@@ -63,7 +63,7 @@ def savePost(post, header, save_folder):
             image_file.write(image_response.read())
             image_file.close()
 
-        f.write(unescape(caption) + '<img alt="' + caption + '" src="images/' + image_filename + '" />')
+        f.write(unescape(caption) + '<img alt="' + unescape(caption) + '" src="images/' + image_filename + '" />')
 
     if post["type"] == "quote":
         quote = post.find("quote-text").string
@@ -106,7 +106,12 @@ def backup(account):
 
     # then get the XML files from the API, which we can only do with a max of 50 posts at once
     for i in range(0, total_posts, 50):
-        print "Getting posts " + str(i) + " to " + str(i + 49) + "."
+        # find the upper bound
+        j = i + 49
+        if j > total_posts:
+            j = total_posts
+
+        print "Getting posts " + str(i) + " to " + str(j) + "."
 
         url = "http://" + account + TUMBLR_URL + "?num=50&start=" + str(i)
         response = urllib2.urlopen(url)
@@ -115,6 +120,8 @@ def backup(account):
         posts = soup.findAll("post")
         for post in posts:
             savePost(post, header, save_folder)
+
+    print "Backup Complete"
 
 
 if __name__ == "__main__":
