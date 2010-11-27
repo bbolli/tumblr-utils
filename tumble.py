@@ -3,12 +3,14 @@
 """Read an Atom feed and post its entries to tumblr.com"""
 
 import sys, urllib, urllib2, netrc
+import xmltramp
 
+HOST = 'www.tumblr.com'
 
 def tumble(feed):
-    host = 'www.tumblr.com'
-    auth = netrc.netrc().authenticators(host)
+    auth = netrc.netrc().authenticators(HOST)
     if auth is not None:
+	feed = xmltramp.parse(feed)
 	return [post(auth, e) for e in feed['entry':]]
 
 def post(auth, entry):
@@ -25,8 +27,7 @@ def post(auth, entry):
 	'title': str(entry['title']),
 	'body': content.__repr__(1, 1),
     }
-    return urllib2.urlopen('http://' + host + '/api/write', urllib.urlencode(data)).read()
+    return urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
 
 if __name__ == '__main__':
-    import xmltramp
-    print tumble(xmltramp.parse(sys.stdin.read()))
+    print tumble(sys.stdin.read())
