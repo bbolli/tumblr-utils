@@ -43,4 +43,5 @@ def post(auth, entry):
     return urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
 
 if __name__ == '__main__':
-    print tumble(sys.stdin)
+    import pprint
+    pprint.pprint(tumble(sys.stdin))
