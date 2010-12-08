@@ -32,6 +32,10 @@ def post(auth, entry):
 	    'format': 'html' if 'html' in content.type.split('/')[1] else 'text'
 	}
     data.update(auth)
+    for k in data:
+	if type(data[k]) == unicode:
+	    data[k] = data[k].encode('utf-8')
+    return data
     return urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
 
 if __name__ == '__main__':
