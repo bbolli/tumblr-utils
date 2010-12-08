@@ -31,6 +31,8 @@ def post(auth, entry):
 	    'type': 'regular', 'title': entry.title, 'body': content.value,
 	    'format': 'html' if 'html' in content.type.split('/')[1] else 'text'
 	}
+    if 'tags' in entry:
+	data['tags'] = ','.join('"%s"' % t.term for t in entry.tags)
     data.update(auth)
     for k in data:
 	if type(data[k]) == unicode:
