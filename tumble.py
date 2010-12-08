@@ -10,21 +10,28 @@ HOST = 'www.tumblr.com'
 def tumble(feed):
     auth = netrc.netrc().authenticators(HOST)
     if auth is not None:
+	auth = {'email': auth[0], 'password': auth[2]}
 	feed = feedparser.parse(feed)
 	return [post(auth, e) for e in feed.entries]
 
 def post(auth, entry):
-    content = entry.content[0]
-    format = content.type.split('/')[1]
-    format = 'html' if 'html' in format else 'text'
-    data = {
-	'email': auth[0],
-	'password': auth[2],
-	'type': 'regular',
-	'format': format,
-	'title': entry.title,
-	'body': content.value,
-    }
+    enc = entry.get('enclosures', [None])[0]
+    if enc and enc.type.startswith('image/'):
+	data = {
+	    'type': 'photo', 'source': enc.href,
+	    'caption': entry.title, 'click-through-url': entry.link
+	}
+    elif enc and enc.type.startswith('audio/'):
+	data = {
+	    'type': 'audio', 'caption': entry.title, 'externally-hosted-url': enc.href
+	}
+    else:
+	content = entry.content[0]
+	data = {
+	    'type': 'regular', 'title': entry.title, 'body': content.value,
+	    'format': 'html' if 'html' in content.type.split('/')[1] else 'text'
+	}
+    data.update(auth)
     return urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
 
 if __name__ == '__main__':
