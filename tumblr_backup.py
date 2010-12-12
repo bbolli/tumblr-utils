@@ -142,4 +142,8 @@ if __name__ == "__main__":
         print "Invalid command line arguments. Please supply the name of your Tumblr account."
     else:
         account = sys.argv[1]
-        backup(account)
+        try:
+            backup(account)
+        except Exception, e:
+            sys.stderr.write("%s\n" % e)
+            sys.exit(2)
