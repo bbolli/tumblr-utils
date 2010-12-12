@@ -31,6 +31,7 @@ def savePost(post, header, save_folder):
 
     slug = post("id")
     date_gmt = post("date")
+    date_unix = int(post("unix-timestamp"))
 
     file_name = os.path.join(save_folder, slug + ".html")
     f = open(file_name, "w")
@@ -89,6 +90,7 @@ def savePost(post, header, save_folder):
     # common footer
     f.write("</body>\n</html>\n")
     f.close()
+    os.utime(file_name, (date_unix, date_unix))
 
 
 def backup(account):
