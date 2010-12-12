@@ -4,8 +4,8 @@ import os
 import sys
 import urllib2
 
-# extra required packages (StoneSoup is the version for XML)
-from BeautifulSoup import BeautifulStoneSoup
+# extra required packages
+import xmltramp
 
 # Tumblr specific constants
 TUMBLR_URL = ".tumblr.com/api/read"
@@ -29,27 +29,30 @@ def unescape(s):
 def savePost(post, header, save_folder):
     """ saves an individual post and any resources for it locally """
 
-    slug = post["url-with-slug"].rpartition("/")[2]
-    date_gmt = post["date-gmt"]
+    slug = post("id")
+    date_gmt = post("date")
 
     file_name = os.path.join(save_folder, slug + ".html")
     f = open(file_name, "w")
 
     # header info which is the same for all posts
     f.write(header)
-    f.write("<p>" + date_gmt + "</p>")
+    f.write("<p>" + date_gmt + "</p>\n")
 
-    if post["type"] == "regular":
-        title = post.find("regular-title").string
-        body = post.find("regular-body").string
+    if post("type") == "regular":
+	try:
+	    title = str(post["regular-title"])
+	except KeyError:
+	    title = ""
+        body = str(post["regular-body"])
 
-        f.write("<h2>" + title + "</h2>" + unescape(body))
+	f.write("<h2>" + title + "</h2>\n" + body + "\n")
 
-    if post["type"] == "photo":
-        caption = post.find("photo-caption").string
-        image_url = post.find("photo-url", {"max-width": "1280"}).string
+    if post("type") == "photo":
+        caption = str(post["photo-caption"])
+        image_url = str(post["photo-url"])
 
-        image_filename = image_url.rpartition("/")[2] + ".jpg" # the 1280 size doesn't end with an extension strangely
+        image_filename = image_url.split("/")[-1]
         image_folder = os.path.join(save_folder, "images")
         if not os.path.exists(image_folder):
             os.mkdir(image_folder)
@@ -63,16 +66,17 @@ def savePost(post, header, save_folder):
             image_file.write(image_response.read())
             image_file.close()
 
-        f.write(unescape(caption) + '<img alt="' + unescape(caption) + '" src="images/' + image_filename + '" />')
+	f.write(caption + "<img alt='" + caption + "' src='images/" + image_filename + "' />\n")
 
-    if post["type"] == "quote":
-        quote = post.find("quote-text").string
-        source = post.find("quote-source").string
 
-        f.write("<blockquote>" + unescape(quote) + "</blockquote><p>" + unescape(source) + "</p>")
+    if post("type") == "quote":
+        quote = str(post["quote-text"])
+        source = str(post["quote-source"])
+
+	f.write("<blockquote>" + quote + "</blockquote>\n<p>" + source + "</p>\n")
 
     # common footer
-    f.write("</body></html>")
+    f.write("</body>\n</html>\n")
     f.close()
 
 
@@ -89,20 +93,18 @@ def backup(account):
     # start by calling the API with just a single post
     url = "http://" + account + TUMBLR_URL + "?num=1"
     response = urllib2.urlopen(url)
-    soup = BeautifulStoneSoup(response.read())
+    soup = xmltramp.parse(response.read())
 
-    # then collect all the meta information
-    tumblelog = soup.find("tumblelog")
-    title = tumblelog["title"]
-    description = tumblelog.string
+    # collect all the meta information
+    tumblelog = soup.tumblelog
+    title = tumblelog('title')
 
     # use it to create a generic header for all posts
-    header = "<html><head><title>" + title + "</title></head><body>"
-    header += "<h1>" + title + "</h1><p>" + unescape(description) + "</p>"
+    header = "<html><head><title>" + title + "</title></head><body>\n"
+    header += "<h1>" + title + "</h1>\n<p>" + str(tumblelog) + "</p>\n"
 
     # then find the total number of posts
-    posts_tag = soup.find("posts")
-    total_posts = int(posts_tag["total"])
+    total_posts = int(soup.posts("total"))
 
     # then get the XML files from the API, which we can only do with a max of 50 posts at once
     for i in range(0, total_posts, 50):
@@ -110,15 +112,13 @@ def backup(account):
         j = i + 49
         if j > total_posts:
             j = total_posts
+        print "Getting posts %d to %d..." % (i, j)
 
-        print "Getting posts " + str(i) + " to " + str(j) + "."
-
-        url = "http://" + account + TUMBLR_URL + "?num=50&start=" + str(i)
+        url = "http://" + account + TUMBLR_URL + "?num=50&start=%d" % i
         response = urllib2.urlopen(url)
-        soup = BeautifulStoneSoup(response.read())
+        soup = xmltramp.parse(response.read())
 
-        posts = soup.findAll("post")
-        for post in posts:
+	for post in soup.posts["post":]:
             savePost(post, header, save_folder)
 
     print "Backup Complete"
@@ -130,5 +130,3 @@ if __name__ == "__main__":
     else:
         account = sys.argv[1]
         backup(account)
-
-
