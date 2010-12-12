@@ -68,6 +68,17 @@ def savePost(post, header, save_folder):
 
 	f.write(caption + "<img alt='" + caption + "' src='images/" + image_filename + "' />\n")
 
+    if post("type") == "link":
+        text = str(post["link-text"])
+        url = str(post["link-url"])
+	try:
+	    desc = str(post["link-description"])
+	except KeyError:
+	    desc = ''
+
+	f.write("<a href='" + url + "'>" + text + "</a>\n")
+	if desc:
+	    f.write(desc + "\n")
 
     if post("type") == "quote":
         quote = str(post["quote-text"])
