@@ -2,8 +2,11 @@
 
 """Read a feed and post its entries to tumblr.com"""
 
-import sys, urllib, urllib2, netrc, datetime, calendar
+import sys, urllib, urllib2, netrc
 import feedparser
+
+from datetime import datetime
+from calendar import timegm
 
 HOST = 'www.tumblr.com'
 
@@ -33,8 +36,11 @@ def post(auth, entry):
 	}
     if 'tags' in entry:
 	data['tags'] = ','.join('"%s"' % t.term for t in entry.tags)
-    pub = datetime.datetime.fromtimestamp(calendar.timegm(entry.published_parsed))
-    data['date'] = pub.isoformat(' ')
+    for d in ('published_parsed', 'updated_parsed'):
+	if d in entry:
+	    pub = datetime.fromtimestamp(timegm(entry.get(d)))
+	    data['date'] = pub.isoformat(' ')
+	    break
     data.update(auth)
     for k in data:
 	if type(data[k]) == unicode:
