@@ -9,6 +9,7 @@ from datetime import datetime
 from calendar import timegm
 
 HOST = 'www.tumblr.com'
+BLOG = None		# or set it to a sub-blog of your account
 
 def tumble(feed):
     auth = netrc.netrc().authenticators(HOST)
@@ -41,6 +42,8 @@ def post(auth, entry):
 	    pub = datetime.fromtimestamp(timegm(entry.get(d)))
 	    data['date'] = pub.isoformat(' ')
 	    break
+    if BLOG:
+	data['group'] = BLOG
     data.update(auth)
     for k in data:
 	if type(data[k]) == unicode:
