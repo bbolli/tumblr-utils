@@ -51,11 +51,16 @@ def post(auth, entry):
     if BLOG:
 	data['group'] = BLOG
     data.update(auth)
+
     for k in data:
 	if type(data[k]) == unicode:
 	    data[k] = data[k].encode('utf-8')
-    return data
-    return urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
+
+    #return 'test', data
+    try:
+        return 'ok', urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
+    except Exception, e:
+	return 'error', e
 
 if __name__ == '__main__':
     import pprint
