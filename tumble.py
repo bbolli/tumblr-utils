@@ -29,6 +29,12 @@ def post(auth, entry):
 	data = {
 	    'type': 'audio', 'caption': entry.title, 'externally-hosted-url': enc.href
 	}
+    elif 'link' in entry:
+	data = {'type': 'link', 'url': entry.link, 'name': entry.title}
+	if 'content' in entry:
+	    data['description'] = entry.content[0].value
+	elif 'summary' in entry:
+	    data['description'] = entry.summary
     else:
 	content = entry.content[0]
 	data = {
