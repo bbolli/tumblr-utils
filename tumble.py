@@ -35,12 +35,12 @@ def post(auth, entry):
 	    data['description'] = entry.content[0].value
 	elif 'summary' in entry:
 	    data['description'] = entry.summary
+    elif 'content' in entry:
+	data = {'type': 'regular', 'title': entry.title, 'body': entry.content[0].value}
+    elif 'summary' in entry:
+	data = {'type': 'regular', 'title': entry.title, 'body': entry.summary}
     else:
-	content = entry.content[0]
-	data = {
-	    'type': 'regular', 'title': entry.title, 'body': content.value,
-	    'format': 'html' if 'html' in content.type.split('/')[1] else 'text'
-	}
+	return 'unknown', entry
     if 'tags' in entry:
 	data['tags'] = ','.join('"%s"' % t.term for t in entry.tags)
     for d in ('published_parsed', 'updated_parsed'):
