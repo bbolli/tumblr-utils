@@ -29,6 +29,10 @@ def post(auth, entry):
 	data = {
 	    'type': 'audio', 'caption': entry.title, 'externally-hosted-url': enc.href
 	}
+    elif enc and enc.type.startswith('video/'):
+	data = {
+	    'type': 'video', 'caption': entry.title, 'embed': enc.href
+	}
     elif 'link' in entry:
 	data = {'type': 'link', 'url': entry.link, 'name': entry.title}
 	if 'content' in entry:
