@@ -11,6 +11,8 @@ from calendar import timegm
 HOST = 'www.tumblr.com'
 BLOG = None		# or set it to a sub-blog of your account
 
+DEBUG = False
+
 def tumble(feed):
     auth = netrc.netrc().authenticators(HOST)
     if auth is not None:
@@ -54,18 +56,22 @@ def post(auth, entry):
 	    break
     if BLOG:
 	data['group'] = BLOG
-    data.update(auth)
 
+    if DEBUG:
+	return 'debug', entry.id, data
+
+    data.update(auth)
     for k in data:
-	if type(data[k]) == unicode:
+	if type(data[k]) is unicode:
 	    data[k] = data[k].encode('utf-8')
 
-    #return 'test', data
     try:
         return 'ok', urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
     except Exception, e:
 	return 'error', e
 
 if __name__ == '__main__':
+    if len(sys.argv) == 2 and sys.argv[1] == '-d':
+	DEBUG = True
     import pprint
     pprint.pprint(tumble(sys.stdin))
