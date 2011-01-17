@@ -49,7 +49,7 @@ def savePost(post, header, save_folder):
 
 	f.write("<h2>" + title + "</h2>\n" + body + "\n")
 
-    if post("type") == "photo":
+    elif post("type") == "photo":
         caption = str(post["photo-caption"])
         image_url = str(post["photo-url"])
 
@@ -69,7 +69,7 @@ def savePost(post, header, save_folder):
 
 	f.write(caption + "<img alt='" + caption + "' src='images/" + image_filename + "' />\n")
 
-    if post("type") == "link":
+    elif post("type") == "link":
         text = str(post["link-text"])
         url = str(post["link-url"])
 	try:
@@ -81,7 +81,7 @@ def savePost(post, header, save_folder):
 	if desc:
 	    f.write(desc + "\n")
 
-    if post("type") == "quote":
+    elif post("type") == "quote":
         quote = str(post["quote-text"])
         source = str(post["quote-source"])
 
@@ -97,6 +97,7 @@ def backup(account):
     """ makes HTML files for every post on a public Tumblr blog account """
 
     print "Getting basic information."
+    base = "http://" + account + TUMBLR_URL
 
     # make sure there's a folder to save in
     save_folder = os.path.join(os.getcwd(), account)
@@ -104,8 +105,7 @@ def backup(account):
         os.mkdir(save_folder)
 
     # start by calling the API with just a single post
-    url = "http://" + account + TUMBLR_URL + "?num=1"
-    response = urllib2.urlopen(url)
+    response = urllib2.urlopen(base + "?num=1")
     soup = xmltramp.parse(response.read())
 
     # collect all the meta information
@@ -127,8 +127,7 @@ def backup(account):
             j = total_posts
         print "Getting posts %d to %d..." % (i, j)
 
-        url = "http://" + account + TUMBLR_URL + "?num=50&start=%d" % i
-        response = urllib2.urlopen(url)
+        response = urllib2.urlopen(base + "?num=50&start=%d" % i)
         soup = xmltramp.parse(response.read())
 
 	for post in soup.posts["post":]:
