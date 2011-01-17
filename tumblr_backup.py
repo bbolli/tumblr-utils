@@ -3,6 +3,7 @@
 import os
 import sys
 import urllib2
+import pprint
 
 # extra required packages
 import xmltramp
@@ -86,6 +87,16 @@ def savePost(post, header, save_folder):
         source = str(post["quote-source"])
 
 	f.write("<blockquote>" + quote + "</blockquote>\n<p>" + source + "</p>\n")
+
+    elif post("type") == "video":
+        caption = str(post["video-caption"])
+        source = str(post["video-source"])
+        player = str(post["video-player"])
+
+        f.write(player + "\n<a href='" + source + "'>" + caption + "</a>\n")
+
+    else:
+        f.write("<pre>%s</pre>\n" % pprint.pformat(post()))
 
     # common footer
     f.write("</body>\n</html>\n")
