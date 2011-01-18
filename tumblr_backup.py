@@ -158,5 +158,5 @@ if __name__ == "__main__":
         try:
             backup(account)
         except Exception, e:
-            sys.stderr.write("%s\n" % e)
+            sys.stderr.write("%r\n" % e)
             sys.exit(2)
