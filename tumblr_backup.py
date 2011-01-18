@@ -52,7 +52,10 @@ def savePost(post, header, save_folder):
 	f.write("<h2>" + title + "</h2>\n" + body + "\n")
 
     elif post("type") == "photo":
-        caption = str(post["photo-caption"])
+        try:
+            caption = str(post["photo-caption"])
+        except KeyError:
+            caption = ''
         image_url = str(post["photo-url"])
 
         image_filename = image_url.split("/")[-1]
@@ -63,7 +66,6 @@ def savePost(post, header, save_folder):
 
         if not os.path.exists(local_image_path):
             # only download images if they don't already exist
-            print "Downloading a photo. This may take a moment."
             image_response = urllib2.urlopen(image_url)
             image_file = open(local_image_path, "wb")
             image_file.write(image_response.read())
