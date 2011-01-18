@@ -4,6 +4,7 @@ import os
 import sys
 import urllib2
 import pprint
+from xml.sax.saxutils import escape
 
 # extra required packages
 import xmltramp
@@ -121,11 +122,11 @@ def backup(account):
 
     # collect all the meta information
     tumblelog = soup.tumblelog
-    title = tumblelog('title')
+    title = escape(tumblelog('title'))
 
     # use it to create a generic header for all posts
-    header = "<html><head><title>" + title + "</title></head><body>\n"
-    header += "<h1>" + title + "</h1>\n<p>" + str(tumblelog) + "</p>\n"
+    header = "<!DOCTYPE html>\n<html><head><title>" + title + "</title></head><body>\n" + \
+        "<h1>" + title + "</h1>\n<p>" + escape(str(tumblelog)) + "</p>\n"
 
     # then find the total number of posts
     total_posts = int(soup.posts("total"))
