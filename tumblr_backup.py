@@ -35,15 +35,18 @@ def savePost(post, header, save_folder):
     slug = post("id")
     date_gmt = post("date")
     date_unix = int(post("unix-timestamp"))
+    type = post("type")
 
     file_name = os.path.join(save_folder, slug + ".html")
     f = open(file_name, "w")
 
     # header info which is the same for all posts
-    f.write(header)
-    f.write("<p>" + date_gmt + "</p>\n")
+    f.write(
+	header + "<!-- type: %s -->\n" % type +
+	"<p>" + date_gmt + "</p>\n"
+    )
 
-    if post("type") == "regular":
+    if type == "regular":
 	try:
 	    title = str(post["regular-title"])
 	except KeyError:
@@ -52,7 +55,7 @@ def savePost(post, header, save_folder):
 
 	f.write("<h2>" + title + "</h2>\n" + body + "\n")
 
-    elif post("type") == "photo":
+    elif type == "photo":
         try:
             caption = str(post["photo-caption"])
         except KeyError:
@@ -74,7 +77,7 @@ def savePost(post, header, save_folder):
 
 	f.write(caption + "<img alt='" + caption + "' src='images/" + image_filename + "' />\n")
 
-    elif post("type") == "link":
+    elif type == "link":
         text = str(post["link-text"])
         url = str(post["link-url"])
 	try:
@@ -86,13 +89,13 @@ def savePost(post, header, save_folder):
 	if desc:
 	    f.write(desc + "\n")
 
-    elif post("type") == "quote":
+    elif type == "quote":
         quote = str(post["quote-text"])
         source = str(post["quote-source"])
 
 	f.write("<blockquote>" + quote + "</blockquote>\n<p>" + source + "</p>\n")
 
-    elif post("type") == "video":
+    elif type == "video":
         caption = str(post["video-caption"])
         source = str(post["video-source"])
         player = str(post["video-player"])
