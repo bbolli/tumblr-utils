@@ -154,10 +154,9 @@ def backup(account):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print "Invalid command line arguments. Please supply the name of your Tumblr account."
-    else:
-        account = sys.argv[1]
-        try:
-            backup(account)
-        except Exception, e:
-            sys.stderr.write("%r\n" % e)
-            sys.exit(2)
+        sys.exit(1)
+    try:
+        backup(sys.argv[1])
+    except Exception, e:
+        sys.stderr.write("%r\n" % e)
+        sys.exit(2)
