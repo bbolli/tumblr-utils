@@ -47,13 +47,14 @@ def savePost(post, header, save_folder):
     )
 
     if type == "regular":
-	try:
-	    title = str(post["regular-title"])
-	except KeyError:
-	    title = ""
-        body = str(post["regular-body"])
-
-	f.write("<h2>" + title + "</h2>\n" + body + "\n")
+        try:
+            f.write("<h2>" + str(post["regular-title"]) + "</h2>\n")
+        except KeyError:
+            pass
+        try:
+            f.write(str(post["regular-body"]) + "\n")
+        except KeyError:
+            pass
 
     elif type == "photo":
         try:
@@ -75,31 +76,26 @@ def savePost(post, header, save_folder):
             image_file.write(image_response.read())
             image_file.close()
 
-	f.write(caption + "<img alt='" + caption + "' src='images/" + image_filename + "' />\n")
+        f.write(caption + "<img alt='" + caption + "' src='images/" + image_filename + "' />\n")
 
     elif type == "link":
         text = str(post["link-text"])
         url = str(post["link-url"])
-	try:
-	    desc = str(post["link-description"])
-	except KeyError:
-	    desc = ''
-
-	f.write("<a href='" + url + "'>" + text + "</a>\n")
-	if desc:
-	    f.write(desc + "\n")
+        f.write("<a href='" + url + "'>" + text + "</a>\n")
+        try:
+            f.write(str(post["link-description"]) + "\n")
+        except KeyError:
+            pass
 
     elif type == "quote":
         quote = str(post["quote-text"])
         source = str(post["quote-source"])
-
-	f.write("<blockquote>" + quote + "</blockquote>\n<p>" + source + "</p>\n")
+        f.write("<blockquote>" + quote + "</blockquote>\n<p>" + source + "</p>\n")
 
     elif type == "video":
         caption = str(post["video-caption"])
         source = str(post["video-source"])
         player = str(post["video-player"])
-
         f.write(player + "\n<a href='" + source + "'>" + caption + "</a>\n")
 
     else:
@@ -148,7 +144,7 @@ def backup(account):
         response = urllib2.urlopen(base + "?num=50&start=%d" % i)
         soup = xmltramp.parse(response.read())
 
-	for post in soup.posts["post":]:
+        for post in soup.posts["post":]:
             savePost(post, header, save_folder)
 
     print "Backup complete" + 50 * " "
