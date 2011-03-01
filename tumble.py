@@ -73,5 +73,7 @@ def post(auth, entry):
 if __name__ == '__main__':
     if len(sys.argv) == 2 and sys.argv[1] == '-d':
         DEBUG = True
-    import pprint
-    pprint.pprint(tumble(sys.stdin))
+    result = tumble(sys.stdin)
+    if result:
+        import pprint
+        pprint.pprint(result)
