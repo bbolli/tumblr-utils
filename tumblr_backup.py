@@ -1,3 +1,4 @@
+#!/usr/bin/python -u
 
 # standard Python library imports
 import os
@@ -110,7 +111,7 @@ def savePost(post, header, save_folder):
 def backup(account):
     """ makes HTML files for every post on a public Tumblr blog account """
 
-    print "Getting basic information."
+    print "Getting basic information\r",
     base = "http://" + account + TUMBLR_URL
 
     # make sure there's a folder to save in
@@ -139,7 +140,7 @@ def backup(account):
         j = i + 49
         if j > total_posts:
             j = total_posts
-        print "Getting posts %d to %d..." % (i, j)
+        print "Getting posts %d to %d...  \r" % (i, j),
 
         response = urllib2.urlopen(base + "?num=50&start=%d" % i)
         soup = xmltramp.parse(response.read())
@@ -147,7 +148,7 @@ def backup(account):
 	for post in soup.posts["post":]:
             savePost(post, header, save_folder)
 
-    print "Backup Complete"
+    print "Backup complete" + 50 * " "
 
 
 if __name__ == "__main__":
