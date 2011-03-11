@@ -81,7 +81,7 @@ def savePost(post, header, save_folder):
     elif type == "link":
         text = str(post["link-text"])
         url = str(post["link-url"])
-        f.write("<a href='" + url + "'>" + text + "</a>\n")
+        f.write("<p><a href='" + url + "'>" + text + "</a></p>\n")
         try:
             f.write(str(post["link-description"]) + "\n")
         except KeyError:
