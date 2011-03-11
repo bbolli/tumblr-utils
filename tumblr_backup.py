@@ -102,6 +102,9 @@ def savePost(post, header, save_folder):
         f.write("<pre>%s</pre>\n" % pprint.pformat(post()))
 
     # common footer
+    tags = post['tag':]
+    if tags:
+        f.write('<p class=tags>%s</p>\n' % ' '.join('#' + str(t) for t in tags))
     f.write("</body>\n</html>\n")
     f.close()
     os.utime(file_name, (date_unix, date_unix))
