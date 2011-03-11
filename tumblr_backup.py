@@ -13,6 +13,12 @@ import xmltramp
 # Tumblr specific constants
 TUMBLR_URL = ".tumblr.com/api/read"
 
+verbose = False
+
+
+def log(s):
+    if verbose:
+        print s,
 
 def unescape(s):
     """ replace Tumblr's escaped characters with one's that make sense for saving in an HTML file """
@@ -113,7 +119,7 @@ def savePost(post, header, save_folder):
 def backup(account):
     """ makes HTML files for every post on a public Tumblr blog account """
 
-    print "Getting basic information\r",
+    log("Getting basic information\r")
     base = "http://" + account + TUMBLR_URL
 
     # make sure there's a folder to save in
@@ -122,7 +128,11 @@ def backup(account):
         os.mkdir(save_folder)
 
     # start by calling the API with just a single post
-    response = urllib2.urlopen(base + "?num=1")
+    try:
+        response = urllib2.urlopen(base + "?num=1")
+    except urllib2.URLError:
+        sys.stderr.write("Invalid URL %s\n" % base)
+        sys.exit(2)
     soup = xmltramp.parse(response.read())
 
     # collect all the meta information
@@ -142,7 +152,7 @@ def backup(account):
         j = i + 49
         if j > total_posts:
             j = total_posts
-        print "Getting posts %d to %d...  \r" % (i, j),
+        log("Getting posts %d to %d of %d...\r" % (i, j, total_posts))
 
         response = urllib2.urlopen(base + "?num=50&start=%d" % i)
         soup = xmltramp.parse(response.read())
@@ -150,12 +160,15 @@ def backup(account):
         for post in soup.posts["post":]:
             savePost(post, header, save_folder)
 
-    print "Backup complete" + 50 * " "
+    log("Backup complete" + 50 * " " + "\n")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print "Invalid command line arguments. Please supply the name of your Tumblr account."
+    if len(sys.argv) == 3 and sys.argv[1] == '-v':
+        verbose = True
+        del sys.argv[1]
+    if len(sys.argv) != 2:
+        print "Usage: %s [-v] userid" % sys.argv[0]
         sys.exit(1)
     try:
         backup(sys.argv[1])
