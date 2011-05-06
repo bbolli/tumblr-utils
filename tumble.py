@@ -21,7 +21,8 @@ def tumble(feed):
         return [post(auth, e) for e in feed.entries]
 
 def post(auth, entry):
-    enc = entry.get('enclosures', [None])[0]
+    enc = entry.get('enclosures', [])
+    if enc: enc = enc[0]
     if enc and enc.type.startswith('image/'):
         data = {
             'type': 'photo', 'source': enc.href,
