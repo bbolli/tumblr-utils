@@ -1,24 +1,36 @@
 #!/usr/bin/env python
 
-"""Read a feed and post its entries to tumblr.com"""
+"""Read a feed from stdin and post its entries to tumblr.com
 
-import sys, urllib, urllib2, netrc
+Options:
+    -b sub-blog         Post to a sub-blog of your account.
+    -e post-id          Edit the existing post with the given ID.
+                        This only looks at the first entry of the feed.
+    -d                  Debug mode: print the raw post data instead
+                        of posting it to tumblr.com.
+"""
+
+import sys, os, getopt, urllib, urllib2, netrc
 import feedparser
 
 from datetime import datetime
 from calendar import timegm
 
-HOST = 'www.tumblr.com'
-BLOG = None		# or set it to a sub-blog of your account
-
+BLOG = None             # or a sub-blog of your account
+POST = None             # or the post-id of a post to edit
 DEBUG = False
+
+HOST = 'www.tumblr.com'
 
 def tumble(feed):
     auth = netrc.netrc().authenticators(HOST)
     if auth is not None:
         auth = {'email': auth[0], 'password': auth[2]}
         feed = feedparser.parse(feed)
-        return [post(auth, e) for e in feed.entries]
+        if POST:
+            return [post(auth, feed.entries[0])]
+        else:
+            return [post(auth, e) for e in feed.entries]
 
 def post(auth, entry):
     enc = entry.get('enclosures', [])
@@ -57,7 +69,8 @@ def post(auth, entry):
             break
     if BLOG:
         data['group'] = BLOG
-
+    if POST:
+        data['post-id'] = POST
     if DEBUG:
         return 'debug', entry.id, data
 
@@ -69,12 +82,25 @@ def post(auth, entry):
     try:
         return 'ok', urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
     except Exception, e:
-        return 'error', e
+        return 'error', str(e)
 
 if __name__ == '__main__':
-    if len(sys.argv) == 2 and sys.argv[1] == '-d':
-        DEBUG = True
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], 'b:e:d')
+    except:
+        print "Usage: %s [-b blog-name] [-e post-id] [-d]" % sys.argv[0].split(os.sep)[-1]
+        sys.exit(1)
+    for o, v in opts:
+        if o == '-b':
+            BLOG = v
+        elif o == '-e':
+            POST = v
+        elif o == '-d':
+            DEBUG = True
     result = tumble(sys.stdin)
     if result:
         import pprint
         pprint.pprint(result)
+        if 'error' in [r[0] for r in result]:
+            sys.exit(2)
+    sys.exit(0)
