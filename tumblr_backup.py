@@ -20,21 +20,6 @@ def log(s):
     if verbose:
         print s,
 
-def unescape(s):
-    """ replace Tumblr's escaped characters with one's that make sense for saving in an HTML file """
-
-    # special character corrections
-    s = s.replace(u"\xa0", "&amp;nbsp;")
-    s = s.replace(u"\xe1", "&amp;aacute;")
-
-    # standard html
-    s = s.replace("&lt;", "<")
-    s = s.replace("&gt;", ">")
-    s = s.replace("&amp;", "&") # this has to be last
-
-    return s
-
-
 def savePost(post, header, save_folder):
     """ saves an individual post and any resources for it locally """
 
