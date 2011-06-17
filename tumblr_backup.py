@@ -14,6 +14,7 @@ import xmltramp
 TUMBLR_URL = ".tumblr.com/api/read"
 
 verbose = True
+n_last = None           # None = all posts
 
 
 def log(s):
@@ -134,17 +135,18 @@ def backup(account):
 """ % (title, title, escape(str(tumblelog)))
 
     # then find the total number of posts
-    total_posts = int(soup.posts("total"))
+    total_posts = n_last or int(soup.posts("total"))
 
-    # then get the XML files from the API, which we can only do with a max of 50 posts at once
-    for i in range(0, total_posts, 50):
+    # then get the XML entries from the API, which we can only do for max 50 posts at once
+    max = 50
+    for i in range(0, total_posts, max):
         # find the upper bound
-        j = i + 49
+        j = i + max
         if j > total_posts:
             j = total_posts
-        log("Getting posts %d to %d of %d...\r" % (i, j, total_posts))
+        log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
 
-        response = urllib2.urlopen(base + "?num=50&start=%d" % i)
+        response = urllib2.urlopen(base + "?num=%d&start=%d" % (j - i, i))
         soup = xmltramp.parse(response.read())
 
         for post in soup.posts["post":]:
@@ -154,14 +156,21 @@ def backup(account):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == '-q':
-        verbose = False
-        del sys.argv[1]
-    if len(sys.argv) != 2:
-        print "Usage: %s [-q] userid" % sys.argv[0]
-        sys.exit(1)
+    import getopt
     try:
-        backup(sys.argv[1])
+        opts, args = getopt.getopt(sys.argv[1:], 'qn:')
+        if len(args) != 1:
+            raise getopt.GetoptError("")
+    except getopt.GetoptError:
+        print "Usage: %s [-q] [-n last-posts] userid" % sys.argv[0]
+        sys.exit(1)
+    for o, v in opts:
+        if o == '-q':
+            verbose = False
+        elif o == '-n':
+            n_last = int(v)
+    try:
+        backup(args[0])
     except Exception, e:
         sys.stderr.write("%r\n" % e)
         sys.exit(2)
