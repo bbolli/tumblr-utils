@@ -34,7 +34,7 @@ def savePost(post, header, save_folder):
     # header info which is the same for all posts
     f.write(
 	header + "<!-- type: %s -->\n" % type +
-	"<p>" + date_gmt + "</p>\n"
+	"<p class=date>" + date_gmt + "</p>\n"
     )
 
     if type == "regular":
@@ -49,7 +49,7 @@ def savePost(post, header, save_folder):
 
     elif type == "photo":
         try:
-            caption = str(post["photo-caption"])
+            caption = str(post["photo-caption"]) + "\n"
         except KeyError:
             caption = ''
         image_url = str(post["photo-url"])
@@ -72,7 +72,7 @@ def savePost(post, header, save_folder):
     elif type == "link":
         text = str(post["link-text"])
         url = str(post["link-url"])
-        f.write("<p><a href='" + url + "'>" + text + "</a></p>\n")
+        f.write("<h2><a href='" + url + "'>" + text + "</a></h2>\n")
         try:
             f.write(str(post["link-description"]) + "\n")
         except KeyError:
@@ -125,8 +125,13 @@ def backup(account):
     title = escape(tumblelog('title'))
 
     # use it to create a generic header for all posts
-    header = "<!DOCTYPE html>\n<html><head><title>" + title + "</title></head><body>\n" + \
-        "<h1>" + title + "</h1>\n<p>" + escape(str(tumblelog)) + "</p>\n"
+    header = """<!DOCTYPE html>
+<html>
+<head><title>%s</title></head>
+<body>
+<h1>%s</h1>
+<p class=subtitle>%s</p>
+""" % (title, title, escape(str(tumblelog)))
 
     # then find the total number of posts
     total_posts = int(soup.posts("total"))
