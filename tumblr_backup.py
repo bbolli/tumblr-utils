@@ -13,7 +13,7 @@ import xmltramp
 # Tumblr specific constants
 TUMBLR_URL = ".tumblr.com/api/read"
 
-verbose = False
+verbose = True
 
 
 def log(s):
@@ -149,11 +149,11 @@ def backup(account):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == '-v':
-        verbose = True
+    if len(sys.argv) == 3 and sys.argv[1] == '-q':
+        verbose = False
         del sys.argv[1]
     if len(sys.argv) != 2:
-        print "Usage: %s [-v] userid" % sys.argv[0]
+        print "Usage: %s [-q] userid" % sys.argv[0]
         sys.exit(1)
     try:
         backup(sys.argv[1])
