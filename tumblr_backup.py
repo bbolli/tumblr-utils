@@ -11,7 +11,7 @@ from xml.sax.saxutils import escape
 import xmltramp
 
 # Tumblr specific constants
-TUMBLR_URL = ".tumblr.com/api/read"
+TUMBLR_URL = '.tumblr.com/api/read'
 
 verbose = True
 n_last = None           # None = all posts
@@ -22,41 +22,38 @@ def log(s):
         print s,
 
 def savePost(post, header, save_folder):
-    """ saves an individual post and any resources for it locally """
+    """saves an individual post and any resources for it locally"""
 
-    slug = post("id")
-    date_gmt = post("date")
-    date_unix = int(post("unix-timestamp"))
-    type = post("type")
+    slug = post('id')
+    date_gmt = post('date')
+    date_unix = int(post('unix-timestamp'))
+    type = post('type')
 
-    file_name = os.path.join(save_folder, slug + ".html")
-    f = open(file_name, "w")
+    file_name = os.path.join(save_folder, slug + '.html')
+    f = open(file_name, 'w')
 
     # header info which is the same for all posts
-    f.write(
-	header + "<!-- type: %s -->\n" % type +
-	"<p class=date>" + date_gmt + "</p>\n"
-    )
+    f.write('%s<p class=date>%s</p>\n' % (header, date_gmt))
 
-    if type == "regular":
+    if type == 'regular':
         try:
-            f.write("<h2>" + str(post["regular-title"]) + "</h2>\n")
+            f.write('<h2>' + str(post['regular-title']) + '</h2>\n')
         except KeyError:
             pass
         try:
-            f.write(str(post["regular-body"]) + "\n")
+            f.write(str(post['regular-body']) + '\n')
         except KeyError:
             pass
 
-    elif type == "photo":
+    elif type == 'photo':
         try:
-            caption = str(post["photo-caption"]) + "\n"
+            caption = str(post['photo-caption']) + '\n'
         except KeyError:
             caption = ''
-        image_url = str(post["photo-url"])
+        image_url = str(post['photo-url'])
 
-        image_filename = image_url.split("/")[-1]
-        image_folder = os.path.join(save_folder, "images")
+        image_filename = image_url.split('/')[-1]
+        image_folder = os.path.join(save_folder, 'images')
         if not os.path.exists(image_folder):
             os.mkdir(image_folder)
         local_image_path = os.path.join(image_folder, image_filename)
@@ -64,49 +61,49 @@ def savePost(post, header, save_folder):
         if not os.path.exists(local_image_path):
             # only download images if they don't already exist
             image_response = urllib2.urlopen(image_url)
-            image_file = open(local_image_path, "wb")
+            image_file = open(local_image_path, 'wb')
             image_file.write(image_response.read())
             image_file.close()
 
-        f.write(caption + "<img alt='" + caption + "' src='images/" + image_filename + "' />\n")
+        f.write(caption + '<img alt="%s" src="images/%s">\n' % (caption, image_filename))
 
-    elif type == "link":
-        text = str(post["link-text"])
-        url = str(post["link-url"])
-        f.write("<h2><a href='" + url + "'>" + text + "</a></h2>\n")
+    elif type == 'link':
+        text = post['link-text']
+        url = post['link-url']
+        f.write('<h2><a href="%s">%s</a></h2>\n' % (url, text))
         try:
-            f.write(str(post["link-description"]) + "\n")
+            f.write(str(post['link-description']) + '\n')
         except KeyError:
             pass
 
-    elif type == "quote":
-        quote = str(post["quote-text"])
-        source = str(post["quote-source"])
-        f.write("<blockquote>" + quote + "</blockquote>\n<p>" + source + "</p>\n")
+    elif type == 'quote':
+        quote = str(post['quote-text'])
+        source = str(post['quote-source'])
+        f.write('<blockquote>%s</blockquote>\n<p>%s</p>\n' % (quote, source))
 
-    elif type == "video":
-        caption = str(post["video-caption"])
-        source = str(post["video-source"])
-        player = str(post["video-player"])
-        f.write(player + "\n<a href='" + source + "'>" + caption + "</a>\n")
+    elif type == 'video':
+        caption = str(post['video-caption'])
+        source = str(post['video-source'])
+        player = str(post['video-player'])
+        f.write(player + '\n<a href="%s">%s</a>\n' % (source, caption))
 
     else:
-        f.write("<pre>%s</pre>\n" % pprint.pformat(post()))
+        f.write('<!-- type: %s -->\n<pre>%s</pre>\n' % (type, pprint.pformat(post())))
 
     # common footer
     tags = post['tag':]
     if tags:
         f.write('<p class=tags>%s</p>\n' % ' '.join('#' + str(t) for t in tags))
-    f.write("</body>\n</html>\n")
+    f.write('</body>\n</html>\n')
+
     f.close()
     os.utime(file_name, (date_unix, date_unix))
 
-
 def backup(account):
-    """ makes HTML files for every post on a public Tumblr blog account """
+    """makes HTML files for every post on a public Tumblr blog account"""
 
     log("Getting basic information\r")
-    base = "http://" + account + TUMBLR_URL
+    base = 'http://' + account + TUMBLR_URL
 
     # make sure there's a folder to save in
     save_folder = os.path.join(os.getcwd(), account)
@@ -115,7 +112,7 @@ def backup(account):
 
     # start by calling the API with just a single post
     try:
-        response = urllib2.urlopen(base + "?num=1")
+        response = urllib2.urlopen(base + '?num=1')
     except urllib2.URLError:
         sys.stderr.write("Invalid URL %s\n" % base)
         sys.exit(2)
@@ -126,16 +123,16 @@ def backup(account):
     title = escape(tumblelog('title'))
 
     # use it to create a generic header for all posts
-    header = """<!DOCTYPE html>
+    header = '''<!DOCTYPE html>
 <html>
 <head><title>%s</title></head>
 <body>
 <h1>%s</h1>
 <p class=subtitle>%s</p>
-""" % (title, title, escape(str(tumblelog)))
+''' % (title, title, escape(str(tumblelog)))
 
     # then find the total number of posts
-    total_posts = n_last or int(soup.posts("total"))
+    total_posts = n_last or int(soup.posts('total'))
 
     # then get the XML entries from the API, which we can only do for max 50 posts at once
     max = 50
@@ -146,16 +143,15 @@ def backup(account):
             j = total_posts
         log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
 
-        response = urllib2.urlopen(base + "?num=%d&start=%d" % (j - i, i))
+        response = urllib2.urlopen(base + '?num=%d&start=%d' % (j - i, i))
         soup = xmltramp.parse(response.read())
 
-        for post in soup.posts["post":]:
+        for post in soup.posts['post':]:
             savePost(post, header, save_folder)
 
-    log("Backup complete" + 50 * " " + "\n")
+    log("Backup complete" + 50 * ' ' + '\n')
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     import getopt
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'qn:')
@@ -172,5 +168,5 @@ if __name__ == "__main__":
     try:
         backup(args[0])
     except Exception, e:
-        sys.stderr.write("%r\n" % e)
+        sys.stderr.write('%r\n' % e)
         sys.exit(2)
