@@ -72,7 +72,7 @@ def post(auth, entry):
     if POST:
         data['post-id'] = POST
     if DEBUG:
-        return 'debug', entry.id, data
+        return 'debug', entry.get('id'), data
 
     data.update(auth)
     for k in data:
