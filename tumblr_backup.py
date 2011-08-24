@@ -122,6 +122,7 @@ def backup(account):
     # collect all the meta information
     tumblelog = soup.tumblelog
     title = escape(tumblelog('title'))
+    subtitle = escape(unicode(tumblelog))
 
     # use it to create a generic header for all posts
     header = u'''<!DOCTYPE html>
@@ -129,8 +130,9 @@ def backup(account):
 <head><title>%s</title></head>
 <body>
 <h1>%s</h1>
-<p class=subtitle>%s</p>
-''' % (title, title, escape(str(tumblelog)))
+''' % (title, title)
+    if subtitle:
+        header += u'<p class=subtitle>%s</p>\n' % subtitle
 
     # then find the total number of posts
     total_posts = n_last or int(soup.posts('total'))
