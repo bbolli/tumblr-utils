@@ -6,6 +6,7 @@ import sys
 import urllib2
 import pprint
 from xml.sax.saxutils import escape
+import codecs
 
 # extra required packages
 import xmltramp
@@ -30,27 +31,27 @@ def savePost(post, header, save_folder):
     type = post('type')
 
     file_name = os.path.join(save_folder, slug + '.html')
-    f = open(file_name, 'w')
+    f = codecs.open(file_name, 'w', 'utf-8')
 
     # header info which is the same for all posts
-    f.write('%s<p class=date>%s</p>\n' % (header, date_gmt))
+    f.write(u'%s<p class=date>%s</p>\n' % (header, date_gmt))
 
     if type == 'regular':
         try:
-            f.write('<h2>' + str(post['regular-title']) + '</h2>\n')
+            f.write('<h2>' + unicode(post['regular-title']) + '</h2>\n')
         except KeyError:
             pass
         try:
-            f.write(str(post['regular-body']) + '\n')
+            f.write(unicode(post['regular-body']) + '\n')
         except KeyError:
             pass
 
     elif type == 'photo':
         try:
-            caption = str(post['photo-caption']) + '\n'
+            caption = unicode(post['photo-caption']) + '\n'
         except KeyError:
-            caption = ''
-        image_url = str(post['photo-url'])
+            caption = u''
+        image_url = unicode(post['photo-url'])
 
         image_filename = image_url.split('/')[-1]
         image_folder = os.path.join(save_folder, 'images')
@@ -65,35 +66,35 @@ def savePost(post, header, save_folder):
             image_file.write(image_response.read())
             image_file.close()
 
-        f.write(caption + '<img alt="%s" src="images/%s">\n' % (caption, image_filename))
+        f.write(caption + u'<img alt="%s" src="images/%s">\n' % (caption, image_filename))
 
     elif type == 'link':
         text = post['link-text']
         url = post['link-url']
-        f.write('<h2><a href="%s">%s</a></h2>\n' % (url, text))
+        f.write(u'<h2><a href="%s">%s</a></h2>\n' % (url, text))
         try:
-            f.write(str(post['link-description']) + '\n')
+            f.write(unicode(post['link-description']) + '\n')
         except KeyError:
             pass
 
     elif type == 'quote':
-        quote = str(post['quote-text'])
-        source = str(post['quote-source'])
-        f.write('<blockquote>%s</blockquote>\n<p>%s</p>\n' % (quote, source))
+        quote = unicode(post['quote-text'])
+        source = unicode(post['quote-source'])
+        f.write(u'<blockquote>%s</blockquote>\n<p>%s</p>\n' % (quote, source))
 
     elif type == 'video':
-        caption = str(post['video-caption'])
-        source = str(post['video-source'])
-        player = str(post['video-player'])
-        f.write(player + '\n<a href="%s">%s</a>\n' % (source, caption))
+        caption = unicode(post['video-caption'])
+        source = unicode(post['video-source'])
+        player = unicode(post['video-player'])
+        f.write(player + u'\n<a href="%s">%s</a>\n' % (source, caption))
 
     else:
-        f.write('<!-- type: %s -->\n<pre>%s</pre>\n' % (type, pprint.pformat(post())))
+        f.write(u'<!-- type: %s -->\n<pre>%s</pre>\n' % (type, pprint.pformat(post())))
 
     # common footer
     tags = post['tag':]
     if tags:
-        f.write('<p class=tags>%s</p>\n' % ' '.join('#' + str(t) for t in tags))
+        f.write(u'<p class=tags>%s</p>\n' % ' '.join('#' + unicode(t) for t in tags))
     f.write('</body>\n</html>\n')
 
     f.close()
@@ -123,7 +124,7 @@ def backup(account):
     title = escape(tumblelog('title'))
 
     # use it to create a generic header for all posts
-    header = '''<!DOCTYPE html>
+    header = u'''<!DOCTYPE html>
 <html>
 <head><title>%s</title></head>
 <body>
