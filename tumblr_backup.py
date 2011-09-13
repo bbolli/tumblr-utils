@@ -66,7 +66,7 @@ def savePost(post, header, save_folder):
             image_file.write(image_response.read())
             image_file.close()
 
-        f.write(caption + u'<img alt="%s" src="images/%s">\n' % (caption, image_filename))
+        f.write(caption + u'<img alt="" src="images/%s">\n' % image_filename)
 
     elif type == 'link':
         text = post['link-text']
