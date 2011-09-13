@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-"""Read a feed from stdin and post its entries to tumblr.com
+"""Read a feed from stdin and post its entries to tumblr.
+
+User name and password are read from your ~/.netrc entry for
+machine www.tumblr.com.
 
 Options:
     -b sub-blog         Post to a sub-blog of your account.
@@ -86,11 +89,14 @@ def post(auth, entry):
 
 if __name__ == '__main__':
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'b:e:d')
+        opts, args = getopt.getopt(sys.argv[1:], 'hb:e:d')
     except:
         print "Usage: %s [-b blog-name] [-e post-id] [-d]" % sys.argv[0].split(os.sep)[-1]
         sys.exit(1)
     for o, v in opts:
+        if o == '-h':
+            print __doc__.strip()
+            sys.exit(0)
         if o == '-b':
             BLOG = v
         elif o == '-e':
