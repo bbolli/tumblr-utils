@@ -99,8 +99,11 @@ def savePost(post, header, save_folder):
     elif type == 'video':
         caption = unicode(post['video-caption'])
         source = unicode(post['video-source'])
-        player = unicode(post['video-player'])
-        f.write(player + u'\n<a href="%s">%s</a>\n' % (source, caption))
+        if source.startswith('<iframe'):
+            f.write(u'%s\n%s\n' % (source, caption))
+        else:
+            player = unicode(post['video-player'])
+            f.write(u'%s\n%s\n<p><a href="%s">Original</a></p>\n' % (player, caption, source))
 
     else:
         f.write(u'<!-- type: %s -->\n<pre>%s</pre>\n' % (type, pprint.pformat(post())))
