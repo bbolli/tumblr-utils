@@ -16,6 +16,7 @@ TUMBLR_URL = '.tumblr.com/api/read'
 
 verbose = True
 n_last = None           # None = all posts
+account = 'bbolli'
 
 
 def log(s):
@@ -158,10 +159,8 @@ if __name__ == '__main__':
     import getopt
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'qn:')
-        if len(args) != 1:
-            raise getopt.GetoptError("")
     except getopt.GetoptError:
-        print "Usage: %s [-q] [-n last-posts] userid" % sys.argv[0]
+        print "Usage: %s [-q] [-n last-posts] [userid]" % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
@@ -169,7 +168,7 @@ if __name__ == '__main__':
         elif o == '-n':
             n_last = int(v)
     try:
-        backup(args[0])
+        backup(args[0] if args else account)
     except Exception, e:
         sys.stderr.write('%r\n' % e)
         sys.exit(2)
