@@ -7,6 +7,7 @@ import urllib2
 import pprint
 from xml.sax.saxutils import escape
 import codecs
+import imghdr
 
 # extra required packages
 import xmltramp
@@ -56,16 +57,28 @@ def savePost(post, header, save_folder):
 
         image_filename = image_url.split('/')[-1]
         image_folder = os.path.join(save_folder, 'images')
+        if '.' not in image_filename:
+            image_response = urllib2.urlopen(image_url)
+            header = image_response.read(32)
+            image_type = imghdr.what(None, header)
+            if image_type:
+                image_type = {'jpeg': 'jpg'}.get(image_type, image_type)
+                image_filename += '.' + image_type
+        else:
+            image_response = None
+            header = ''
         if not os.path.exists(image_folder):
             os.mkdir(image_folder)
         local_image_path = os.path.join(image_folder, image_filename)
-
         if not os.path.exists(local_image_path):
             # only download images if they don't already exist
-            image_response = urllib2.urlopen(image_url)
+            if not image_response:
+                image_response = urllib2.urlopen(image_url)
             image_file = open(local_image_path, 'wb')
-            image_file.write(image_response.read())
+            image_file.write(header + image_response.read())
             image_file.close()
+        if image_response:
+            image_response.close()
 
         f.write(caption + u'<img alt="" src="images/%s">\n' % image_filename)
 
