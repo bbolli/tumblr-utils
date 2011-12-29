@@ -36,7 +36,7 @@ def savePost(post, header, save_folder):
     f = codecs.open(file_name, 'w', 'utf-8')
 
     # header info which is the same for all posts
-    f.write(u'%s<p class=date>%s</p>\n' % (header, date_gmt))
+    f.write(u'%s<p class=date>%s</p>\n<!-- type: %s -->\n' % (header, date_gmt, type))
 
     if type == 'regular':
         try:
@@ -107,7 +107,7 @@ def savePost(post, header, save_folder):
             f.write(u'%s\n%s\n<p><a href="%s">Original</a></p>\n' % (player, caption, source))
 
     else:
-        f.write(u'<!-- type: %s -->\n<pre>%s</pre>\n' % (type, pprint.pformat(post())))
+        f.write(u'<pre>%s</pre>\n' % pprint.pformat(post()))
 
     # common footer
     tags = post['tag':]
