@@ -77,6 +77,7 @@ def savePost(post, header, save_folder):
             image_file = open(local_image_path, 'wb')
             image_file.write(header + image_response.read())
             image_file.close()
+            os.utime(local_image_path, (date_unix, date_unix))
         if image_response:
             image_response.close()
 
