@@ -16,7 +16,7 @@ import xmltramp
 TUMBLR_URL = '.tumblr.com/api/read'
 
 verbose = True
-n_last = None           # None = all posts
+count = None            # None = all posts
 account = 'bbolli'
 
 # add another JPEG recognizer
@@ -161,7 +161,7 @@ def backup(account):
         header += u'<p class=subtitle>%s</p>\n' % subtitle
 
     # then find the total number of posts
-    total_posts = n_last or int(soup.posts('total'))
+    total_posts = count or int(soup.posts('total'))
 
     # then get the XML entries from the API, which we can only do for max 50 posts at once
     max = 50
@@ -185,13 +185,13 @@ if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'qn:')
     except getopt.GetoptError:
-        print "Usage: %s [-q] [-n last-posts] [userid]" % sys.argv[0]
+        print "Usage: %s [-q] [-n post-count] [userid]" % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
             verbose = False
         elif o == '-n':
-            n_last = int(v)
+            count = int(v)
     try:
         backup(args[0] if args else account)
     except Exception, e:
