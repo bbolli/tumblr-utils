@@ -19,6 +19,14 @@ verbose = True
 n_last = None           # None = all posts
 account = 'bbolli'
 
+# add another JPEG recognizer
+# see http://www.garykessler.net/library/file_sigs.html
+def test_jpg(h, f):
+    if h[:3] == '\xFF\xD8\xFF' and h[3] in "\xDB\xE0\xE1\xE2\xE3":
+        return 'jpg'
+
+imghdr.tests.append(test_jpg)
+
 
 def log(s):
     if verbose:
