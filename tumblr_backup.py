@@ -42,6 +42,7 @@ def savePost(post, header, save_folder):
 
     file_name = os.path.join(save_folder, slug + '.html')
     f = codecs.open(file_name, 'w', 'utf-8')
+    skip = False
 
     # header info which is the same for all posts
     f.write(u'%s<p class=date>%s</p>\n<!-- type: %s -->\n' % (header, date_gmt, type))
@@ -114,6 +115,9 @@ def savePost(post, header, save_folder):
             player = unicode(post['video-player'])
             f.write(u'%s\n%s\n<p><a href="%s">Original</a></p>\n' % (player, caption, source))
 
+    elif type in ('answer',):
+        skip = True
+
     else:
         f.write(u'<pre>%s</pre>\n' % pprint.pformat(post()))
 
@@ -124,7 +128,10 @@ def savePost(post, header, save_folder):
     f.write('</body>\n</html>\n')
 
     f.close()
-    os.utime(file_name, (date_unix, date_unix))
+    if skip:
+        os.unlink(file_name)
+    else:
+        os.utime(file_name, (date_unix, date_unix))
 
 def backup(account):
     """makes HTML files for every post on a public Tumblr blog account"""
