@@ -183,7 +183,10 @@ def backup(account):
         soup = xmltramp.parse(response.read())
 
         for post in soup.posts['post':]:
-            savePost(post, header, save_folder)
+            try:
+                savePost(post, header, save_folder)
+            except Exception, e:
+                sys.stderr.write('%s%s\n' % (e, 50 * ' '))
 
     log("Backup complete" + 50 * ' ' + '\n')
 
