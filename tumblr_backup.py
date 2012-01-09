@@ -33,117 +33,124 @@ def log(s):
     if verbose:
         print s,
 
-def savePost(post, header, save_folder):
-    """saves an individual post and any resources for it locally"""
+class TumblrBackup:
 
-    slug = post('id')
-    date_gmt = post('date')
-    date_unix = int(post('unix-timestamp'))
+  def get_content(self, post):
+    """generates HTML source for one post"""
+
+    content = []
+    append = content.append
     type = post('type')
 
-    file_name = os.path.join(save_folder, slug + '.html')
-    f = codecs.open(file_name, 'w', 'utf-8')
-    skip = False
-
     # header info which is the same for all posts
-    f.write(u'%s<p class=date>%s</p>\n<!-- type: %s -->\n' % (header, date_gmt, type))
+    append(u'<p class=date>%s</p>\n<!-- type: %s -->' % (post('date'), type))
 
     if type == 'regular':
         try:
-            f.write('<h2>' + unicode(post['regular-title']) + '</h2>\n')
+            append('<h2>' + unicode(post['regular-title']) + '</h2>')
         except KeyError:
             pass
         try:
-            f.write(unicode(post['regular-body']) + '\n')
+            append(unicode(post['regular-body']))
         except KeyError:
             pass
 
     elif type == 'photo':
         try:
-            caption = unicode(post['photo-caption']) + '\n'
+            append(unicode(post['photo-caption']))
         except KeyError:
-            caption = u''
-        image_url = unicode(post['photo-url'])
-
-        image_filename = image_url.split('/')[-1]
-        image_folder = os.path.join(save_folder, 'images')
-        if '.' not in image_filename:
-            image_response = urllib2.urlopen(image_url)
-            header = image_response.read(32)
-            image_type = imghdr.what(None, header)
-            if image_type:
-                image_type = {'jpeg': 'jpg'}.get(image_type, image_type)
-                image_filename += '.' + image_type
-        else:
-            image_response = None
-            header = ''
-        if not os.path.exists(image_folder):
-            os.mkdir(image_folder)
-        local_image_path = os.path.join(image_folder, image_filename)
-        if not os.path.exists(local_image_path):
-            # only download images if they don't already exist
-            if not image_response:
-                image_response = urllib2.urlopen(image_url)
-            image_file = open(local_image_path, 'wb')
-            image_file.write(header + image_response.read())
-            image_file.close()
-            os.utime(local_image_path, (date_unix, date_unix))
-        if image_response:
-            image_response.close()
-
-        f.write(caption + u'<img alt="" src="images/%s">\n' % image_filename)
+            pass
+        append(u'<img alt="" src="%s/%s">' % (self.image_dir, self.save_image(unicode(post['photo-url']))))
 
     elif type == 'link':
         text = post['link-text']
         url = post['link-url']
-        f.write(u'<h2><a href="%s">%s</a></h2>\n' % (url, text))
+        append(u'<h2><a href="%s">%s</a></h2>' % (url, text))
         try:
-            f.write(unicode(post['link-description']) + '\n')
+            append(unicode(post['link-description']))
         except KeyError:
             pass
 
     elif type == 'quote':
         quote = unicode(post['quote-text'])
         source = unicode(post['quote-source'])
-        f.write(u'<blockquote>%s</blockquote>\n<p>%s</p>\n' % (quote, source))
+        append(u'<blockquote>%s</blockquote>\n<p>%s</p>' % (quote, source))
 
     elif type == 'video':
         caption = unicode(post['video-caption'])
         source = unicode(post['video-source'])
         if source.startswith('<iframe'):
-            f.write(u'%s\n%s\n' % (source, caption))
+            append(u'%s\n%s' % (source, caption))
         else:
             player = unicode(post['video-player'])
-            f.write(u'%s\n%s\n<p><a href="%s">Original</a></p>\n' % (player, caption, source))
+            append(u'%s\n%s\n<p><a href="%s">Original</a></p>' % (player, caption, source))
 
     elif type in ('answer',):
-        skip = True
+        return ''
 
     else:
-        f.write(u'<pre>%s</pre>\n' % pprint.pformat(post()))
+        append(u'<pre>%s</pre>' % pprint.pformat(post()))
 
-    # common footer
     tags = post['tag':]
     if tags:
-        f.write(u'<p class=tags>%s</p>\n' % ' '.join('#' + unicode(t) for t in tags))
-    f.write('</body>\n</html>\n')
+        append(u'<p class=tags>%s</p>' % ' '.join('#' + unicode(t) for t in tags))
 
-    f.close()
-    if skip:
-        os.unlink(file_name)
+    return '\n'.join(content)
+
+  def save_post(self, post, content):
+    """saves one post locally"""
+
+    file_name = os.path.join(self.save_folder, post('id') + '.html')
+    f = codecs.open(file_name, 'w', 'utf-8')
+    try:
+        f.write(self.header + content + self.footer)
+    finally:
+        f.close()
+    self.set_date(file_name)
+
+  def save_image(self, image_url):
+    """saves an image if not saved yet"""
+    image_filename = image_url.split('/')[-1]
+    if '.' not in image_filename:
+        image_response = urllib2.urlopen(image_url)
+        image_header = image_response.read(32)
+        image_type = imghdr.what(None, image_header)
+        if image_type:
+            image_type = {'jpeg': 'jpg'}.get(image_type, image_type)
+            image_filename += '.' + image_type
     else:
-        os.utime(file_name, (date_unix, date_unix))
+        image_response = None
+        image_header = ''
+    if not os.path.exists(self.image_folder):
+        os.mkdir(self.image_folder)
+    local_image_path = os.path.join(self.image_folder, image_filename)
+    if not os.path.exists(local_image_path):
+        # only download images if they don't already exist
+        if not image_response:
+            image_response = urllib2.urlopen(image_url)
+        image_file = open(local_image_path, 'wb')
+        image_file.write(image_header + image_response.read())
+        image_file.close()
+        self.set_date(local_image_path)
+    if image_response:
+        image_response.close()
+    return image_filename
 
-def backup(account):
+  def set_date(self, file_name):
+    os.utime(file_name, (self.post_date, self.post_date))
+
+  def backup(self, account):
     """makes HTML files for every post on a public Tumblr blog account"""
 
     log("Getting basic information\r")
     base = 'http://' + account + TUMBLR_URL
 
     # make sure there's a folder to save in
-    save_folder = os.path.join(os.getcwd(), account)
-    if not os.path.exists(save_folder):
-        os.mkdir(save_folder)
+    self.save_folder = os.path.join(os.getcwd(), account)
+    if not os.path.exists(self.save_folder):
+        os.mkdir(self.save_folder)
+    self.image_dir = 'images'
+    self.image_folder = os.path.join(self.save_folder, self.image_dir)
 
     # start by calling the API with just a single post
     try:
@@ -159,14 +166,19 @@ def backup(account):
     subtitle = escape(unicode(tumblelog))
 
     # use it to create a generic header for all posts
-    header = u'''<!DOCTYPE html>
+    self.header = u'''<!DOCTYPE html>
 <html>
 <head><meta charset=utf-8><title>%s</title></head>
 <body>
 <h1>%s</h1>
 ''' % (title, title)
     if subtitle:
-        header += u'<p class=subtitle>%s</p>\n' % subtitle
+        self.header += u'<p class=subtitle>%s</p>\n' % subtitle
+
+    self.footer = u'''
+</body>
+</html>
+'''
 
     # then find the total number of posts
     total_posts = count or int(soup.posts('total'))
@@ -185,7 +197,10 @@ def backup(account):
 
         for post in soup.posts['post':]:
             try:
-                savePost(post, header, save_folder)
+                self.post_date = int(post('unix-timestamp'))
+                content = self.get_content(post)
+                if content:
+                    self.save_post(post, content)
             except Exception, e:
                 sys.stderr.write('%s%s\n' % (e, 50 * ' '))
 
@@ -206,7 +221,7 @@ if __name__ == '__main__':
         elif o == '-s':
             start = int(v)
     try:
-        backup(args[0] if args else account)
+        TumblrBackup().backup(args[0] if args else account)
     except Exception, e:
         sys.stderr.write('%r\n' % e)
         sys.exit(2)
