@@ -160,7 +160,7 @@ def backup(account):
     # use it to create a generic header for all posts
     header = u'''<!DOCTYPE html>
 <html>
-<head><title>%s</title></head>
+<head><meta charset=utf-8><title>%s</title></head>
 <body>
 <h1>%s</h1>
 ''' % (title, title)
