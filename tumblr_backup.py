@@ -17,6 +17,7 @@ TUMBLR_URL = '.tumblr.com/api/read'
 
 verbose = True
 count = None            # None = all posts
+start = 0               # 0 = most recent post
 account = 'bbolli'
 
 # add another JPEG recognizer
@@ -172,14 +173,14 @@ def backup(account):
 
     # then get the XML entries from the API, which we can only do for max 50 posts at once
     max = 50
-    for i in range(0, total_posts, max):
+    for i in range(start, start + total_posts, max):
         # find the upper bound
         j = i + max
-        if j > total_posts:
-            j = total_posts
+        if j > start + total_posts:
+            j = start + total_posts
         log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
 
-        response = urllib2.urlopen(base + '?num=%d&start=%d' % (j - i, i))
+        response = urllib2.urlopen('%s?num=%d&start=%d' % (base, j - i, i))
         soup = xmltramp.parse(response.read())
 
         for post in soup.posts['post':]:
@@ -193,15 +194,17 @@ def backup(account):
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qn:')
+        opts, args = getopt.getopt(sys.argv[1:], 'qn:s:')
     except getopt.GetoptError:
-        print "Usage: %s [-q] [-n post-count] [userid]" % sys.argv[0]
+        print "Usage: %s [-q] [-n post-count] [-s start-post] [userid]" % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
             verbose = False
         elif o == '-n':
             count = int(v)
+        elif o == '-s':
+            start = int(v)
     try:
         backup(args[0] if args else account)
     except Exception, e:
