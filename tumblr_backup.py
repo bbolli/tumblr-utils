@@ -100,7 +100,7 @@ def header(heading, title='', body_class='', subtitle=''):
 class TumblrBackup:
 
     def save_index(self):
-        idx = open(os.path.join(save_folder, 'index.html'), 'w')
+        idx = codecs.open(os.path.join(save_folder, 'index.html'), 'w', 'utf-8')
         idx.write(header(self.title, self.title, body_class='index', subtitle=self.subtitle))
         for year in sorted(self.index.keys(), reverse=True):
             self.save_year(idx, year)
@@ -120,7 +120,7 @@ class TumblrBackup:
     def save_month(self, year, month, tm):
         file_name = '%d-%02d.html' % (year, month)
         mkdir(archive_folder)
-        arch = open(os.path.join(archive_folder, file_name), 'w')
+        arch = codecs.open(os.path.join(archive_folder, file_name), 'w', 'utf-8')
         arch.write('\n\n'.join([
             header(self.title, time.strftime('%B %Y', tm), body_class='archive'),
             '\n\n'.join(p.meta(True) + p.content for p in self.index[year][month]),
