@@ -180,9 +180,9 @@ class TumblrBackup:
 
             for p in soup.posts['post':]:
                 post = TumblrPost(p)
-                if hasattr(post, 'error'):
+                if post.error:
                     sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
-                elif post.save_post():
+                if post.save_post():
                     self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
 
         if self.index:
@@ -196,6 +196,7 @@ class TumblrPost:
     def __init__(self, post):
         self.content = ''
         self.ident = post('id')
+        self.error = None
         try:
             self.typ = post('type')
             self.date = int(post('unix-timestamp'))
