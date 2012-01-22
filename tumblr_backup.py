@@ -16,7 +16,8 @@ import time
 import xmltramp
 
 # Tumblr specific constants
-TUMBLR_URL = '.tumblr.com/api/read'
+TUMBLR_BASE = '.tumblr.com'
+TUMBLR_URL = '/api/read'
 
 verbose = True
 root_folder = os.getcwdu()
@@ -133,6 +134,8 @@ class TumblrBackup:
         """makes HTML files and an index for every post on a public Tumblr blog account"""
 
         log("Getting basic information\r")
+        if '.' not in account:
+            account += TUMBLR_BASE
         base = 'http://' + account + TUMBLR_URL
 
         # make sure there are folders to save in
@@ -155,7 +158,10 @@ class TumblrBackup:
 
         # collect all the meta information
         tumblelog = soup.tumblelog
-        self.title = escape(tumblelog('title'))
+        try:
+            self.title = escape(tumblelog('title'))
+        except KeyError:
+            self.title = account
         self.subtitle = escape(unicode(tumblelog))
 
         # use it to create a header
