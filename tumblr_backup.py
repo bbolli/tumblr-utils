@@ -15,10 +15,6 @@ import time
 # extra required packages
 import xmltramp
 
-# Tumblr specific constants
-TUMBLR_BASE = '.tumblr.com'
-TUMBLR_URL = '/api/read'
-
 verbose = True
 root_folder = os.getcwdu()
 count = None            # None = all posts
@@ -133,10 +129,11 @@ class TumblrBackup:
     def backup(self, account):
         """makes HTML files and an index for every post on a public Tumblr blog account"""
 
-        log("Getting basic information\r")
+        # construct the tumblr API URL
+        base = 'http://' + account
         if '.' not in account:
-            account += TUMBLR_BASE
-        base = 'http://' + account + TUMBLR_URL
+            base += '.tumblr.com'
+        base += '/api/read'
 
         # make sure there are folders to save in
         global save_folder, post_folder, image_folder, archive_folder
@@ -149,6 +146,7 @@ class TumblrBackup:
         self.index = defaultdict(lambda: defaultdict(list))
 
         # start by calling the API with just a single post
+        log("Getting basic information\r")
         try:
             response = urllib2.urlopen(base + '?num=1')
         except urllib2.URLError:
