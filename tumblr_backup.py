@@ -229,6 +229,7 @@ class TumblrBackup:
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
         max = 50
+        n_posts = 0
         for i in range(start, start + total_posts, max):
             # find the upper bound
             j = i + max
@@ -251,6 +252,7 @@ class TumblrBackup:
                     sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
                 if post.save_post():
                     self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+                    n_posts += 1
 
             if i is None:
                 break
@@ -258,7 +260,7 @@ class TumblrBackup:
         if self.index:
             self.save_index()
 
-        log("Backup complete" + 50 * ' ' + '\n')
+        log("%d posts backed up" % n_posts + 50 * ' ' + '\n')
 
 
 class TumblrPost:
