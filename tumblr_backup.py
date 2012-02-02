@@ -2,6 +2,7 @@
 # encoding: utf-8
 
 # standard Python library imports
+from __future__ import with_statement
 import os
 import sys
 import urllib2
@@ -75,9 +76,8 @@ def save_image(image_url):
         # only download images if they don't already exist
         if not image_response:
             image_response = urllib2.urlopen(image_url)
-        image_file = open(local_image_path, 'wb')
-        image_file.write(image_header + image_response.read())
-        image_file.close()
+        with open(local_image_path, 'wb') as image_file:
+            image_file.write(image_header + image_response.read())
     if image_response:
         image_response.close()
     return image_filename
@@ -100,12 +100,11 @@ def header(heading, title='', body_class='', subtitle=''):
 class TumblrBackup:
 
     def save_index(self):
-        idx = open_text('index.html')
-        idx.write(header(self.title, self.title, body_class='index', subtitle=self.subtitle))
-        for year in sorted(self.index.keys(), reverse=True):
-            self.save_year(idx, year)
-        idx.write(footer)
-        idx.close()
+        with open_text('index.html') as idx:
+            idx.write(header(self.title, self.title, body_class='index', subtitle=self.subtitle))
+            for year in sorted(self.index.keys(), reverse=True):
+                self.save_year(idx, year)
+            idx.write(footer)
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
@@ -119,13 +118,12 @@ class TumblrBackup:
 
     def save_month(self, year, month, tm):
         file_name = '%d-%02d.html' % (year, month)
-        arch = open_text(archive_dir, file_name)
-        arch.write('\n\n'.join([
-            header(self.title, time.strftime('%B %Y', tm), body_class='archive'),
-            '\n\n'.join(p.meta(True) + p.content for p in self.index[year][month]),
-            footer
-        ]))
-        arch.close()
+        with open_text(archive_dir, file_name) as arch:
+            arch.write('\n\n'.join([
+                header(self.title, time.strftime('%B %Y', tm), body_class='archive'),
+                '\n\n'.join(p.meta(True) + p.content for p in self.index[year][month]),
+                footer
+            ]))
         return file_name
 
     def backup(self, account):
@@ -284,13 +282,8 @@ class TumblrPost:
         """saves this post locally"""
         if not self.content:
             return False
-        f = open_text(post_dir, self.file_name)
-        try:
+        with open_text(post_dir, self.file_name) as f:
             f.write(post_header + self.meta() + self.content + footer)
-        except:
-            return False
-        finally:
-            f.close()
         os.utime(os.path.join(save_folder, post_dir, self.file_name),
             (self.date, self.date)
         )
