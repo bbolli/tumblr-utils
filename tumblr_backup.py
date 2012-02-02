@@ -32,11 +32,9 @@ imghdr.tests.append(test_jpg)
 # directory names, will be set in TumblrBackup.backup()
 save_folder = ''
 post_dir = 'posts'
-post_folder = ''
 image_dir = 'images'
 image_folder = ''
 archive_dir = 'archive'
-archive_folder = ''
 
 # HTML fragments
 post_header = ''
@@ -52,6 +50,11 @@ def mkdir(dir, recursive=False):
             os.makedirs(dir)
         else:
             os.mkdir(dir)
+
+def open_text(*parts):
+    if len(parts) > 1:
+        mkdir(os.path.join(save_folder, *parts[:-1]))
+    return codecs.open(os.path.join(save_folder, *parts), 'w', 'utf-8')
 
 def save_image(image_url):
     """saves an image if not saved yet"""
@@ -97,7 +100,7 @@ def header(heading, title='', body_class='', subtitle=''):
 class TumblrBackup:
 
     def save_index(self):
-        idx = codecs.open(os.path.join(save_folder, 'index.html'), 'w', 'utf-8')
+        idx = open_text('index.html')
         idx.write(header(self.title, self.title, body_class='index', subtitle=self.subtitle))
         for year in sorted(self.index.keys(), reverse=True):
             self.save_year(idx, year)
@@ -116,8 +119,7 @@ class TumblrBackup:
 
     def save_month(self, year, month, tm):
         file_name = '%d-%02d.html' % (year, month)
-        mkdir(archive_folder)
-        arch = codecs.open(os.path.join(archive_folder, file_name), 'w', 'utf-8')
+        arch = open_text(archive_dir, file_name)
         arch.write('\n\n'.join([
             header(self.title, time.strftime('%B %Y', tm), body_class='archive'),
             '\n\n'.join(p.meta(True) + p.content for p in self.index[year][month]),
@@ -136,12 +138,10 @@ class TumblrBackup:
         base += '/api/read'
 
         # make sure there are folders to save in
-        global save_folder, post_folder, image_folder, archive_folder
+        global save_folder, image_folder
         save_folder = os.path.join(root_folder, account)
         mkdir(save_folder, True)
-        post_folder = os.path.join(save_folder, post_dir)
         image_folder = os.path.join(save_folder, image_dir)
-        archive_folder = os.path.join(save_folder, archive_dir)
 
         self.index = defaultdict(lambda: defaultdict(list))
 
@@ -284,16 +284,16 @@ class TumblrPost:
         """saves this post locally"""
         if not self.content:
             return False
-        mkdir(post_folder)
-        file_name = os.path.join(post_folder, self.file_name)
-        f = codecs.open(file_name, 'w', 'utf-8')
+        f = open_text(post_dir, self.file_name)
         try:
             f.write(post_header + self.meta() + self.content + footer)
         except:
             return False
         finally:
             f.close()
-        os.utime(file_name, (self.date, self.date))
+        os.utime(os.path.join(save_folder, post_dir, self.file_name),
+            (self.date, self.date)
+        )
         return True
 
 
