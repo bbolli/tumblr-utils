@@ -22,6 +22,7 @@ verbose = True
 root_folder = os.getcwdu()
 count = None            # None = all posts
 start = 0               # 0 = most recent post
+period = None           # YYYY[MM[DD]] to be backed up
 theme = False
 account = 'bbolli'
 
@@ -182,6 +183,17 @@ class TumblrBackup:
         self.index = defaultdict(lambda: defaultdict(list))
         self.avatar = None
 
+        # prepare the period start and end timestamps
+        if period:
+            i = 0; tm = [int(period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
+            if len(period) >= 6:
+                i = 1; tm[1] = int(period[4:6])
+            if len(period) == 8:
+                i = 2; tm[2] = int(period[6:8])
+            p_start = time.mktime(tm)
+            tm[i] += 1
+            p_stop = time.mktime(tm)
+
         if theme:
             # if .netrc contains the login, get the style info
             host = 'www.tumblr.com'
@@ -229,10 +241,19 @@ class TumblrBackup:
 
             for p in soup.posts['post':]:
                 post = TumblrPost(p)
+                if period:
+                    if post.date >= p_stop:
+                        continue
+                    if post.date < p_start:
+                        i = None
+                        break
                 if post.error:
                     sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
                 if post.save_post():
                     self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+
+            if i is None:
+                break
 
         if self.index:
             self.save_index()
@@ -340,9 +361,9 @@ class TumblrPost:
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qn:s:t')
+        opts, args = getopt.getopt(sys.argv[1:], 'qn:s:p:t')
     except getopt.GetoptError:
-        print "Usage: %s [-q] [-n post-count] [-s start-post] [-t] [userid]" % sys.argv[0]
+        print "Usage: %s [-q] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [userid]" % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
@@ -351,6 +372,16 @@ if __name__ == '__main__':
             count = int(v)
         elif o == '-s':
             start = int(v)
+        elif o == '-p':
+            try:
+                period = time.strftime(
+                    {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[v]
+                )
+            except KeyError:
+                period = v.replace('-', '')
+            if len(period) not in (4, 6, 8):
+                sys.stderr.write('Period must be y, m, d or YYYY[MM[DD]]\n')
+                sys.exit(1)
         elif o == '-t':
             theme = True
     if args:
