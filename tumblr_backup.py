@@ -5,6 +5,7 @@
 from __future__ import with_statement
 import os
 import sys
+import urllib
 import urllib2
 import pprint
 from xml.sax.saxutils import escape
@@ -12,6 +13,7 @@ import codecs
 import imghdr
 from collections import defaultdict
 import time
+import netrc
 
 # extra required packages
 import xmltramp
@@ -20,6 +22,7 @@ verbose = True
 root_folder = os.getcwdu()
 count = None            # None = all posts
 start = 0               # 0 = most recent post
+theme = False
 account = 'bbolli'
 
 # add another JPEG recognizer
@@ -36,6 +39,7 @@ post_dir = 'posts'
 image_dir = 'images'
 image_folder = ''
 archive_dir = 'archive'
+theme_dir = 'theme'
 
 # HTML fragments
 post_header = ''
@@ -82,7 +86,7 @@ def save_image(image_url):
         image_response.close()
     return image_filename
 
-def header(heading, title='', body_class='', subtitle=''):
+def header(heading, title='', body_class='', subtitle='', avatar=''):
     if body_class:
         body_class = ' class=' + body_class
     h = u'''<!DOCTYPE html>
@@ -90,6 +94,8 @@ def header(heading, title='', body_class='', subtitle=''):
 <head><meta charset=utf-8><title>%s</title></head>
 <body%s>
 ''' % (heading, body_class)
+    if avatar:
+        h += '<img src=%s/%s alt=Avatar style="float: right;">\n' % (theme_dir, avatar)
     if title:
         h += '<h1>%s</h1>\n' % title
     if subtitle:
@@ -101,7 +107,9 @@ class TumblrBackup:
 
     def save_index(self):
         with open_text('index.html') as idx:
-            idx.write(header(self.title, self.title, body_class='index', subtitle=self.subtitle))
+            idx.write(header(self.title, self.title, body_class='index',
+                subtitle=self.subtitle, avatar=self.avatar
+            ))
             for year in sorted(self.index.keys(), reverse=True):
                 self.save_year(idx, year)
             idx.write(footer)
@@ -126,6 +134,36 @@ class TumblrBackup:
             ]))
         return file_name
 
+    def get_theme(self, host, user, password):
+        try:
+            info = urllib2.urlopen('http://%s/api/authenticate' % host,
+                urllib.urlencode({
+                    'email': user, 'password': password, 'include-theme': '1'
+                })
+            )
+        except urllib2.URLError:
+            return
+        tumblr = xmltramp.parse(info.read())
+        if tumblr._name != 'tumblr':
+            return
+        for log in tumblr['tumblelog':]:
+            attrs = log()
+            if attrs.get('is-primary') != 'yes':
+                continue
+            if hasattr(log, 'custom-css'):
+                with open_text(theme_dir, 'custom.css') as f:
+                    f.write(log['custom-css'][0])
+            if hasattr(log, 'theme-source'):
+                with open_text(theme_dir, 'theme.html') as f:
+                    f.write(log['theme-source'][0])
+            avatar_url = attrs.get('avatar-url')
+            if avatar_url:
+                avatar = urllib2.urlopen(avatar_url)
+                avatar_file = 'avatar.' + avatar_url.split('.')[-1]
+                with open(os.path.join(save_folder, theme_dir, avatar_file), 'wb') as f:
+                    f.write(avatar.read())
+                    self.avatar = avatar_file
+
     def backup(self, account):
         """makes HTML files and an index for every post on a public Tumblr blog account"""
 
@@ -142,6 +180,15 @@ class TumblrBackup:
         image_folder = os.path.join(save_folder, image_dir)
 
         self.index = defaultdict(lambda: defaultdict(list))
+        self.avatar = None
+
+        if theme:
+            # if .netrc contains the login, get the style info
+            host = 'www.tumblr.com'
+            auth = netrc.netrc().authenticators(host)
+            if auth:
+                log("Getting the theme\r")
+                self.get_theme(host, auth[0], auth[2])
 
         # start by calling the API with just a single post
         log("Getting basic information\r")
@@ -293,9 +340,9 @@ class TumblrPost:
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qn:s:')
+        opts, args = getopt.getopt(sys.argv[1:], 'qn:s:t')
     except getopt.GetoptError:
-        print "Usage: %s [-q] [-n post-count] [-s start-post] [userid]" % sys.argv[0]
+        print "Usage: %s [-q] [-n post-count] [-s start-post] [-t] [userid]" % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
@@ -304,6 +351,8 @@ if __name__ == '__main__':
             count = int(v)
         elif o == '-s':
             start = int(v)
+        elif o == '-t':
+            theme = True
     if args:
         account = args[0]
     try:
