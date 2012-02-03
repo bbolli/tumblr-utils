@@ -90,12 +90,21 @@ def save_image(image_url):
 def header(heading, title='', body_class='', subtitle='', avatar=''):
     if body_class:
         body_class = ' class=' + body_class
+        style = '''
+<style>
+.archive h1, .subtitle, article {
+    padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; margin-bottom: 0.75em;
+}
+</style>
+'''
+    else:
+        style = ''
     h = u'''<!DOCTYPE html>
 <html>
-<head><meta charset=utf-8><title>%s</title></head>
+<head><meta charset=utf-8><title>%s</title>%s</head>
 <body%s>
 
-''' % (heading, body_class)
+''' % (heading, style, body_class)
     if avatar:
         h += '<img src=%s/%s alt=Avatar style="float: right;">\n' % (theme_dir, avatar)
     if title:
