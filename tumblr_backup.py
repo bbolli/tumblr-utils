@@ -228,7 +228,7 @@ class TumblrBackup:
             self.title = escape(tumblelog('title'))
         except KeyError:
             self.title = account
-        self.subtitle = escape(unicode(tumblelog))
+        self.subtitle = unicode(tumblelog)
 
         # use it to create a header
         global post_header
