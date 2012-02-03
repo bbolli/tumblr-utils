@@ -94,6 +94,7 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
 <html>
 <head><meta charset=utf-8><title>%s</title></head>
 <body%s>
+
 ''' % (heading, body_class)
     if avatar:
         h += '<img src=%s/%s alt=Avatar style="float: right;">\n' % (theme_dir, avatar)
@@ -120,7 +121,7 @@ class TumblrBackup:
         for month in sorted(self.index[year].keys(), reverse=True):
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
             month_name = self.save_month(year, month, tm)
-            idx.write('<li><a href=%s/%s>%s</a></li>\n' % (
+            idx.write('    <li><a href=%s/%s>%s</a></li>\n' % (
                 archive_dir, month_name, time.strftime('%B', tm)
             ))
         idx.write('</ul>\n')
@@ -130,7 +131,8 @@ class TumblrBackup:
         with open_text(archive_dir, file_name) as arch:
             arch.write('\n\n'.join([
                 header(self.title, time.strftime('%B %Y', tm), body_class='archive'),
-                '\n\n'.join(p.meta(True) + p.content for p in self.index[year][month]),
+                '\n\n'.join(p.get_post(True) for p in self.index[year][month]),
+                '<p><a href=../>Index</a></p>',
                 footer
             ]))
         return file_name
@@ -339,21 +341,21 @@ class TumblrPost:
 
         self.content = '\n'.join(content)
 
-    def meta(self, link=False):
-        """returns this post's meta data in HTML"""
-        meta = u'<!-- type: %s, id: %s -->\n<p class=meta><span class=date>%s</span>' % (
-            self.typ, self.ident, time.strftime('%x %X', self.tm)
-        )
+    def get_post(self, link=False):
+        """returns this post in HTML"""
+        post = '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
+        post += '<p class=meta><span class=date>%s</span>' % time.strftime('%x %X', self.tm)
         if link:
-            meta += u'\n<span class=link><a href=../%s/%s>¶</a></span>' % (post_dir, self.file_name)
-        return meta + '</p>\n'
+            post += u'\n<span class=link><a href=../%s/%s>¶</a></span>' % (post_dir, self.file_name)
+        post += '</p>\n' + self.content + '\n</article>'
+        return post
 
     def save_post(self):
         """saves this post locally"""
         if not self.content:
             return False
         with open_text(post_dir, self.file_name) as f:
-            f.write(post_header + self.meta() + self.content + footer)
+            f.write(post_header + self.get_post() + '\n\n' + footer)
         os.utime(os.path.join(save_folder, post_dir, self.file_name),
             (self.date, self.date)
         )
