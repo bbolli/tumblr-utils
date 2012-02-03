@@ -24,7 +24,6 @@ count = None            # None = all posts
 start = 0               # 0 = most recent post
 period = None           # YYYY[MM[DD]] to be backed up
 theme = False
-account = 'bbolli'
 
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
@@ -397,10 +396,12 @@ if __name__ == '__main__':
                 sys.exit(1)
         elif o == '-t':
             theme = True
-    if args:
-        account = args[0]
+    if not args:
+        args = ['bbolli']
+    tb = TumblrBackup()
     try:
-        TumblrBackup().backup(account)
+        for account in args:
+            tb.backup(account)
     except Exception, e:
         sys.stderr.write('%r\n' % e)
         sys.exit(2)
