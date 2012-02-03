@@ -66,24 +66,24 @@ def save_image(image_url):
     """saves an image if not saved yet"""
     image_filename = image_url.split('/')[-1]
     if '.' not in image_filename:
-        image_response = urllib2.urlopen(image_url)
-        image_header = image_response.read(32)
+        # read just the first 32 bytes of the image
+        header_req = urllib2.Request(image_url)
+        header_req.headers['Range'] = 'bytes=0-31'
+        header_resp = urllib2.urlopen(header_req)
+        image_header = header_resp.read()
         image_type = imghdr.what(None, image_header)
         if image_type:
-            image_type = {'jpeg': 'jpg'}.get(image_type, image_type)
+            if image_type == 'jpeg':
+                image_type = 'jpg'
             image_filename += '.' + image_type
-    else:
-        image_response = None
-        image_header = ''
+        header_resp.close()
     mkdir(image_folder)
     local_image_path = os.path.join(image_folder, image_filename)
     if not os.path.exists(local_image_path):
         # only download images if they don't already exist
-        if not image_response:
-            image_response = urllib2.urlopen(image_url)
+        image_response = urllib2.urlopen(image_url)
         with open(local_image_path, 'wb') as image_file:
-            image_file.write(image_header + image_response.read())
-    if image_response:
+            image_file.write(image_response.read())
         image_response.close()
     return image_filename
 
