@@ -144,6 +144,18 @@ class TumblrBackup:
             ]))
         return file_name
 
+    def save_period(self):
+        dashed = period
+        for i in range(len(period) - 2, 2, -2):
+            dashed = dashed[:i] + '-' + dashed[i:]
+        file_name = 'period-%s.html' % dashed
+        with open_text(archive_dir, file_name) as arch:
+            arch.write('\n\n'.join([
+                header(self.title, dashed, body_class='archive'),
+                '\n\n'.join(p.get_post(True) for p in self.period),
+                footer
+            ]))
+
     def get_theme(self, host, user, password):
         os.system('/bin/rm -rf "%s"' % os.path.join(save_folder, theme_dir))
         try:
@@ -191,6 +203,7 @@ class TumblrBackup:
         image_folder = os.path.join(save_folder, image_dir)
 
         self.index = defaultdict(lambda: defaultdict(list))
+        self.period = []
         self.avatar = None
 
         # prepare the period start and end timestamps
@@ -239,7 +252,6 @@ class TumblrBackup:
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
         max = 50
-        n_posts = 0
         for i in range(start, start + total_posts, max):
             # find the upper bound
             j = i + max
@@ -259,18 +271,21 @@ class TumblrBackup:
                         i = None
                         break
                 if post.error:
-                    sys.stderr.write('%s in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
+                    sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
                 if post.save_post():
                     self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
-                    n_posts += 1
+                    self.period.append(post)
 
             if i is None:
                 break
 
         if self.index:
-            self.save_index()
+            if period:
+                self.save_period()
+            else:
+                self.save_index()
 
-        log("%d posts backed up" % n_posts + 50 * ' ' + '\n')
+        log("%d posts backed up" % len(self.period) + 50 * ' ' + '\n')
 
 
 class TumblrPost:
