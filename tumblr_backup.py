@@ -161,10 +161,10 @@ class TumblrBackup:
             attrs = log()
             if attrs.get('is-primary') != 'yes':
                 continue
-            if hasattr(log, 'custom-css'):
+            if hasattr(log, 'custom-css') and len(log['custom-css']):
                 with open_text(theme_dir, 'custom.css') as f:
                     f.write(log['custom-css'][0])
-            if hasattr(log, 'theme-source'):
+            if hasattr(log, 'theme-source') and len(log['theme-source']):
                 with open_text(theme_dir, 'theme.html') as f:
                     f.write(log['theme-source'][0])
             avatar_url = attrs.get('avatar-url')
