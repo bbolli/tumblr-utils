@@ -7,7 +7,6 @@ import os
 import sys
 import urllib
 import urllib2
-import pprint
 from xml.sax.saxutils import escape
 import codecs
 import imghdr
@@ -260,7 +259,7 @@ class TumblrBackup:
                         i = None
                         break
                 if post.error:
-                    sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
+                    sys.stderr.write('%s in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
                 if post.save_post():
                     self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
                     n_posts += 1
@@ -288,7 +287,7 @@ class TumblrPost:
             self.generate_content(post)
         except Exception, e:
             self.error = e
-            self.content = u'<p class=error>%r</p>\n<pre>%s</pre>' % (e, pprint.pformat(post()))
+            self.content = u'<p class=error>%r</p>\n<pre>%s</pre>' % (e, escape(post.__repr__(1, 1)))
 
     def generate_content(self, post):
         """generates HTML source for this post"""
@@ -345,7 +344,7 @@ class TumblrPost:
             return ''
 
         else:
-            append(u'<pre>%s</pre>' % pprint.pformat(post()))
+            raise ValueError('Unknown post type: ' + self.typ)
 
         tags = post['tag':]
         if tags:
