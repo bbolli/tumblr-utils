@@ -355,8 +355,8 @@ class TumblrPost:
                 player = unicode(post['video-player'])
                 append(u'%s\n%s\n<p><a href="%s">Original</a></p>' % (player, caption, source))
 
-        elif self.typ in ('answer',):
-            return ''
+        elif self.typ == 'answer':
+            append(u'<p class=question>%s</p>\n%s\n' % (post.question, post.answer))
 
         else:
             raise ValueError('Unknown post type: ' + self.typ)
