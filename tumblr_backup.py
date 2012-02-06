@@ -383,7 +383,7 @@ class TumblrPost:
         post = '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>' % time.strftime('%x %X', self.tm)
         if link:
-            post += u'\n<span class=link><a href=../%s/%s>¶</a></span>' % (post_dir, self.file_name)
+            post += u'\n<a class=link href=../%s/%s>¶</a>' % (post_dir, self.file_name)
         post += '</p>\n' + self.content + '\n</article>'
         return post
 
