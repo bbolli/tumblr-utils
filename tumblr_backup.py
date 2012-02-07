@@ -355,6 +355,14 @@ class TumblrPost:
                 player = unicode(post['video-player'])
                 append(u'%s\n%s\n<p><a href="%s">Original</a></p>' % (player, caption, source))
 
+        elif self.typ == 'audio':
+            try:
+                caption = unicode(post['audio-caption'])
+            except:
+                caption = ''
+            source = unicode(post['audio-player'])
+            append(u'%s\n%s' % (source, caption))
+
         elif self.typ == 'answer':
             append(u'<p class=question>%s</p>\n%s\n' % (post.question, post.answer))
 
