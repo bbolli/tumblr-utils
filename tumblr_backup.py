@@ -89,17 +89,20 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
     if body_class:
         body_class = ' class=' + body_class
         style = '''
-<style>
 .archive h1, .subtitle, article {
     padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; margin-bottom: 0.75em;
-}
-</style>
-'''
+}'''
     else:
         style = ''
     h = u'''<!DOCTYPE html>
 <html>
-<head><meta charset=utf-8><title>%s</title>%s</head>
+<head><meta charset=utf-8><title>%s</title>
+<style>
+body { width: 720px; margin: 0 auto; }
+img { max-width: 720px; }%s
+</style>
+</head>
+
 <body%s>
 
 ''' % (heading, style, body_class)
