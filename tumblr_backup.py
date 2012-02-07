@@ -100,6 +100,7 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
 <style>
 body { width: 720px; margin: 0 auto; }
 img { max-width: 720px; }%s
+a.link { text-decoration: none; }
 </style>
 </head>
 
@@ -296,6 +297,7 @@ class TumblrPost:
     def __init__(self, post):
         self.content = ''
         self.ident = post('id')
+        self.url = post('url')
         self.error = None
         try:
             self.typ = post('type')
@@ -378,12 +380,14 @@ class TumblrPost:
 
         self.content = '\n'.join(content)
 
-    def get_post(self, link=False):
+    def get_post(self, local_link=False):
         """returns this post in HTML"""
         post = '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>' % time.strftime('%x %X', self.tm)
-        if link:
+        if local_link:
             post += u'\n<a class=link href=../%s/%s>¶</a>' % (post_dir, self.file_name)
+        else:
+            post += u'\n<a class=link href=%s>●</a>' % self.url
         post += '</p>\n' + self.content + '\n</article>'
         return post
 
