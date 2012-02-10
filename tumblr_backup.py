@@ -168,7 +168,7 @@ class TumblrBackup:
                 footer
             ]))
 
-    def get_theme(self, host, user, password):
+    def get_theme(self, account, host, user, password):
         subprocess.call(['/bin/rm', '-rf', os.path.join(save_folder, theme_dir)])
         try:
             info = urllib2.urlopen('http://%s/api/authenticate' % host,
@@ -183,7 +183,7 @@ class TumblrBackup:
             return
         for log in tumblr['tumblelog':]:
             attrs = log()
-            if attrs.get('is-primary') != 'yes':
+            if attrs.get('name') != account:
                 continue
             if hasattr(log, 'custom-css') and len(log['custom-css']):
                 with open_text(theme_dir, 'custom.css') as f:
@@ -236,7 +236,7 @@ class TumblrBackup:
             auth = netrc.netrc().authenticators(host)
             if auth:
                 log("Getting the theme\r")
-                self.get_theme(host, auth[0], auth[2])
+                self.get_theme(account, host, auth[0], auth[2])
 
         # start by calling the API with just a single post
         log("Getting basic information\r")
