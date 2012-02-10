@@ -326,57 +326,41 @@ class TumblrPost:
             # the %s conversion calls unicode() on the xmltramp element
             content.append(fmt % s)
 
+        def append_try(elt, fmt=u'%s'):
+            try:
+                append(post[elt], fmt)
+            except KeyError:
+                pass
+
         if self.typ == 'regular':
-            try:
-                append(post['regular-title'], u'<h2>%s</h2>')
-            except KeyError:
-                pass
-            try:
-                append(post['regular-body'])
-            except KeyError:
-                pass
+            append_try('regular-title', u'<h2>%s</h2>')
+            append_try('regular-body')
 
         elif self.typ == 'photo':
             append((image_dir, save_image(unicode(post['photo-url']))), u'<img alt="" src="../%s/%s">')
-            try:
-                append(post['photo-caption'])
-            except KeyError:
-                pass
+            append_try('photo-caption')
 
         elif self.typ == 'link':
             append((post['link-url'], post['link-text']), u'<h2><a href="%s">%s</a></h2>')
-            try:
-                append(post['link-description'])
-            except KeyError:
-                pass
+            append_try('link-description')
 
         elif self.typ == 'quote':
             append(post['quote-text'], u'<blockquote>%s</blockquote>')
-            try:
-                append(post['quote-source'], u'<p>%s</p>')
-            except KeyError:
-                pass
+            append_try('quote-source', u'<p>%s</p>')
 
         elif self.typ == 'video':
-            try:
-                caption = unicode(post['video-caption'])
-            except:
-                caption = ''
             source = unicode(post['video-source'])
             if source.startswith('<iframe') or source.startswith('<object'):
                 append(source)
-                append(caption)
+                append_try('video-caption')
             else:
                 append(post['video-player'])
-                append(caption)
+                append_try('video-caption')
                 append(source, u'<p><a href="%s">Original</a></p>')
 
         elif self.typ == 'audio':
             append(post['audio-player'])
-            try:
-                append(post['audio-caption'])
-            except:
-                pass
+            append_try('audio-caption')
 
         elif self.typ == 'answer':
             append(post.question, u'<p class=question>%s</p>')
