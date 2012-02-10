@@ -321,38 +321,39 @@ class TumblrPost:
     def generate_content(self, post):
         """generates HTML source for this post"""
         content = []
-        append = content.append
+
+        def append(s, fmt=u'%s'):
+            # the %s conversion calls unicode() on the xmltramp element
+            content.append(fmt % s)
 
         if self.typ == 'regular':
             try:
-                append('<h2>' + unicode(post['regular-title']) + '</h2>')
+                append(post['regular-title'], u'<h2>%s</h2>')
             except KeyError:
                 pass
             try:
-                append(unicode(post['regular-body']))
+                append(post['regular-body'])
             except KeyError:
                 pass
 
         elif self.typ == 'photo':
-            append(u'<img alt="" src="../%s/%s">' % (image_dir, save_image(unicode(post['photo-url']))))
+            append((image_dir, save_image(unicode(post['photo-url']))), u'<img alt="" src="../%s/%s">')
             try:
-                append(unicode(post['photo-caption']))
+                append(post['photo-caption'])
             except KeyError:
                 pass
 
         elif self.typ == 'link':
-            text = post['link-text']
-            url = post['link-url']
-            append(u'<h2><a href="%s">%s</a></h2>' % (url, text))
+            append((post['link-url'], post['link-text']), u'<h2><a href="%s">%s</a></h2>')
             try:
-                append(unicode(post['link-description']))
+                append(post['link-description'])
             except KeyError:
                 pass
 
         elif self.typ == 'quote':
-            append(unicode(post['quote-text']))
+            append(post['quote-text'], u'<blockquote>%s</blockquote>')
             try:
-                append(u'<p>%s</p>' % post['quote-source'])
+                append(post['quote-source'], u'<p>%s</p>')
             except KeyError:
                 pass
 
@@ -363,28 +364,30 @@ class TumblrPost:
                 caption = ''
             source = unicode(post['video-source'])
             if source.startswith('<iframe') or source.startswith('<object'):
-                append(u'%s\n%s' % (source, caption))
+                append(source)
+                append(caption)
             else:
-                player = unicode(post['video-player'])
-                append(u'%s\n%s\n<p><a href="%s">Original</a></p>' % (player, caption, source))
+                append(post['video-player'])
+                append(caption)
+                append(source, u'<p><a href="%s">Original</a></p>')
 
         elif self.typ == 'audio':
+            append(post['audio-player'])
             try:
-                caption = unicode(post['audio-caption'])
+                append(post['audio-caption'])
             except:
-                caption = ''
-            source = unicode(post['audio-player'])
-            append(u'%s\n%s' % (source, caption))
+                pass
 
         elif self.typ == 'answer':
-            append(u'<p class=question>%s</p>\n%s\n' % (post.question, post.answer))
+            append(post.question, u'<p class=question>%s</p>')
+            append(post.answer)
 
         else:
             raise ValueError('Unknown post type: ' + self.typ)
 
         tags = post['tag':]
         if tags:
-            append(u'<p class=tags>%s</p>' % ' '.join('#' + unicode(t) for t in tags))
+            append(' '.join(u'#%s' % t for t in tags), u'<p class=tags>%s</p>')
 
         self.content = '\n'.join(content)
 
