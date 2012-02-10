@@ -34,13 +34,16 @@ def test_jpg(h, f):
 
 imghdr.tests.append(test_jpg)
 
-# directory names, will be set in TumblrBackup.backup()
+# variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
+image_folder = ''
+
+# constant names
 post_dir = 'posts'
 image_dir = 'images'
-image_folder = ''
 archive_dir = 'archive'
 theme_dir = 'theme'
+backup_css = '_local.css'
 
 # HTML fragments
 post_header = ''
@@ -94,29 +97,22 @@ def save_image(image_url):
     return image_filename
 
 def header(heading, title='', body_class='', subtitle='', avatar=''):
+    theme_rel = '../' + theme_dir
     if body_class:
+        if body_class == 'index':
+            theme_rel = theme_dir
         body_class = ' class=' + body_class
-        style = '''
-.archive h1, .subtitle, article {
-    padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; margin-bottom: 0.75em;
-}'''
-    else:
-        style = ''
     h = u'''<!DOCTYPE html>
 <html>
 <head><meta charset=utf-8><title>%s</title>
-<style>
-body { width: 720px; margin: 0 auto; }
-img { max-width: 720px; }%s
-a.link { text-decoration: none; }
-</style>
+<link rel=stylesheet type=text/css href=%s/%s>
 </head>
 
 <body%s>
 
-''' % (heading, style, body_class)
+''' % (heading, theme_rel, backup_css, body_class)
     if avatar:
-        h += '<img src=%s/%s alt=Avatar style="float: right;">\n' % (theme_dir, avatar)
+        h += '<img src=%s/%s alt=Avatar style="float: right;">\n' % (theme_rel, avatar)
     if title:
         h += u'<h1>%s</h1>\n' % title
     if subtitle:
@@ -125,6 +121,23 @@ a.link { text-decoration: none; }
 
 
 class TumblrBackup:
+
+    def save_style(self):
+        with open_text(theme_dir, backup_css) as css:
+            css.write('''
+body {
+    width: 720px; margin: 0 auto;
+}
+img {
+    max-width: 720px;
+}
+.archive h1, .subtitle, article {
+    padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; margin-bottom: 0.75em;
+}
+a.link {
+    text-decoration: none;
+}
+''')
 
     def save_index(self):
         with open_text('index.html') as idx:
@@ -293,6 +306,7 @@ class TumblrBackup:
                 break
 
         if self.index:
+            self.save_style()
             if period:
                 self.save_period()
             else:
