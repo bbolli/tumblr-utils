@@ -334,11 +334,11 @@ class TumblrPost:
                 pass
 
         elif self.typ == 'photo':
+            append(u'<img alt="" src="../%s/%s">' % (image_dir, save_image(unicode(post['photo-url']))))
             try:
                 append(unicode(post['photo-caption']))
             except KeyError:
                 pass
-            append(u'<img alt="" src="../%s/%s">' % (image_dir, save_image(unicode(post['photo-url']))))
 
         elif self.typ == 'link':
             text = post['link-text']
