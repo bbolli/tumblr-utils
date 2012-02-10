@@ -363,7 +363,7 @@ class TumblrPost:
             except:
                 caption = ''
             source = unicode(post['video-source'])
-            if source.startswith('<iframe'):
+            if source.startswith('<iframe') or source.startswith('<object'):
                 append(u'%s\n%s' % (source, caption))
             else:
                 player = unicode(post['video-player'])
