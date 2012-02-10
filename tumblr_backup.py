@@ -350,12 +350,11 @@ class TumblrPost:
                 pass
 
         elif self.typ == 'quote':
-            quote = unicode(post['quote-text'])
+            append(unicode(post['quote-text']))
             try:
-                source = unicode(post['quote-source'])
+                append(u'<p>%s</p>' % post['quote-source'])
             except KeyError:
-                source = ''
-            append(u'<blockquote>%s</blockquote>\n<p>%s</p>' % (quote, source))
+                pass
 
         elif self.typ == 'video':
             try:
