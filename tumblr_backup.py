@@ -193,6 +193,7 @@ class TumblrBackup:
                     f.write(log['theme-source'][0])
             avatar_url = attrs.get('avatar-url')
             if avatar_url:
+                mkdir(os.path.join(save_folder, theme_dir))
                 avatar = urllib2.urlopen(avatar_url)
                 avatar_file = 'avatar.' + avatar_url.split('.')[-1]
                 with open(os.path.join(save_folder, theme_dir, avatar_file), 'wb') as f:
