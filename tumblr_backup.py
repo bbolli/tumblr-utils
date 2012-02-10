@@ -13,6 +13,7 @@ import imghdr
 from collections import defaultdict
 import time
 import netrc
+import locale
 
 # extra required packages
 import xmltramp
@@ -43,6 +44,12 @@ theme_dir = 'theme'
 # HTML fragments
 post_header = ''
 footer = u'</body>\n</html>\n'
+
+# ensure the right date/time format
+try:
+    locale.setlocale(locale.LC_TIME, '')
+except locale.Error:
+    pass
 
 def log(s):
     if verbose:
