@@ -14,6 +14,7 @@ from collections import defaultdict
 import time
 import netrc
 import locale
+import subprocess
 
 # extra required packages
 import xmltramp
@@ -168,7 +169,7 @@ class TumblrBackup:
             ]))
 
     def get_theme(self, host, user, password):
-        os.system('/bin/rm -rf "%s"' % os.path.join(save_folder, theme_dir))
+        subprocess.call(['/bin/rm', '-rf', os.path.join(save_folder, theme_dir)])
         try:
             info = urllib2.urlopen('http://%s/api/authenticate' % host,
                 urllib.urlencode({
