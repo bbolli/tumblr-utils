@@ -118,9 +118,9 @@ a.link { text-decoration: none; }
     if avatar:
         h += '<img src=%s/%s alt=Avatar style="float: right;">\n' % (theme_dir, avatar)
     if title:
-        h += '<h1>%s</h1>\n' % title
+        h += u'<h1>%s</h1>\n' % title
     if subtitle:
-        h += '<p class=subtitle>%s</p>\n' % subtitle
+        h += u'<p class=subtitle>%s</p>\n' % subtitle
     return h
 
 
@@ -141,7 +141,7 @@ class TumblrBackup:
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
             month_name = self.save_month(year, month, tm)
             idx.write('    <li><a href=%s/%s>%s</a></li>\n' % (
-                archive_dir, month_name, time.strftime('%B', tm)
+                archive_dir, month_name, time.strftime('%B', tm).decode('utf-8')
             ))
         idx.write('</ul>\n')
 
@@ -149,7 +149,7 @@ class TumblrBackup:
         file_name = '%d-%02d.html' % (year, month)
         with open_text(archive_dir, file_name) as arch:
             arch.write('\n\n'.join([
-                header(self.title, time.strftime('%B %Y', tm), body_class='archive'),
+                header(self.title, time.strftime('%B %Y', tm).decode('utf-8'), body_class='archive'),
                 '\n\n'.join(p.get_post(True) for p in self.index[year][month]),
                 '<p><a href=../>Index</a></p>',
                 footer
