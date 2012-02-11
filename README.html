@@ -1,0 +1,136 @@
+<h1>tumblr_backup</h1>
+
+<h2>0. What is this?</h2>
+
+<p><code>tumblr_backup</code> is a Python script that backs up your
+<a href="http://www.tumblr.com">Tumblr</a> blog locally. The backup includes all
+images from image posts. An index links to monthly pages, which contain
+all the posts from the respective month, plus links to single post pages.
+There are many options to select the posts to backup.</p>
+
+<p>You can see en example of <code>tumblr_backup</code>’s output
+<a href="http://drbeat.li/tumblr">on my home page</a>.</p>
+
+<h2>1. Installation</h2>
+
+<ol>
+<li>Download and unzip
+<a href="https://github.com/bbolli/xmltramp/zipball/master">xmltramp.zip</a>.</li>
+<li>Install <code>xmltramp.py</code> somewhere on your Python path like
+<code>/usr/local/lib/python2.6/dist-packages</code>.</li>
+<li>Download and unzip
+<a href="https://github.com/bbolli/tumblr_backup/zipball/bb">tumblr_backup.zip</a>.</li>
+<li>Copy <code>tumblr_backup.py</code> to a directory on your <code>$PATH</code> like <code>~/bin</code> or
+<code>/usr/local/bin</code>.</li>
+<li>Run <code>tumblr_backup.py</code> <em>blog-name</em> as often as you like manually
+or from a cron job.</li>
+</ol>
+
+<h2>2. Usage</h2>
+
+<h3>2.1. Synopsis</h3>
+
+<pre><code>tumblr_backup.py [-q] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [blog-name] ...
+</code></pre>
+
+<h3>2.2. Options</h3>
+
+<ul>
+<li><code>-q</code>: Suppress the progress display.</li>
+<li><code>-n</code> <em>post-count</em>: Stop backing up after <em>post-count</em> posts.</li>
+<li><code>-s</code> <em>start-post</em>: Start backing up at the <em>start-post</em>’th post.</li>
+<li><code>-p</code> <em>period</em>: Limit the backup to the given period.
+These are ways to define the period:
+<ul>
+<li><code>y</code>: the current year</li>
+<li><code>m</code>: the current month</li>
+<li><code>d</code>: the current day (i.e. today ;-)</li>
+<li><em>yyyy</em>: the given year</li>
+<li><em>yyyy-mm</em>: the given month</li>
+<li><em>yyyy-mm-dd</em>: the given day</li>
+</ul></li>
+<li><code>-t</code>: Include the theme in the backup</li>
+</ul>
+
+<h3>2.3. Arguments</h3>
+
+<ul>
+<li><em>blog-name</em>: The name of your blog.</li>
+</ul>
+
+<p>If your blog is under <code>.tumblr.com</code>, you can give just the first domain name
+part; if your blog is under your own domain, give the whole domain name.
+You can give more than one <em>blog-name</em> to backup multiple blogs in one go.</p>
+
+<p>The default blog name can be changed in the script.</p>
+
+<h2>3. Operation</h2>
+
+<p>By default, <code>tumblr_backup</code> backs up all posts.</p>
+
+<p>The generated directory structure looks like this:</p>
+
+<pre><code>./ - the current directory
+    &lt;blog-name&gt;/ - your blog backup
+        index.html - table of contents with links to the monthly pages
+        archive/
+            &lt;yyyy-mm&gt;.html - the monthly pages
+            …
+            period-&lt;yyyy&gt;.html - the index of a yearly period
+            period-&lt;yyyy-mm&gt;.html - the index of a monthly period
+            period-&lt;yyyy-mm-dd&gt;.html - the index of a single day
+            …
+        posts/
+            &lt;id&gt;.html - the single post pages
+            …
+        images/
+            &lt;image.ext&gt; - the image files
+            …
+        theme/
+            _local.css - the local style sheet
+            theme.html - the saved HTML template
+            custom.css - the CSS customizations
+            avatar.&lt;ext&gt; - your avatar image
+</code></pre>
+
+<p>The name of the single post pages is the numeric post id.  The modification
+time of the single post pages is set to the post’s timestamp. <code>tumblr_backup</code>
+applies a simple style to the saved pages. All generated pages are
+<a href="http://www.whatwg.org/specs/web-apps/current-work/multipage/">HTML5</a>.</p>
+
+<p>Tumblr saves most image files without extension. This probably saves a few
+million bytes in their database. <code>tumblr_backup</code> restores the image extensions.
+If an image is already backed up, it is not downloaded again. The image
+extension determination only downloads the first 32 bytes of the image.</p>
+
+<p>In order to limit the set of backed up posts, use the <code>-n</code> and <code>-s</code> options.
+The most recent post is always number 0, so the option <code>-n 200</code> would select
+the 200 most recent posts. Calling <code>tumblr_backup -n 100 -s 200</code> would skip
+the 200 most recent posts and backup the next 100. The generated index will
+just contain links to the posts selected.</p>
+
+<p>With option <code>-p</code>, a separate archive page is generated for the
+selected period. This page has the name <code>period-</code><em>period</em><code>.html</code>.
+Any other index or archive pages are left alone.</p>
+
+<p>If you combine <code>-n</code> and/or <code>-s</code> with <code>-p</code>, only posts matching both criteria
+will be backed up.</p>
+
+<p>In order to successfully backup your blog theme with <code>-t</code>, you need to define
+your Tumblr login information in the file <code>~/.netrc</code> with an entry like this:</p>
+
+<p><code>machine www.tumblr.com login</code> <em>login-email</em> <code>password</code> <em>tumblr-password</em></p>
+
+<p>This file should have mode 0600 (read/write by owner only).</p>
+
+<p>All operations except <code>-t</code> use only public Tumblr APIs, so you can use the
+program to backup blogs that you don’t own.</p>
+
+<h2>4. Changelog</h2>
+
+<p>See <a href="https://github.com/bbolli/tumblr_backup/commits/bb">here</a>. There are no
+formal releases; so check back often!</p>
+
+<h2>5. Author</h2>
+
+<p>Beat Bolli <code>&lt;me+tumblr_backup@drbeat.li&gt;</code>, <a href="http://drbeat.li">http://drbeat.li</a></p>
