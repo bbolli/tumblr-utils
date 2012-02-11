@@ -10,7 +10,7 @@ images from image posts. An index links to monthly pages, which contain
 all the posts from the respective month, plus links to single post pages.
 There are many options to select the posts to backup.
 
-You can see en example of `tumblr_backup`’s output
+You can see an example of `tumblr_backup`’s output
 [on my home page](http://drbeat.li/tumblr).
 
 
