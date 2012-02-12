@@ -1,8 +1,4 @@
-tumblr_backup
-=============
-
-0. What is this?
-----------------
+## 0. What is this?
 
 `tumblr_backup` is a Python script that backs up your
 [Tumblr](http://www.tumblr.com) blog locally. The backup includes all
@@ -14,8 +10,7 @@ You can see an example of `tumblr_backup`’s output
 [on my home page](http://drbeat.li/tumblr).
 
 
-1. Installation
----------------
+## 1. Installation
 
 1. Download and unzip
    [xmltramp.zip](https://github.com/bbolli/xmltramp/zipball/master).
@@ -29,8 +24,7 @@ You can see an example of `tumblr_backup`’s output
    or from a cron job.
 
 
-2. Usage
---------
+## 2. Usage
 
 ### 2.1. Synopsis
 
@@ -62,8 +56,7 @@ You can give more than one _blog-name_ to backup multiple blogs in one go.
 The default blog name can be changed in the script.
 
 
-3. Operation
-------------
+## 3. Operation
 
 By default, `tumblr_backup` backs up all posts.
 
@@ -124,15 +117,18 @@ This file should have mode 0600 (read/write by owner only).
 All operations except `-t` use only public Tumblr APIs, so you can use the
 program to backup blogs that you don’t own.
 
+`tumblr_backup` is developed and tested on Linux and OS X. If you want to
+run it under Windows, I suggest the excellent [Cygwin](http://cygwin.com)
+environment.
 
-4. Changelog
-------------
+
+## 4. Changelog
 
 See [here](https://github.com/bbolli/tumblr_backup/commits/bb). There are no
 formal releases; so check back often!
 
 
-5. Author
----------
+## 5. Author
 
-Beat Bolli `<me+tumblr_backup@drbeat.li>`, [http://drbeat.li](http://drbeat.li)
+Beat Bolli `<me+tumblr_backup@drbeat.li>`,
+[http://drbeat.li/py/tumblr_backup/](http://drbeat.li/py/tumblr_backup/)
