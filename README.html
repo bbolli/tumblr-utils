@@ -47,7 +47,7 @@
 
   <h3>2.1. Synopsis</h3>
   <pre>
-<code>tumblr_backup.py [-q] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [blog-name] ...
+<code>tumblr_backup.py [-q] [-i] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [blog-name] ...
 </code>
 </pre>
 
@@ -55,6 +55,8 @@
 
   <ul>
     <li><code>-q</code>: Suppress the progress display.</li>
+
+    <li><code>-i</code>: Incremental backup.</li>
 
     <li><code>-n</code> <em>post-count</em>: Stop backing up after
     <em>post-count</em> posts.</li>
@@ -140,6 +142,10 @@
   extension determination only downloads the first 32 bytes of the
   image.</p>
 
+  <p>In incremental backup mode, <code>tumblr_backup</code> saves
+  only posts that have higher ids than the highest id in the
+  <code>posts</code> folder. No index files are updated.</p>
+
   <p>In order to limit the set of backed up posts, use the
   <code>-n</code> and <code>-s</code> options. The most recent post
   is always number 0, so the option <code>-n 200</code> would
@@ -153,9 +159,9 @@
   <code>period-</code><em>period</em><code>.html</code>. Any other
   index or archive pages are left alone.</p>
 
-  <p>If you combine <code>-n</code> and/or <code>-s</code> with
-  <code>-p</code>, only posts matching both criteria will be backed
-  up.</p>
+  <p>If you combine <code>-n</code>, <code>-s</code>,
+  <code>-i</code> and <code>-p</code>, only posts matching all
+  criteria will be backed up.</p>
 
   <p>In order to successfully backup your blog theme with
   <code>-t</code>, you need to define your Tumblr login information

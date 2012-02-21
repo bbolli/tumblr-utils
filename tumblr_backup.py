@@ -15,11 +15,13 @@ import time
 import netrc
 import locale
 import subprocess
+from glob import glob
 
 # extra required packages
 import xmltramp
 
 verbose = True
+incremental = False
 root_folder = os.getcwdu()
 count = None            # None = all posts
 start = 0               # 0 = most recent post
@@ -235,6 +237,15 @@ blockquote {
         self.period = []
         self.avatar = None
 
+        # get the highest post id already saved
+        if incremental:
+            ident_max = max(
+                long(os.path.split(f)[1][:-5])
+                for f in glob(os.path.join(save_folder, post_dir, '*.html'))
+            )
+        else:
+            ident_max = None
+
         # prepare the period start and end timestamps
         if period:
             i = 0; tm = [int(period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
@@ -280,10 +291,10 @@ blockquote {
 
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
-        max = 50
-        for i in range(start, start + total_posts, max):
+        MAX = 50
+        for i in range(start, start + total_posts, MAX):
             # find the upper bound
-            j = i + max
+            j = i + MAX
             if j > start + total_posts:
                 j = start + total_posts
             log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
@@ -293,6 +304,9 @@ blockquote {
 
             for p in soup.posts['post':]:
                 post = TumblrPost(p)
+                if ident_max and long(post.ident) <= ident_max:
+                    i = None
+                    break
                 if period:
                     if post.date >= p_stop:
                         continue
@@ -308,7 +322,7 @@ blockquote {
             if i is None:
                 break
 
-        if self.index:
+        if not incremental and self.index:
             self.save_style()
             if period:
                 self.save_period()
@@ -418,13 +432,15 @@ class TumblrPost:
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qn:s:p:t')
+        opts, args = getopt.getopt(sys.argv[1:], 'qin:s:p:t')
     except getopt.GetoptError:
-        print "Usage: %s [-q] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [userid]" % sys.argv[0]
+        print "Usage: %s [-q] [-i] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [userid]" % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
             verbose = False
+        elif o == '-i':
+            incremental = True
         elif o == '-n':
             count = int(v)
         elif o == '-s':

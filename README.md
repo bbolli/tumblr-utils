@@ -28,11 +28,12 @@ You can see an example of `tumblr_backup`’s output
 
 ### 2.1. Synopsis
 
-    tumblr_backup.py [-q] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [blog-name] ...
+    tumblr_backup.py [-q] [-i] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [blog-name] ...
 
 ### 2.2. Options
 
 * `-q`: Suppress the progress display.
+* `-i`: Incremental backup.
 * `-n` _post-count_: Stop backing up after _post-count_ posts.
 * `-s` _start-post_: Start backing up at the _start-post_’th post.
 * `-p` _period_: Limit the backup to the given period.
@@ -94,6 +95,9 @@ million bytes in their database. `tumblr_backup` restores the image extensions.
 If an image is already backed up, it is not downloaded again. The image
 extension determination only downloads the first 32 bytes of the image.
 
+In incremental backup mode, `tumblr_backup` saves only posts that have higher
+ids than the highest id in the `posts` folder. No index files are updated.
+
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select
 the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip
@@ -104,7 +108,7 @@ With option `-p`, a separate archive page is generated for the
 selected period. This page has the name `period-`_period_`.html`.
 Any other index or archive pages are left alone.
 
-If you combine `-n` and/or `-s` with `-p`, only posts matching both criteria
+If you combine `-n`, `-s`, `-i` and `-p`, only posts matching all criteria
 will be backed up.
 
 In order to successfully backup your blog theme with `-t`, you need to define
