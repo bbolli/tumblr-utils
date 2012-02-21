@@ -137,6 +137,9 @@ img {
 a.link {
     text-decoration: none;
 }
+blockquote {
+    margin-left: 0; border-left: 8px #999 solid; padding: 0 24px;
+}
 ''')
 
     def save_index(self):
