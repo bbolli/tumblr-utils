@@ -28,12 +28,14 @@ You can see an example of `tumblr_backup`’s output
 
 ### 2.1. Synopsis
 
-    tumblr_backup.py [-q] [-i] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [blog-name] ...
+    tumblr_backup.py [-qixt] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
 
 ### 2.2. Options
 
 * `-q`: Suppress the progress display.
 * `-i`: Incremental backup.
+* `-x`: XML backup.
+* `-t`: Include the theme in the backup.
 * `-n` _post-count_: Stop backing up after _post-count_ posts.
 * `-s` _start-post_: Start backing up at the _start-post_’th post.
 * `-p` _period_: Limit the backup to the given period.
@@ -44,7 +46,6 @@ You can see an example of `tumblr_backup`’s output
   * _yyyy_: the given year
   * _yyyy-mm_: the given month
   * _yyyy-mm-dd_: the given day
-* `-t`: Include the theme in the backup
 
 ### 2.3. Arguments
 
@@ -79,6 +80,9 @@ The generated directory structure looks like this:
             images/
                 <image.ext> - the image files
                 …
+            xml/
+                <id>.xml - the raw XML posts
+                …
             theme/
                 _local.css - the local style sheet
                 theme.html - the saved HTML template
@@ -96,7 +100,10 @@ If an image is already backed up, it is not downloaded again. The image
 extension determination only downloads the first 32 bytes of the image.
 
 In incremental backup mode, `tumblr_backup` saves only posts that have higher
-ids than the highest id in the `posts` folder. No index files are updated.
+ids than the highest id saved yet. No index files are updated.
+
+In XML backup mode, the original XML source returned by the Tumblr API is saved.
+Images are not downloaded, and no index files are updated.
 
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select

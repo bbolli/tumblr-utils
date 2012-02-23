@@ -22,6 +22,7 @@ import xmltramp
 
 verbose = True
 incremental = False
+xml = False
 root_folder = os.getcwdu()
 count = None            # None = all posts
 start = 0               # 0 = most recent post
@@ -38,10 +39,12 @@ imghdr.tests.append(test_jpg)
 
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
+save_dir = ''
 image_folder = ''
 
 # constant names
 post_dir = 'posts'
+xml_dir = 'xml'
 image_dir = 'images'
 archive_dir = 'archive'
 theme_dir = 'theme'
@@ -50,6 +53,8 @@ backup_css = '_local.css'
 # HTML fragments
 post_header = ''
 footer = u'</body>\n</html>\n'
+
+save_ext = ''
 
 # ensure the right date/time format
 try:
@@ -237,15 +242,6 @@ blockquote {
         self.period = []
         self.avatar = None
 
-        # get the highest post id already saved
-        if incremental:
-            ident_max = max(
-                long(os.path.split(f)[1][:-5])
-                for f in glob(os.path.join(save_folder, post_dir, '*.html'))
-            )
-        else:
-            ident_max = None
-
         # prepare the period start and end timestamps
         if period:
             i = 0; tm = [int(period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
@@ -282,9 +278,27 @@ blockquote {
             self.title = account
         self.subtitle = unicode(tumblelog)
 
-        # use it to create a header
-        global post_header
-        post_header = header(self.title)
+        global save_dir, save_ext
+        if xml:
+            save_dir = xml_dir
+            save_ext = '.xml'
+        else:
+            save_dir = post_dir
+            save_ext = '.html'
+            # use the meta information to create a HTML header
+            global post_header
+            post_header = header(self.title)
+
+        # get the highest post id already saved
+        ident_max = None
+        if incremental:
+            try:
+                ident_max = max(
+                    long(os.path.splitext(os.path.split(f)[1])[0])
+                    for f in glob(os.path.join(save_folder, save_dir, '*' + save_ext))
+                )
+            except ValueError:  # max() arg is an empty sequence
+                pass
 
         # find the total number of posts
         total_posts = count or int(soup.posts('total'))
@@ -322,7 +336,7 @@ blockquote {
             if i is None:
                 break
 
-        if not incremental and self.index:
+        if not incremental and not xml and self.index:
             self.save_style()
             if period:
                 self.save_period()
@@ -336,18 +350,19 @@ class TumblrPost:
 
     def __init__(self, post):
         self.content = ''
+        self.xml_content = post.__repr__(1, 1)
         self.ident = post('id')
         self.url = post('url')
+        self.typ = post('type')
+        self.date = int(post('unix-timestamp'))
+        self.tm = time.localtime(self.date)
+        self.file_name = self.ident + save_ext
         self.error = None
         try:
-            self.typ = post('type')
-            self.date = int(post('unix-timestamp'))
-            self.tm = time.localtime(self.date)
-            self.file_name = self.ident + '.html'
             self.generate_content(post)
         except Exception, e:
             self.error = e
-            self.content = u'<p class=error>%r</p>\n<pre>%s</pre>' % (e, escape(post.__repr__(1, 1)))
+            self.content = u'<p class=error>%r</p>\n<pre>%s</pre>' % (e, escape(self.xml_content))
 
     def generate_content(self, post):
         """generates HTML source for this post"""
@@ -421,9 +436,11 @@ class TumblrPost:
         """saves this post locally"""
         if not self.content:
             return False
-        with open_text(post_dir, self.file_name) as f:
-            f.write(post_header + self.get_post() + '\n\n' + footer)
-        os.utime(os.path.join(save_folder, post_dir, self.file_name),
+        content = self.xml_content if xml \
+            else post_header + self.get_post() + '\n\n' + footer
+        with open_text(save_dir, self.file_name) as f:
+            f.write(content)
+        os.utime(os.path.join(save_folder, save_dir, self.file_name),
             (self.date, self.date)
         )
         return True
@@ -432,15 +449,19 @@ class TumblrPost:
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qin:s:p:t')
+        opts, args = getopt.getopt(sys.argv[1:], 'qixtn:s:p:')
     except getopt.GetoptError:
-        print "Usage: %s [-q] [-i] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [-t] [userid]" % sys.argv[0]
+        print "Usage: %s [-qixt] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
             verbose = False
         elif o == '-i':
             incremental = True
+        elif o == '-x':
+            xml = True
+        elif o == '-t':
+            theme = True
         elif o == '-n':
             count = int(v)
         elif o == '-s':
@@ -455,8 +476,6 @@ if __name__ == '__main__':
             if len(period) not in (4, 6, 8):
                 sys.stderr.write('Period must be y, m, d or YYYY[MM[DD]]\n')
                 sys.exit(1)
-        elif o == '-t':
-            theme = True
     if not args:
         args = ['bbolli']
     tb = TumblrBackup()
