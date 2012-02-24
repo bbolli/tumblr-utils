@@ -299,6 +299,7 @@ blockquote {
                     long(os.path.splitext(os.path.split(f)[1])[0])
                     for f in glob(join(save_folder, save_dir, '*' + save_ext))
                 )
+                log('Backing up posts after %d\n' % ident_max)
             except ValueError:  # max() arg is an empty sequence
                 pass
 
