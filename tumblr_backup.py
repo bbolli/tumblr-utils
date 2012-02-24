@@ -82,26 +82,26 @@ def open_text(*parts):
 def save_image(image_url):
     """saves an image if not saved yet"""
     image_filename = image_url.split('/')[-1]
+    glob_filter = '' if '.' in image_filename else '.*'
+    # check if a file with this name already exists
+    image_glob = glob(join(image_folder, image_filename + glob_filter))
+    if image_glob:
+        return os.path.split(image_glob[0])[1]
+    # download the image data
+    image_response = urllib2.urlopen(image_url)
+    image_data = image_response.read()
+    image_response.close()
+    # determine the file type if it's unknown
     if '.' not in image_filename:
-        # read just the first 32 bytes of the image
-        header_req = urllib2.Request(image_url)
-        header_req.headers['Range'] = 'bytes=0-31'
-        header_resp = urllib2.urlopen(header_req)
-        image_header = header_resp.read()
-        image_type = imghdr.what(None, image_header)
+        image_type = imghdr.what(None, image_data[:32])
         if image_type:
             if image_type == 'jpeg':
                 image_type = 'jpg'
             image_filename += '.' + image_type
-        header_resp.close()
+    # save the image
     mkdir(image_folder)
-    local_image_path = join(image_folder, image_filename)
-    if not os.path.exists(local_image_path):
-        # only download images if they don't already exist
-        image_response = urllib2.urlopen(image_url)
-        with open(local_image_path, 'wb') as image_file:
-            image_file.write(image_response.read())
-        image_response.close()
+    with open(join(image_folder, image_filename), 'wb') as image_file:
+        image_file.write(image_data)
     return image_filename
 
 def header(heading, title='', body_class='', subtitle='', avatar=''):
