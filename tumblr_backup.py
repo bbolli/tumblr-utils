@@ -20,6 +20,8 @@ from glob import glob
 # extra required packages
 import xmltramp
 
+join = os.path.join
+
 verbose = True
 incremental = False
 xml = False
@@ -75,8 +77,8 @@ def mkdir(dir, recursive=False):
 
 def open_text(*parts):
     if len(parts) > 1:
-        mkdir(os.path.join(save_folder, *parts[:-1]))
-    return codecs.open(os.path.join(save_folder, *parts), 'w', 'utf-8')
+        mkdir(join(save_folder, *parts[:-1]))
+    return codecs.open(join(save_folder, *parts), 'w', 'utf-8')
 
 def save_image(image_url):
     """saves an image if not saved yet"""
@@ -94,7 +96,7 @@ def save_image(image_url):
             image_filename += '.' + image_type
         header_resp.close()
     mkdir(image_folder)
-    local_image_path = os.path.join(image_folder, image_filename)
+    local_image_path = join(image_folder, image_filename)
     if not os.path.exists(local_image_path):
         # only download images if they don't already exist
         image_response = urllib2.urlopen(image_url)
@@ -192,7 +194,7 @@ blockquote {
             ]))
 
     def get_theme(self, account, host, user, password):
-        subprocess.call(['/bin/rm', '-rf', os.path.join(save_folder, theme_dir)])
+        subprocess.call(['/bin/rm', '-rf', join(save_folder, theme_dir)])
         try:
             info = urllib2.urlopen('http://%s/api/authenticate' % host,
                 urllib.urlencode({
@@ -216,10 +218,10 @@ blockquote {
                     f.write(log['theme-source'][0])
             avatar_url = attrs.get('avatar-url')
             if avatar_url:
-                mkdir(os.path.join(save_folder, theme_dir))
+                mkdir(join(save_folder, theme_dir))
                 avatar = urllib2.urlopen(avatar_url)
                 avatar_file = 'avatar.' + avatar_url.split('.')[-1]
-                with open(os.path.join(save_folder, theme_dir, avatar_file), 'wb') as f:
+                with open(join(save_folder, theme_dir, avatar_file), 'wb') as f:
                     f.write(avatar.read())
                     self.avatar = avatar_file
 
@@ -234,9 +236,9 @@ blockquote {
 
         # make sure there are folders to save in
         global save_folder, image_folder
-        save_folder = os.path.join(root_folder, account)
+        save_folder = join(root_folder, account)
         mkdir(save_folder, True)
-        image_folder = os.path.join(save_folder, image_dir)
+        image_folder = join(save_folder, image_dir)
 
         self.index = defaultdict(lambda: defaultdict(list))
         self.period = []
@@ -295,7 +297,7 @@ blockquote {
             try:
                 ident_max = max(
                     long(os.path.splitext(os.path.split(f)[1])[0])
-                    for f in glob(os.path.join(save_folder, save_dir, '*' + save_ext))
+                    for f in glob(join(save_folder, save_dir, '*' + save_ext))
                 )
             except ValueError:  # max() arg is an empty sequence
                 pass
@@ -440,7 +442,7 @@ class TumblrPost:
             else post_header + self.get_post() + '\n\n' + footer
         with open_text(save_dir, self.file_name) as f:
             f.write(content)
-        os.utime(os.path.join(save_folder, save_dir, self.file_name),
+        os.utime(join(save_folder, save_dir, self.file_name),
             (self.date, self.date)
         )
         return True
