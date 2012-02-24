@@ -58,7 +58,8 @@
 
     <li><code>-i</code>: Incremental backup.</li>
 
-    <li><code>-x</code>: XML backup.</li>
+    <li><code>-x</code>: Include the original XML in the
+    backup.</li>
 
     <li><code>-t</code>: Include the theme in the backup.</li>
 
@@ -124,7 +125,7 @@
             &lt;image.ext&gt; - the image files
             …
         xml/
-            &lt;id&gt;.xml - the raw XML posts
+            &lt;id&gt;.xml - the original XML posts
             …
         theme/
             _local.css - the local style sheet
@@ -152,8 +153,8 @@
   index files are updated.</p>
 
   <p>In XML backup mode, the original XML source returned by the
-  Tumblr API is saved. Images are not downloaded, and no index
-  files are updated.</p>
+  Tumblr API is saved under the <code>xml/</code> folder in
+  addition to the HTML format.</p>
 
   <p>In order to limit the set of backed up posts, use the
   <code>-n</code> and <code>-s</code> options. The most recent post

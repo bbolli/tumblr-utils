@@ -34,7 +34,7 @@ You can see an example of `tumblr_backup`’s output
 
 * `-q`: Suppress the progress display.
 * `-i`: Incremental backup.
-* `-x`: XML backup.
+* `-x`: Include the original XML in the backup.
 * `-t`: Include the theme in the backup.
 * `-n` _post-count_: Stop backing up after _post-count_ posts.
 * `-s` _start-post_: Start backing up at the _start-post_’th post.
@@ -81,7 +81,7 @@ The generated directory structure looks like this:
                 <image.ext> - the image files
                 …
             xml/
-                <id>.xml - the raw XML posts
+                <id>.xml - the original XML posts
                 …
             theme/
                 _local.css - the local style sheet
@@ -102,8 +102,8 @@ extension determination only downloads the first 32 bytes of the image.
 In incremental backup mode, `tumblr_backup` saves only posts that have higher
 ids than the highest id saved yet. No index files are updated.
 
-In XML backup mode, the original XML source returned by the Tumblr API is saved.
-Images are not downloaded, and no index files are updated.
+In XML backup mode, the original XML source returned by the Tumblr API is saved
+under the `xml/` folder in addition to the HTML format.
 
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select

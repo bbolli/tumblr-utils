@@ -41,7 +41,6 @@ imghdr.tests.append(test_jpg)
 
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
-save_dir = ''
 image_folder = ''
 
 # constant names
@@ -263,21 +262,13 @@ blockquote {
                 log("Getting the theme\r")
                 self.get_theme(account, host, auth[0], auth[2])
 
-        global save_dir, save_ext
-        if xml:
-            save_dir = xml_dir
-            save_ext = '.xml'
-        else:
-            save_dir = post_dir
-            save_ext = '.html'
-
         # get the highest post id already saved
         ident_max = None
         if incremental:
             try:
                 ident_max = max(
                     long(os.path.splitext(os.path.split(f)[1])[0])
-                    for f in glob(join(save_folder, save_dir, '*' + save_ext))
+                    for f in glob(join(save_folder, post_dir, '*.html'))
                 )
                 log('Backing up posts after %d\n' % ident_max)
             except ValueError:  # max() arg is an empty sequence
@@ -340,7 +331,7 @@ blockquote {
             if i is None:
                 break
 
-        if not incremental and not xml and self.index:
+        if not incremental and self.index:
             self.save_style()
             if period:
                 self.save_period()
@@ -360,7 +351,7 @@ class TumblrPost:
         self.typ = post('type')
         self.date = int(post('unix-timestamp'))
         self.tm = time.localtime(self.date)
-        self.file_name = self.ident + save_ext
+        self.file_name = self.ident + '.html'
         self.error = None
         try:
             self.generate_content(post)
@@ -440,13 +431,14 @@ class TumblrPost:
         """saves this post locally"""
         if not self.content:
             return False
-        content = self.xml_content if xml \
-            else post_header + self.get_post() + '\n\n' + footer
-        with open_text(save_dir, self.file_name) as f:
-            f.write(content)
-        os.utime(join(save_folder, save_dir, self.file_name),
+        with open_text(post_dir, self.file_name) as f:
+            f.write(post_header + self.get_post() + '\n\n' + footer)
+        os.utime(join(save_folder, post_dir, self.file_name),
             (self.date, self.date)
         )
+        if xml:
+            with open_text(xml_dir, self.ident + '.xml') as f:
+                f.write(self.xml_content)
         return True
 
 
