@@ -324,9 +324,9 @@ blockquote {
                         break
                 if post.error:
                     sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
-                if post.save_post():
-                    self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
-                    self.period.append(post)
+                post.save_post()
+                self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+                self.period.append(post)
 
             if i is None:
                 break
@@ -429,8 +429,6 @@ class TumblrPost:
 
     def save_post(self):
         """saves this post locally"""
-        if not self.content:
-            return False
         with open_text(post_dir, self.file_name) as f:
             f.write(post_header + self.get_post() + '\n\n' + footer)
         os.utime(join(save_folder, post_dir, self.file_name),
@@ -439,7 +437,6 @@ class TumblrPost:
         if xml:
             with open_text(xml_dir, self.ident + '.xml') as f:
                 f.write(self.xml_content)
-        return True
 
 
 if __name__ == '__main__':
