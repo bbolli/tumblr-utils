@@ -263,6 +263,26 @@ blockquote {
                 log("Getting the theme\r")
                 self.get_theme(account, host, auth[0], auth[2])
 
+        global save_dir, save_ext
+        if xml:
+            save_dir = xml_dir
+            save_ext = '.xml'
+        else:
+            save_dir = post_dir
+            save_ext = '.html'
+
+        # get the highest post id already saved
+        ident_max = None
+        if incremental:
+            try:
+                ident_max = max(
+                    long(os.path.splitext(os.path.split(f)[1])[0])
+                    for f in glob(join(save_folder, save_dir, '*' + save_ext))
+                )
+                log('Backing up posts after %d\n' % ident_max)
+            except ValueError:  # max() arg is an empty sequence
+                pass
+
         # start by calling the API with just a single post
         log("Getting basic information\r")
         try:
@@ -280,28 +300,9 @@ blockquote {
             self.title = account
         self.subtitle = unicode(tumblelog)
 
-        global save_dir, save_ext
-        if xml:
-            save_dir = xml_dir
-            save_ext = '.xml'
-        else:
-            save_dir = post_dir
-            save_ext = '.html'
-            # use the meta information to create a HTML header
-            global post_header
-            post_header = header(self.title)
-
-        # get the highest post id already saved
-        ident_max = None
-        if incremental:
-            try:
-                ident_max = max(
-                    long(os.path.splitext(os.path.split(f)[1])[0])
-                    for f in glob(join(save_folder, save_dir, '*' + save_ext))
-                )
-                log('Backing up posts after %d\n' % ident_max)
-            except ValueError:  # max() arg is an empty sequence
-                pass
+        # use the meta information to create a HTML header
+        global post_header
+        post_header = header(self.title)
 
         # find the total number of posts
         total_posts = count or int(soup.posts('total'))
