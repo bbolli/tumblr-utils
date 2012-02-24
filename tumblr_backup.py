@@ -280,7 +280,7 @@ blockquote {
             response = urllib2.urlopen(base + '?num=1')
         except urllib2.URLError:
             sys.stderr.write("Invalid URL %s\n" % base)
-            sys.exit(2)
+            return
         soup = xmltramp.parse(response.read())
 
         # collect all the meta information
