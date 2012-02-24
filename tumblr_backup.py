@@ -180,15 +180,11 @@ blockquote {
             ]))
         return file_name
 
-    def save_period(self):
-        dashed = period
-        for i in range(len(period) - 2, 2, -2):
-            dashed = dashed[:i] + '-' + dashed[i:]
-        file_name = 'period-%s.html' % dashed
-        with open_text(archive_dir, file_name) as arch:
-            arch.write('\n\n'.join([
-                header(self.title, dashed, body_class='archive'),
-                '\n\n'.join(p.get_post(True) for p in self.period),
+    def save_current(self):
+        with open_text(archive_dir, 'current.html') as current:
+            current.write('\n\n'.join([
+                header(self.title, 'Current backup', body_class='archive'),
+                '\n\n'.join(p.get_post(True) for p in self.current),
                 footer
             ]))
 
@@ -240,7 +236,7 @@ blockquote {
         image_folder = join(save_folder, image_dir)
 
         self.index = defaultdict(lambda: defaultdict(list))
-        self.period = []
+        self.current = []
         self.avatar = None
 
         # prepare the period start and end timestamps
@@ -326,19 +322,19 @@ blockquote {
                     sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
                 post.save_post()
                 self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
-                self.period.append(post)
+                self.current.append(post)
 
             if i is None:
                 break
 
-        if not incremental and self.index:
+        if self.current:
             self.save_style()
-            if period:
-                self.save_period()
+            if period or incremental:
+                self.save_current()
             else:
                 self.save_index()
 
-        log("%d posts backed up" % len(self.period) + 50 * ' ' + '\n')
+        log("%d posts backed up" % len(self.current) + 50 * ' ' + '\n')
 
 
 class TumblrPost:

@@ -114,10 +114,7 @@
         archive/
             &lt;yyyy-mm&gt;.html - the monthly pages
             …
-            period-&lt;yyyy&gt;.html - the index of a yearly period
-            period-&lt;yyyy-mm&gt;.html - the index of a monthly period
-            period-&lt;yyyy-mm-dd&gt;.html - the index of a single day
-            …
+            current.html - the index of the latest -p or -i backup
         posts/
             &lt;id&gt;.html - the single post pages
             …
@@ -149,8 +146,9 @@
   image.</p>
 
   <p>In incremental backup mode, <code>tumblr_backup</code> saves
-  only posts that have higher ids than the highest id saved yet. No
-  index files are updated.</p>
+  only posts that have higher ids than the highest id saved
+  locally. <code>archive/current.html</code> is overwritten. Any
+  other index or archive pages are left alone.</p>
 
   <p>In XML backup mode, the original XML source returned by the
   Tumblr API is saved under the <code>xml/</code> folder in
@@ -164,10 +162,9 @@
   the next 100. The generated index will just contain links to the
   posts selected.</p>
 
-  <p>With option <code>-p</code>, a separate archive page is
-  generated for the selected period. This page has the name
-  <code>period-</code><em>period</em><code>.html</code>. Any other
-  index or archive pages are left alone.</p>
+  <p>With option <code>-p</code>, <code>archive/current.html</code>
+  is overwritten. Any other index or archive pages are left
+  alone.</p>
 
   <p>If you combine <code>-n</code>, <code>-s</code>,
   <code>-i</code> and <code>-p</code>, only posts matching all
