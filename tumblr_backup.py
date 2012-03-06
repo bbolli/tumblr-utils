@@ -347,6 +347,8 @@ class TumblrPost:
         self.typ = post('type')
         self.date = int(post('unix-timestamp'))
         self.tm = time.localtime(self.date)
+        self.title = ''
+        self.tags = []
         self.file_name = self.ident + '.html'
         self.error = None
         try:
@@ -363,14 +365,19 @@ class TumblrPost:
             # the %s conversion calls unicode() on the xmltramp element
             content.append(fmt % s)
 
-        def append_try(elt, fmt=u'%s'):
+        def get_try(elt):
             try:
-                append(post[elt], fmt)
+                return unicode(post[elt])
             except KeyError:
-                pass
+                return ''
+
+        def append_try(elt, fmt=u'%s'):
+            elt = get_try(elt)
+            if elt:
+                append(elt, fmt)
 
         if self.typ == 'regular':
-            append_try('regular-title', u'<h2>%s</h2>')
+            self.title = get_try('regular-title')
             append_try('regular-body')
 
         elif self.typ == 'photo':
@@ -378,7 +385,7 @@ class TumblrPost:
             append_try('photo-caption')
 
         elif self.typ == 'link':
-            append((post['link-url'], post['link-text']), u'<h2><a href="%s">%s</a></h2>')
+            self.title = u'<a href="%s">%s</a>' % (post['link-url'], post['link-text'])
             append_try('link-description')
 
         elif self.typ == 'quote':
@@ -400,15 +407,13 @@ class TumblrPost:
             append_try('audio-caption')
 
         elif self.typ == 'answer':
-            append(post.question, u'<p class=question>%s</p>')
+            self.title = post.question
             append(post.answer)
 
         else:
             raise ValueError('Unknown post type: ' + self.typ)
 
-        tags = post['tag':]
-        if tags:
-            append(' '.join(u'#%s' % t for t in tags), u'<p class=tags>%s</p>')
+        self.tags = [u'%s' % t for t in post['tag':]]
 
         self.content = '\n'.join(content)
 
@@ -420,7 +425,13 @@ class TumblrPost:
             post += u'\n<a class=link href=../%s/%s>¶</a>' % (post_dir, self.file_name)
         else:
             post += u'\n<a class=link href=%s>●</a>' % self.url
-        post += '</p>\n' + self.content + '\n</article>'
+        post += '</p>\n'
+        if self.title:
+            post += '<h2>%s</h2>\n' % self.title
+        post += self.content
+        if self.tags:
+            post += u'\n<p class=tags>%s</p>' % u' '.join(u'#' + t for t in self.tags)
+        post += '\n</article>'
         return post
 
     def save_post(self):
