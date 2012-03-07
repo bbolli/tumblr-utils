@@ -386,9 +386,13 @@ class TumblrPost:
 
         elif self.typ == 'photo':
             if blosxom:
-                append(post['photo-url'], u'<p><img alt="" src="%s"></p>')
+                append(post['photo-url'], u'<img alt="" src="%s">')
             else:
                 append((image_dir, save_image(unicode(post['photo-url']))), u'<img alt="" src="../%s/%s">')
+            url = get_try('photo-link-url')
+            if url:
+                content[0] = '<a href=%s>%s</a>' % (url, content[0])
+            content[0] = '<p>' + content[0] + '</p>'
             append_try('photo-caption')
 
         elif self.typ == 'link':
