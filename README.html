@@ -35,19 +35,21 @@
     <li>Download and unzip <a href=
     "https://github.com/bbolli/tumblr_backup/zipball/bb">tumblr_backup.zip</a>.</li>
 
-    <li>Copy <code>tumblr_backup.py</code> to a directory on your
-    <code>$PATH</code> like <code>~/bin</code> or
+    <li>Copy or symlink <code>tumblr_backup.py</code> to a
+    directory on your <code>$PATH</code> like <code>~/bin</code> or
     <code>/usr/local/bin</code>.</li>
 
     <li>Run <code>tumblr_backup.py</code> <em>blog-name</em> as
-    often as you like manually or from a cron job.</li>
+    often as you like manually or from a cron job. The
+    recommendation is to do a daily incremental backup and a weekly
+    complete one to update the index.</li>
   </ol>
 
   <h2>2. Usage</h2>
 
   <h3>2.1. Synopsis</h3>
   <pre>
-<code>tumblr_backup.py [-qixt] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
+<code>tumblr_backup.py [-qixtb] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
 </code>
 </pre>
 
@@ -62,6 +64,9 @@
     backup.</li>
 
     <li><code>-t</code>: Include the theme in the backup.</li>
+
+    <li><code>-b</code>: Change the output format to <a href=
+    "http://www.blosxom.com">Blosxom</a>.</li>
 
     <li><code>-n</code> <em>post-count</em>: Stop backing up after
     <em>post-count</em> posts.</li>
@@ -141,9 +146,7 @@
   <p>Tumblr saves most image files without extension. This probably
   saves a few million bytes in their database.
   <code>tumblr_backup</code> restores the image extensions. If an
-  image is already backed up, it is not downloaded again. The image
-  extension determination only downloads the first 32 bytes of the
-  image.</p>
+  image is already backed up, it is not downloaded again.</p>
 
   <p>In incremental backup mode, <code>tumblr_backup</code> saves
   only posts that have higher ids than the highest id saved
@@ -153,6 +156,15 @@
   <p>In XML backup mode, the original XML source returned by the
   Tumblr API is saved under the <code>xml/</code> folder in
   addition to the HTML format.</p>
+
+  <p>In Blosxom format mode, the posts generated are saved in a
+  format suitable for re-publishing in <a href=
+  "http://www.blosxom.com">Blosxom</a> with the <a href=
+  "http://www.blosxom.com/plugins/meta/meta.htm">Meta plugin</a>.
+  Images are not downloaded; instead, the image links point back to
+  the original image on Tumblr. The posts are saved in the current
+  folder with a <code>.txt</code> extension. The index is not
+  updated.</p>
 
   <p>In order to limit the set of backed up posts, use the
   <code>-n</code> and <code>-s</code> options. The most recent post

@@ -30,6 +30,7 @@ count = None            # None = all posts
 start = 0               # 0 = most recent post
 period = None           # YYYY[MM[DD]] to be backed up
 theme = False
+blosxom = False
 
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
@@ -55,7 +56,7 @@ backup_css = '_local.css'
 post_header = ''
 footer = u'</body>\n</html>\n'
 
-save_ext = ''
+post_ext = '.html'
 
 # ensure the right date/time format
 try:
@@ -221,7 +222,7 @@ blockquote {
                     self.avatar = avatar_file
 
     def backup(self, account):
-        """makes HTML files and an index for every post on a public Tumblr blog account"""
+        """makes single files and an index for every post on a public Tumblr blog account"""
 
         # construct the tumblr API URL
         base = 'http://' + account
@@ -231,9 +232,12 @@ blockquote {
 
         # make sure there are folders to save in
         global save_folder, image_folder
-        save_folder = join(root_folder, account)
+        if blosxom:
+            save_folder = root_folder
+        else:
+            save_folder = join(root_folder, account)
+            image_folder = join(save_folder, image_dir)
         mkdir(save_folder, True)
-        image_folder = join(save_folder, image_dir)
 
         self.index = defaultdict(lambda: defaultdict(list))
         self.current = []
@@ -264,7 +268,7 @@ blockquote {
             try:
                 ident_max = max(
                     long(os.path.splitext(os.path.split(f)[1])[0])
-                    for f in glob(join(save_folder, post_dir, '*.html'))
+                    for f in glob(join(save_folder, post_dir, '*' + post_ext))
                 )
                 log('Backing up posts after %d\n' % ident_max)
             except ValueError:  # max() arg is an empty sequence
@@ -327,7 +331,7 @@ blockquote {
             if i is None:
                 break
 
-        if self.current:
+        if not blosxom and self.current:
             self.save_style()
             if period or incremental:
                 self.save_current()
@@ -349,7 +353,7 @@ class TumblrPost:
         self.tm = time.localtime(self.date)
         self.title = ''
         self.tags = []
-        self.file_name = self.ident + '.html'
+        self.file_name = self.ident + post_ext
         self.error = None
         try:
             self.generate_content(post)
@@ -358,7 +362,7 @@ class TumblrPost:
             self.content = u'<p class=error>%r</p>\n<pre>%s</pre>' % (e, escape(self.xml_content))
 
     def generate_content(self, post):
-        """generates HTML source for this post"""
+        """generates the content for this post"""
         content = []
 
         def append(s, fmt=u'%s'):
@@ -381,7 +385,10 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
-            append((image_dir, save_image(unicode(post['photo-url']))), u'<img alt="" src="../%s/%s">')
+            if blosxom:
+                append(post['photo-url'], u'<p><img alt="" src="%s"></p>')
+            else:
+                append((image_dir, save_image(unicode(post['photo-url']))), u'<img alt="" src="../%s/%s">')
             append_try('photo-caption')
 
         elif self.typ == 'link':
@@ -395,10 +402,10 @@ class TumblrPost:
         elif self.typ == 'video':
             source = unicode(post['video-source'])
             if source.startswith('<iframe') or source.startswith('<object'):
-                append(source)
+                append(source, u'<p>%s</p>')
                 append_try('video-caption')
             else:
-                append(post['video-player'])
+                append(post['video-player'], u'<p>%s</p>')
                 append_try('video-caption')
                 append(source, u'<p><a href="%s">Original</a></p>')
 
@@ -417,7 +424,7 @@ class TumblrPost:
 
         self.content = '\n'.join(content)
 
-    def get_post(self, local_link=False):
+    def get_html(self, local_link):
         """returns this post in HTML"""
         post = '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>' % time.strftime('%x %X', self.tm)
@@ -434,10 +441,24 @@ class TumblrPost:
         post += '\n</article>'
         return post
 
+    def get_blosxom(self):
+        """returns this post as a Blosxom post"""
+        post = self.title + '\nmeta-id: _' + self.ident + '\nmeta-url: ' + self.url
+        if self.tags:
+            post += '\nmeta-tags: ' + ' '.join(t.replace(' ', '+') for t in self.tags)
+        post += '\n\n' + self.content
+        return post
+
+    def get_post(self, local_link=False):
+        if blosxom:
+            return self.get_blosxom()
+        else:
+            return post_header + self.get_html(local_link) + '\n\n' + footer
+
     def save_post(self):
         """saves this post locally"""
         with open_text(post_dir, self.file_name) as f:
-            f.write(post_header + self.get_post() + '\n\n' + footer)
+            f.write(self.get_post())
         os.utime(join(save_folder, post_dir, self.file_name),
             (self.date, self.date)
         )
@@ -449,9 +470,9 @@ class TumblrPost:
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qixtn:s:p:')
+        opts, args = getopt.getopt(sys.argv[1:], 'qixtbn:s:p:')
     except getopt.GetoptError:
-        print "Usage: %s [-qixt] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
+        print "Usage: %s [-qixtb] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
@@ -462,6 +483,10 @@ if __name__ == '__main__':
             xml = True
         elif o == '-t':
             theme = True
+        elif o == '-b':
+            blosxom = True
+            post_ext = '.txt'
+            post_dir = os.curdir
         elif o == '-n':
             count = int(v)
         elif o == '-s':

@@ -18,17 +18,18 @@ You can see an example of `tumblr_backup`’s output
    `/usr/local/lib/python2.6/dist-packages`.
 3. Download and unzip
    [tumblr_backup.zip](https://github.com/bbolli/tumblr_backup/zipball/bb).
-4. Copy `tumblr_backup.py` to a directory on your `$PATH` like `~/bin` or
-   `/usr/local/bin`.
+4. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
+   `~/bin` or `/usr/local/bin`.
 5. Run `tumblr_backup.py` _blog-name_ as often as you like manually
-   or from a cron job.
+   or from a cron job. The recommendation is to do a daily incremental backup
+   and a weekly complete one to update the index.
 
 
 ## 2. Usage
 
 ### 2.1. Synopsis
 
-    tumblr_backup.py [-qixt] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
+    tumblr_backup.py [-qixtb] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
 
 ### 2.2. Options
 
@@ -36,6 +37,7 @@ You can see an example of `tumblr_backup`’s output
 * `-i`: Incremental backup.
 * `-x`: Include the original XML in the backup.
 * `-t`: Include the theme in the backup.
+* `-b`: Change the output format to [Blosxom](http://www.blosxom.com).
 * `-n` _post-count_: Stop backing up after _post-count_ posts.
 * `-s` _start-post_: Start backing up at the _start-post_’th post.
 * `-p` _period_: Limit the backup to the given period.
@@ -93,8 +95,7 @@ applies a simple style to the saved pages. All generated pages are
 
 Tumblr saves most image files without extension. This probably saves a few
 million bytes in their database. `tumblr_backup` restores the image extensions.
-If an image is already backed up, it is not downloaded again. The image
-extension determination only downloads the first 32 bytes of the image.
+If an image is already backed up, it is not downloaded again.
 
 In incremental backup mode, `tumblr_backup` saves only posts that have higher
 ids than the highest id saved locally. `archive/current.html` is overwritten.
@@ -102,6 +103,13 @@ Any other index or archive pages are left alone.
 
 In XML backup mode, the original XML source returned by the Tumblr API is saved
 under the `xml/` folder in addition to the HTML format.
+
+In Blosxom format mode, the posts generated are saved in a format suitable for
+re-publishing in [Blosxom](http://www.blosxom.com) with the [Meta
+plugin](http://www.blosxom.com/plugins/meta/meta.htm). Images are not
+downloaded; instead, the image links point back to the original image on
+Tumblr. The posts are saved in the current folder with a `.txt` extension.
+The index is not updated.
 
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select
