@@ -17,7 +17,7 @@ You can see an example of `tumblr_backup`’s output
 2. Install `xmltramp.py` somewhere on your Python path like
    `/usr/local/lib/python2.6/dist-packages`.
 3. Download and unzip
-   [tumblr_backup.zip](https://github.com/bbolli/tumblr_backup/zipball/bb).
+   [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master).
 4. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
    `~/bin` or `/usr/local/bin`.
 5. Run `tumblr_backup.py` _blog-name_ as often as you like manually
@@ -91,7 +91,7 @@ The generated directory structure looks like this:
 The name of the single post pages is the numeric post id.  The modification
 time of the single post pages is set to the post’s timestamp. `tumblr_backup`
 applies a simple style to the saved pages. All generated pages are
-[HTML5](http://www.whatwg.org/specs/web-apps/current-work/multipage/).
+[HTML5](http://html5.org).
 
 Tumblr saves most image files without extension. This probably saves a few
 million bytes in their database. `tumblr_backup` restores the image extensions.
@@ -140,11 +140,11 @@ environment.
 
 ## 4. Changelog
 
-See [here](https://github.com/bbolli/tumblr_backup/commits/bb). There are no
-formal releases; so check back often!
+See [here](https://github.com/bbolli/tumblr-utils/commits/master/tumblr_backup.py).
+There are no formal releases; so check back often!
 
 
 ## 5. Author
 
-Beat Bolli `<me+tumblr_backup@drbeat.li>`,
-[http://drbeat.li/py/tumblr_backup/](http://drbeat.li/py/tumblr_backup/)
+Beat Bolli `<me+tumblr-utils@drbeat.li>`,
+[http://drbeat.li/py/](http://drbeat.li/py/)
