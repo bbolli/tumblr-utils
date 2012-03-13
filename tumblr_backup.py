@@ -143,8 +143,11 @@ img {
 .archive h1, .subtitle, article {
     padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; margin-bottom: 0.75em;
 }
-a.link {
+.meta a {
     text-decoration: none;
+}
+.post a.llink, .archive a.tlink {
+    display: none;
 }
 blockquote {
     margin-left: 0; border-left: 8px #999 solid; padding: 0 24px;
@@ -175,7 +178,7 @@ blockquote {
         with open_text(archive_dir, file_name) as arch:
             arch.write('\n\n'.join([
                 header(self.title, time.strftime('%B %Y', tm).decode('utf-8'), body_class='archive'),
-                '\n\n'.join(p.get_post(True) for p in self.index[year][month]),
+                '\n\n'.join(p.get_post() for p in self.index[year][month]),
                 '<p><a href=../>Index</a></p>',
                 footer
             ]))
@@ -185,7 +188,7 @@ blockquote {
         with open_text(archive_dir, 'current.html') as current:
             current.write('\n\n'.join([
                 header(self.title, 'Current backup', body_class='archive'),
-                '\n\n'.join(p.get_post(True) for p in self.current),
+                '\n\n'.join(p.get_post() for p in self.current),
                 footer
             ]))
 
@@ -293,7 +296,7 @@ blockquote {
 
         # use the meta information to create a HTML header
         global post_header
-        post_header = header(self.title)
+        post_header = header(self.title, body_class='post')
 
         # find the total number of posts
         total_posts = count or int(soup.posts('total'))
@@ -428,15 +431,12 @@ class TumblrPost:
 
         self.content = '\n'.join(content)
 
-    def get_html(self, local_link):
+    def get_html(self):
         """returns this post in HTML"""
         post = '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
-        post += '<p class=meta><span class=date>%s</span>' % time.strftime('%x %X', self.tm)
-        if local_link:
-            post += u'\n<a class=link href=../%s/%s>¶</a>' % (post_dir, self.file_name)
-        else:
-            post += u'\n<a class=link href=%s>●</a>' % self.url
-        post += '</p>\n'
+        post += '<p class=meta><span class=date>%s</span>\n' % time.strftime('%x %X', self.tm)
+        post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
+        post += u'<a class=tlink href=%s>●</a></p>\n' % self.url
         if self.title:
             post += '<h2>%s</h2>\n' % self.title
         post += self.content
@@ -453,11 +453,11 @@ class TumblrPost:
         post += '\n\n' + self.content
         return post
 
-    def get_post(self, local_link=False):
+    def get_post(self):
         if blosxom:
             return self.get_blosxom()
         else:
-            return post_header + self.get_html(local_link) + '\n\n' + footer
+            return post_header + self.get_html() + '\n\n' + footer
 
     def save_post(self):
         """saves this post locally"""
