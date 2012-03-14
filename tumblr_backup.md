@@ -22,7 +22,7 @@ You can see an example of `tumblr_backup`’s output
    `~/bin` or `/usr/local/bin`.
 5. Run `tumblr_backup.py` _blog-name_ as often as you like manually
    or from a cron job. The recommendation is to do a daily incremental backup
-   and a weekly complete one to update the index.
+   and a weekly complete one.
 
 
 ## 2. Usage
@@ -72,7 +72,6 @@ The generated directory structure looks like this:
             archive/
                 <yyyy-mm>.html - the monthly pages
                 …
-                current.html - the index of the latest -p or -i backup
             posts/
                 <id>.html - the single post pages
                 …
@@ -88,18 +87,20 @@ The generated directory structure looks like this:
                 custom.css - the CSS customizations
                 avatar.<ext> - your avatar image
 
-The name of the single post pages is the numeric post id.  The modification
+The name of the single post pages is its numeric post id.  The modification
 time of the single post pages is set to the post’s timestamp. `tumblr_backup`
 applies a simple style to the saved pages. All generated pages are
 [HTML5](http://html5.org).
+
+The index pages are recreated from scratch after every backup, based on the
+existing single post pages.
 
 Tumblr saves most image files without extension. This probably saves a few
 million bytes in their database. `tumblr_backup` restores the image extensions.
 If an image is already backed up, it is not downloaded again.
 
 In incremental backup mode, `tumblr_backup` saves only posts that have higher
-ids than the highest id saved locally. `archive/current.html` is overwritten.
-Any other index or archive pages are left alone.
+ids than the highest id saved locally.
 
 In XML backup mode, the original XML source returned by the Tumblr API is saved
 under the `xml/` folder in addition to the HTML format.
@@ -114,11 +115,7 @@ The index is not updated.
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select
 the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip
-the 200 most recent posts and backup the next 100. The generated index will
-just contain links to the posts selected.
-
-With option `-p`, `archive/current.html` is overwritten.  Any other index or
-archive pages are left alone.
+the 200 most recent posts and backup the next 100.
 
 If you combine `-n`, `-s`, `-i` and `-p`, only posts matching all criteria
 will be backed up.

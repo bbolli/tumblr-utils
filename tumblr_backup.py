@@ -154,6 +154,11 @@ blockquote {
 }
 ''')
 
+    def build_index(self):
+        for f in glob(join(save_folder, post_dir, '*.html')):
+            post = LocalPost(f)
+            self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+
     def save_index(self):
         with open_text('index.html') as idx:
             idx.write(header(self.title, self.title, body_class='index',
@@ -178,19 +183,13 @@ blockquote {
         with open_text(archive_dir, file_name) as arch:
             arch.write('\n\n'.join([
                 header(self.title, time.strftime('%B %Y', tm).decode('utf-8'), body_class='archive'),
-                '\n\n'.join(p.get_post() for p in self.index[year][month]),
+                '\n\n'.join(p.get_post() for p in sorted(
+                    self.index[year][month], key=lambda x: x.date, reverse=True
+                )),
                 '<p><a href=../>Index</a></p>',
                 footer
             ]))
         return file_name
-
-    def save_current(self):
-        with open_text(archive_dir, 'current.html') as current:
-            current.write('\n\n'.join([
-                header(self.title, 'Current backup', body_class='archive'),
-                '\n\n'.join(p.get_post() for p in self.current),
-                footer
-            ]))
 
     def get_theme(self, account, host, user, password):
         subprocess.call(['/bin/rm', '-rf', join(save_folder, theme_dir)])
@@ -242,8 +241,7 @@ blockquote {
             image_folder = join(save_folder, image_dir)
         mkdir(save_folder, True)
 
-        self.index = defaultdict(lambda: defaultdict(list))
-        self.current = []
+        self.post_count = 0
         self.avatar = None
 
         # prepare the period start and end timestamps
@@ -328,20 +326,18 @@ blockquote {
                 if post.error:
                     sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
                 post.save_post()
-                self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
-                self.current.append(post)
+                self.post_count += 1
 
             if i is None:
                 break
 
-        if not blosxom and self.current:
+        if not blosxom and self.post_count:
             self.save_style()
-            if period or incremental:
-                self.save_current()
-            else:
-                self.save_index()
+            self.index = defaultdict(lambda: defaultdict(list))
+            self.build_index()
+            self.save_index()
 
-        log("%d posts backed up" % len(self.current) + 50 * ' ' + '\n')
+        log("%d posts backed up" % self.post_count + 50 * ' ' + '\n')
 
 
 class TumblrPost:
@@ -469,6 +465,24 @@ class TumblrPost:
         if xml:
             with open_text(xml_dir, self.ident + '.xml') as f:
                 f.write(self.xml_content)
+
+class LocalPost(TumblrPost):
+
+    def __init__(self, post_file):
+        with codecs.open(post_file, 'r', 'utf-8') as f:
+            self.lines = f.readlines()
+        # remove header and footer
+        while self.lines and '<article ' not in self.lines[0]:
+            del self.lines[0]
+        while self.lines and '</article>' not in self.lines[-1]:
+            del self.lines[-1]
+        self.file_name = os.path.split(post_file)[1]
+        self.ident = os.path.splitext(self.file_name)[0]
+        self.date = os.stat(post_file).st_mtime
+        self.tm = time.localtime(self.date)
+
+    def get_post(self):
+        return u''.join(self.lines)
 
 
 if __name__ == '__main__':
