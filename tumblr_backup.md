@@ -21,15 +21,15 @@ page](http://drbeat.li/tumblr).
 4. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
    `~/bin` or `/usr/local/bin`.
 5. Run `tumblr_backup.py` _blog-name_ as often as you like manually
-   or from a cron job. The recommendation is to do a daily incremental backup
-   and a weekly complete one.
+   or from a cron job. The recommendation is to do a hourly incremental backup
+   and a daily complete one.
 
 
 ## 2. Usage
 
 ### 2.1. Synopsis
 
-    tumblr_backup.py [-qixtbrR] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
+    tumblr_backup.py [-qixtbrR] [-a hour] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
 
 ### 2.2. Options
 
@@ -40,6 +40,9 @@ page](http://drbeat.li/tumblr).
 * `-b`: Change the output format to [Blosxom](http://www.blosxom.com).
 * `-r`: Reverse the order of the monthly archive pages (oldest post on top).
 * `-R`: Reverse the order of the index page (year of first post on top).
+* `-a` _hour_: Automatic archive mode: if the hour is _hour_ (in 24-hour
+        format), do a full backup with theme and XML, otherwise do an
+        incremental backup.
 * `-n` _post-count_: Stop backing up after _post-count_ posts.
 * `-s` _start-post_: Start backing up at the _start-post_’th post.
 * `-p` _period_: Limit the backup to the given period.
@@ -111,6 +114,13 @@ being backed up are not backed up again with this option.
 
 In XML backup mode, the original XML source returned by the Tumblr API is saved
 under the `xml/` folder in addition to the HTML format.
+
+Automatic archive mode `-a` is designed to be used from an hourly cron script.
+It normally makes an incremental backup except if the current hour is the one
+given as argument.  In this case, `tumblr_backup` will make a full backup
+including the theme and the XML posts. An example invocation is
+`tumblr_backup.py -qa4` to do a full backup at 4 in the morning. This option
+obviates the need for shell script logic to determine what to backup.
 
 In Blosxom format mode, the posts generated are saved in a format suitable for
 re-publishing in [Blosxom](http://www.blosxom.com) with the [Meta

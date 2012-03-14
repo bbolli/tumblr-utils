@@ -490,9 +490,9 @@ class LocalPost(TumblrPost):
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qixtbrRn:s:p:')
+        opts, args = getopt.getopt(sys.argv[1:], 'qixtbrRa:n:s:p:')
     except getopt.GetoptError:
-        print "Usage: %s [-qixtbrR] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
+        print "Usage: %s [-qixtbrR] [-a hour] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
@@ -511,6 +511,11 @@ if __name__ == '__main__':
             reverse_archive = False
         elif o == '-R':
             reverse_index = False
+        elif o == '-a':
+            if time.localtime().tm_hour == int(v):
+                theme = xml = True
+            else:
+                incremental = True
         elif o == '-n':
             count = int(v)
         elif o == '-s':
