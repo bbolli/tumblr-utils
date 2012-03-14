@@ -1,7 +1,7 @@
 ## 0. What is this?
 
 `tumblr_backup` is a Python script that backs up your
-[Tumblr](http://www.tumblr.com) blog locally in HTML format. The backup includes
+[Tumblr](http://tumblr.com) blog locally in HTML format. The backup includes
 all images from image posts. An index links to monthly pages, which contain all
 the posts from the respective month with links to single post pages. There are
 many options to select which posts to backup or to set the output format.
@@ -35,8 +35,8 @@ You can see an example of `tumblr_backup`’s output
 
 * `-q`: Suppress the progress display.
 * `-i`: Incremental backup.
-* `-x`: Include the original XML in the backup.
-* `-t`: Include the theme in the backup.
+* `-x`: Include the original XML as returned by the Tumblr API.
+* `-t`: Include the theme and avatar picture in the backup.
 * `-b`: Change the output format to [Blosxom](http://www.blosxom.com).
 * `-r`: Reverse the order of the monthly archive pages (oldest post on top).
 * `-R`: Reverse the order of the index page (year of first post on top).
@@ -89,7 +89,7 @@ The generated directory structure looks like this:
                 custom.css - the CSS customizations
                 avatar.<ext> - your avatar image
 
-The name of the single post pages is its numeric post id.  The modification
+The name of the single post pages is their numeric post id. The modification
 time of the single post pages is set to the post’s timestamp. `tumblr_backup`
 applies a simple style to the saved pages. All generated pages are
 [HTML5](http://html5.org).
@@ -101,10 +101,13 @@ can be used to reverse the order.
 
 Tumblr saves most image files without extension. This probably saves a few
 million bytes in their database. `tumblr_backup` restores the image extensions.
-If an image is already backed up, it is not downloaded again.
+If an image is already backed up, it is not downloaded again. If an image is
+re-uploaded/edited, the old image is kept in the backup, but no post links to
+it.
 
 In incremental backup mode, `tumblr_backup` saves only posts that have higher
-ids than the highest id saved locally.
+ids than the highest id saved locally. Note that posts that are edited after
+being backed up are not backed up again with this option.
 
 In XML backup mode, the original XML source returned by the Tumblr API is saved
 under the `xml/` folder in addition to the HTML format.
@@ -119,7 +122,8 @@ The index is not updated.
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select
 the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip
-the 200 most recent posts and backup the next 100.
+the 200 most recent posts and backup the next 100. `-n 1` is the fastest way
+to rebuild the index pages.
 
 If you combine `-n`, `-s`, `-i` and `-p`, only posts matching all criteria
 will be backed up.
@@ -131,18 +135,18 @@ your Tumblr login information in the file `~/.netrc` with an entry like this:
 
 This file should have mode 0600 (read/write by owner only).
 
-All operations except `-t` use only public Tumblr APIs, so you can use the
+All options except `-t` use only public Tumblr APIs, so you can use the
 program to backup blogs that you don’t own.
 
 `tumblr_backup` is developed and tested on Linux and OS X. If you want to
-run it under Windows, I suggest the excellent [Cygwin](http://cygwin.com)
+run it under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)
 environment.
 
 
 ## 4. Changelog
 
 See [here](https://github.com/bbolli/tumblr-utils/commits/master/tumblr_backup.py).
-There are no formal releases; so check back often!
+There are no formal releases so check back often!
 
 
 ## 5. Author
