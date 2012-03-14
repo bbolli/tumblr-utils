@@ -31,6 +31,8 @@ start = 0               # 0 = most recent post
 period = None           # YYYY[MM[DD]] to be backed up
 theme = False
 blosxom = False
+reverse_archive = True
+reverse_index = True
 
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
@@ -164,13 +166,13 @@ blockquote {
             idx.write(header(self.title, self.title, body_class='index',
                 subtitle=self.subtitle, avatar=self.avatar
             ))
-            for year in sorted(self.index.keys(), reverse=True):
+            for year in sorted(self.index.keys(), reverse=reverse_index):
                 self.save_year(idx, year)
             idx.write(footer)
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
-        for month in sorted(self.index[year].keys(), reverse=True):
+        for month in sorted(self.index[year].keys(), reverse=reverse_index):
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
             month_name = self.save_month(year, month, tm)
             idx.write('    <li><a href=%s/%s>%s</a></li>\n' % (
@@ -184,7 +186,7 @@ blockquote {
             arch.write('\n\n'.join([
                 header(self.title, time.strftime('%B %Y', tm).decode('utf-8'), body_class='archive'),
                 '\n\n'.join(p.get_post() for p in sorted(
-                    self.index[year][month], key=lambda x: x.date, reverse=True
+                    self.index[year][month], key=lambda x: x.date, reverse=reverse_archive
                 )),
                 '<p><a href=../>Index</a></p>',
                 footer
@@ -488,9 +490,9 @@ class LocalPost(TumblrPost):
 if __name__ == '__main__':
     import getopt
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qixtbn:s:p:')
+        opts, args = getopt.getopt(sys.argv[1:], 'qixtbrRn:s:p:')
     except getopt.GetoptError:
-        print "Usage: %s [-qixtb] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
+        print "Usage: %s [-qixtbrR] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
         sys.exit(1)
     for o, v in opts:
         if o == '-q':
@@ -505,6 +507,10 @@ if __name__ == '__main__':
             blosxom = True
             post_ext = '.txt'
             post_dir = os.curdir
+        elif o == '-r':
+            reverse_archive = False
+        elif o == '-R':
+            reverse_index = False
         elif o == '-n':
             count = int(v)
         elif o == '-s':

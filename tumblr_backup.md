@@ -1,10 +1,10 @@
 ## 0. What is this?
 
 `tumblr_backup` is a Python script that backs up your
-[Tumblr](http://www.tumblr.com) blog locally. The backup includes all
-images from image posts. An index links to monthly pages, which contain
-all the posts from the respective month, plus links to single post pages.
-There are many options to select the posts to backup.
+[Tumblr](http://www.tumblr.com) blog locally in HTML format. The backup includes
+all images from image posts. An index links to monthly pages, which contain all
+the posts from the respective month with links to single post pages. There are
+many options to select which posts to backup or to set the output format.
 
 You can see an example of `tumblr_backup`’s output
 [on my home page](http://drbeat.li/tumblr).
@@ -29,7 +29,7 @@ You can see an example of `tumblr_backup`’s output
 
 ### 2.1. Synopsis
 
-    tumblr_backup.py [-qixtb] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
+    tumblr_backup.py [-qixtbrR] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
 
 ### 2.2. Options
 
@@ -38,6 +38,8 @@ You can see an example of `tumblr_backup`’s output
 * `-x`: Include the original XML in the backup.
 * `-t`: Include the theme in the backup.
 * `-b`: Change the output format to [Blosxom](http://www.blosxom.com).
+* `-r`: Reverse the order of the monthly archive pages (oldest post on top).
+* `-R`: Reverse the order of the index page (year of first post on top).
 * `-n` _post-count_: Stop backing up after _post-count_ posts.
 * `-s` _start-post_: Start backing up at the _start-post_’th post.
 * `-p` _period_: Limit the backup to the given period.
@@ -93,7 +95,9 @@ applies a simple style to the saved pages. All generated pages are
 [HTML5](http://html5.org).
 
 The index pages are recreated from scratch after every backup, based on the
-existing single post pages.
+existing single post pages. Normally, the index and monthly pages are in reverse
+chronological order, i.e. more recent entries on top. The options `-R` and `-r`
+can be used to reverse the order.
 
 Tumblr saves most image files without extension. This probably saves a few
 million bytes in their database. `tumblr_backup` restores the image extensions.
