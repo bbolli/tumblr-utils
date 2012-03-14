@@ -6,8 +6,8 @@ all images from image posts. An index links to monthly pages, which contain all
 the posts from the respective month with links to single post pages. There are
 many options to select which posts to backup or to set the output format.
 
-You can see an example of `tumblr_backup`’s output
-[on my home page](http://drbeat.li/tumblr).
+You can see an example of `tumblr_backup`’s output [on my home
+page](http://drbeat.li/tumblr).
 
 
 ## 1. Installation
@@ -56,8 +56,8 @@ You can see an example of `tumblr_backup`’s output
 * _blog-name_: The name of your blog.
 
 If your blog is under `.tumblr.com`, you can give just the first domain name
-part; if your blog is under your own domain, give the whole domain name.
-You can give more than one _blog-name_ to backup multiple blogs in one go.
+part; if your blog is under your own domain, give the whole domain name. You
+can give more than one _blog-name_ to backup multiple blogs in one go.
 
 The default blog name can be changed in the script.
 
