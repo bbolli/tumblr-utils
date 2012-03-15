@@ -119,9 +119,9 @@ under the `xml/` folder in addition to the HTML format.
 Automatic archive mode `-a` is designed to be used from an hourly cron script.
 It normally makes an incremental backup except if the current hour is the one
 given as argument. In this case, `tumblr_backup` will make a full backup
-including the theme and the XML posts. An example invocation is
-`tumblr_backup.py -qa4` to do a full backup at 4 in the morning. This option
-obviates the need for shell script logic to determine what to backup.
+including the theme. An example invocation is `tumblr_backup.py -qa4` to do a
+full backup at 4 in the morning. This option obviates the need for shell script
+logic to determine what to backup.
 
 In Blosxom format mode, the posts generated are saved in a format suitable for
 re-publishing in [Blosxom](http://www.blosxom.com) with the [Meta

@@ -520,10 +520,10 @@ if __name__ == '__main__':
     if options.auto is not None:
         if options.auto == time.localtime().tm_hour:
             options.incremental = False
-            options.xml = options.theme = True
+            options.theme = True
         else:
             options.incremental = True
-            options.xml = options.theme = False
+            options.theme = False
     if options.period:
         try:
             options.period = time.strftime(
