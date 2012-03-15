@@ -22,18 +22,6 @@ import xmltramp
 
 join = os.path.join
 
-verbose = True
-incremental = False
-xml = False
-root_folder = os.getcwdu()
-count = None            # None = all posts
-start = 0               # 0 = most recent post
-period = None           # YYYY[MM[DD]] to be backed up
-theme = False
-blosxom = False
-reverse_archive = True
-reverse_index = True
-
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
 def test_jpg(h, f):
@@ -47,6 +35,7 @@ save_folder = ''
 image_folder = ''
 
 # constant names
+root_folder = os.getcwdu()
 post_dir = 'posts'
 xml_dir = 'xml'
 image_dir = 'images'
@@ -67,7 +56,7 @@ except locale.Error:
     pass
 
 def log(s):
-    if verbose:
+    if not options.quiet:
         print s,
 
 def mkdir(dir, recursive=False):
@@ -166,13 +155,13 @@ blockquote {
             idx.write(header(self.title, self.title, body_class='index',
                 subtitle=self.subtitle, avatar=self.avatar
             ))
-            for year in sorted(self.index.keys(), reverse=reverse_index):
+            for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
             idx.write(footer)
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
-        for month in sorted(self.index[year].keys(), reverse=reverse_index):
+        for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
             month_name = self.save_month(year, month, tm)
             idx.write('    <li><a href=%s/%s>%s</a></li>\n' % (
@@ -186,7 +175,7 @@ blockquote {
             arch.write('\n\n'.join([
                 header(self.title, time.strftime('%B %Y', tm).decode('utf-8'), body_class='archive'),
                 '\n\n'.join(p.get_post() for p in sorted(
-                    self.index[year][month], key=lambda x: x.date, reverse=reverse_archive
+                    self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
                 )),
                 '<p><a href=../>Index</a></p>',
                 footer
@@ -236,7 +225,7 @@ blockquote {
 
         # make sure there are folders to save in
         global save_folder, image_folder
-        if blosxom:
+        if options.blosxom:
             save_folder = root_folder
         else:
             save_folder = join(root_folder, account)
@@ -247,17 +236,17 @@ blockquote {
         self.avatar = None
 
         # prepare the period start and end timestamps
-        if period:
-            i = 0; tm = [int(period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
-            if len(period) >= 6:
-                i = 1; tm[1] = int(period[4:6])
-            if len(period) == 8:
-                i = 2; tm[2] = int(period[6:8])
+        if options.period:
+            i = 0; tm = [int(options.period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
+            if len(options.period) >= 6:
+                i = 1; tm[1] = int(options.period[4:6])
+            if len(options.period) == 8:
+                i = 2; tm[2] = int(options.period[6:8])
             p_start = time.mktime(tm)
             tm[i] += 1
             p_stop = time.mktime(tm)
 
-        if theme:
+        if options.theme:
             # if .netrc contains the login, get the style info
             host = 'www.tumblr.com'
             auth = netrc.netrc().authenticators(host)
@@ -267,7 +256,7 @@ blockquote {
 
         # get the highest post id already saved
         ident_max = None
-        if incremental:
+        if options.incremental:
             try:
                 ident_max = max(
                     long(os.path.splitext(os.path.split(f)[1])[0])
@@ -299,16 +288,15 @@ blockquote {
         post_header = header(self.title, body_class='post')
 
         # find the total number of posts
-        total_posts = count or int(soup.posts('total'))
+        total_posts = options.count or int(soup.posts('total'))
+        last_post = options.skip + total_posts
 
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
         MAX = 50
-        for i in range(start, start + total_posts, MAX):
+        for i in range(options.skip, last_post, MAX):
             # find the upper bound
-            j = i + MAX
-            if j > start + total_posts:
-                j = start + total_posts
+            j = min(i + MAX, last_post)
             log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
 
             response = urllib2.urlopen('%s?num=%d&start=%d' % (base, j - i, i))
@@ -319,7 +307,7 @@ blockquote {
                 if ident_max and long(post.ident) <= ident_max:
                     i = None
                     break
-                if period:
+                if options.period:
                     if post.date >= p_stop:
                         continue
                     if post.date < p_start:
@@ -333,7 +321,7 @@ blockquote {
             if i is None:
                 break
 
-        if not blosxom and self.post_count:
+        if not options.blosxom and self.post_count:
             self.save_style()
             self.index = defaultdict(lambda: defaultdict(list))
             self.build_index()
@@ -386,7 +374,7 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
-            if blosxom:
+            if options.blosxom:
                 append(post['photo-url'], u'<img alt="" src="%s">')
             else:
                 append((image_dir, save_image(unicode(post['photo-url']))), u'<img alt="" src="../%s/%s">')
@@ -452,7 +440,7 @@ class TumblrPost:
         return post
 
     def get_post(self):
-        if blosxom:
+        if options.blosxom:
             return self.get_blosxom()
         else:
             return post_header + self.get_html() + '\n\n' + footer
@@ -464,7 +452,7 @@ class TumblrPost:
         os.utime(join(save_folder, post_dir, self.file_name),
             (self.date, self.date)
         )
-        if xml:
+        if options.xml:
             with open_text(xml_dir, self.ident + '.xml') as f:
                 f.write(self.xml_content)
 
@@ -488,54 +476,70 @@ class LocalPost(TumblrPost):
 
 
 if __name__ == '__main__':
-    import getopt
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], 'qixtbrRa:n:s:p:')
-    except getopt.GetoptError:
-        print "Usage: %s [-qixtbrR] [-a hour] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [userid]..." % sys.argv[0]
-        sys.exit(1)
-    for o, v in opts:
-        if o == '-q':
-            verbose = False
-        elif o == '-i':
-            incremental = True
-        elif o == '-x':
-            xml = True
-        elif o == '-t':
-            theme = True
-        elif o == '-b':
-            blosxom = True
-            post_ext = '.txt'
-            post_dir = os.curdir
-        elif o == '-r':
-            reverse_archive = False
-        elif o == '-R':
-            reverse_index = False
-        elif o == '-a':
-            if time.localtime().tm_hour == int(v):
-                theme = xml = True
-            else:
-                incremental = True
-        elif o == '-n':
-            count = int(v)
-        elif o == '-s':
-            start = int(v)
-        elif o == '-p':
-            try:
-                period = time.strftime(
-                    {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[v]
-                )
-            except KeyError:
-                period = v.replace('-', '')
-            if len(period) not in (4, 6, 8):
-                sys.stderr.write('Period must be y, m, d or YYYY[MM[DD]]\n')
-                sys.exit(1)
+    import optparse
+    parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
+        description="Makes a local backup of Tumblr blogs."
+    )
+    parser.add_option('-q', '--quiet', action='store_true',
+        help="suppress progress messages"
+    )
+    parser.add_option('-i', '--incremental', action='store_true',
+        help="incremental backup mode"
+    )
+    parser.add_option('-x', '--xml', action='store_true',
+        help="save the original XML source"
+    )
+    parser.add_option('-t', '--theme', action='store_true',
+        help="save the blog's theme (needs a ~/.netrc entry)"
+    )
+    parser.add_option('-b', '--blosxom', action='store_true',
+        help="save the posts in blosxom format"
+    )
+    parser.add_option('-r', '--reverse-month', action='store_false', default=True,
+        help="reverse the post order in the monthly archives"
+    )
+    parser.add_option('-R', '--reverse-index', action='store_false', default=True,
+        help="reverse the index file order"
+    )
+    parser.add_option('-a', '--auto', type='int', metavar="HOUR",
+        help="do a full backup at HOUR hours, otherwise do an incremental backup"
+        " (useful for cron jobs)"
+    )
+    parser.add_option('-n', '--count', type='int', help="save only COUNT posts")
+    parser.add_option('-s', '--skip', type='int', default=0,
+        help="skip the first SKIP posts"
+    )
+    parser.add_option('-p', '--period', help="limit the backup to PERIOD"
+        " ('y', 'm', 'd' or YYYY[MM[DD]])"
+    )
+    options, args = parser.parse_args()
+
+    if options.blosxom:
+        post_ext = '.txt'
+        post_dir = os.curdir
+    if options.auto is not None:
+        if options.auto == time.localtime().tm_hour:
+            options.incremental = False
+            options.xml = options.theme = True
+        else:
+            options.incremental = True
+            options.xml = options.theme = False
+    if options.period:
+        try:
+            options.period = time.strftime(
+                {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[options.period]
+            )
+        except KeyError:
+            options.period = options.period.replace('-', '')
+        if len(options.period) not in (4, 6, 8):
+            parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
     if not args:
         args = ['bbolli']
+
     tb = TumblrBackup()
     try:
         for account in args:
             tb.backup(account)
     except Exception, e:
         sys.stderr.write('%r\n' % e)
-        sys.exit(2)
+        sys.exit(1)

@@ -29,34 +29,35 @@ page](http://drbeat.li/tumblr).
 
 ### 2.1. Synopsis
 
-    tumblr_backup.py [-qixtbrR] [-a hour] [-n post-count] [-s start-post] [-p y|m|d|YYYY[MM[DD]]] [blog-name] ...
+    tumblr_backup.py [options] blog-name ...
 
 ### 2.2. Options
 
-* `-q`: Suppress the progress display.
-* `-i`: Incremental backup.
-* `-x`: Include the original XML as returned by the Tumblr API.
-* `-t`: Include the theme and avatar picture in the backup.
-* `-b`: Change the output format to [Blosxom](http://www.blosxom.com).
-* `-r`: Reverse the order of the monthly archive pages (oldest post on top).
-* `-R`: Reverse the order of the index page (year of first post on top).
-* `-a` _hour_: Automatic archive mode: if the hour is _hour_ (in 24-hour
-        format), do a full backup with theme and XML, otherwise do an
-        incremental backup.
-* `-n` _post-count_: Stop backing up after _post-count_ posts.
-* `-s` _start-post_: Start backing up at the _start-post_’th post.
-* `-p` _period_: Limit the backup to the given period.
-  These are ways to define the period:
-  * `y`: the current year
-  * `m`: the current month
-  * `d`: the current day (i.e. today ;-)
-  * _yyyy_: the given year
-  * _yyyy-mm_: the given month
-  * _yyyy-mm-dd_: the given day
+    -h, --help            show this help message and exit
+    -q, --quiet           suppress progress messages
+    -i, --incremental     incremental backup mode
+    -x, --xml             save the original XML source
+    -t, --theme           save the blog's theme (needs a ~/.netrc entry)
+    -b, --blosxom         save the posts in blosxom format
+    -r, --reverse-month   reverse the post order in the monthly archives
+    -R, --reverse-index   reverse the index file order
+    -a HOUR, --auto=HOUR  do a full backup at HOUR hours, otherwise do an
+                          incremental backup (useful for cron jobs)
+    -n COUNT, --count=COUNT
+                          save only COUNT posts
+    -s SKIP, --skip=SKIP  skip the first SKIP posts
+    -p PERIOD, --period=PERIOD
+                          limit the backup to PERIOD:
+                            'y': the current year
+                            'm': the current month
+                            'd': the current day (i.e. today ;-)
+                            YYYY: the given year
+                            YYYY-MM: the given month
+                            YYYY-MM-DD: the given day
 
 ### 2.3. Arguments
 
-* _blog-name_: The name of your blog.
+_blog-name_: The name of your blog.
 
 If your blog is under `.tumblr.com`, you can give just the first domain name
 part; if your blog is under your own domain, give the whole domain name. You
@@ -117,7 +118,7 @@ under the `xml/` folder in addition to the HTML format.
 
 Automatic archive mode `-a` is designed to be used from an hourly cron script.
 It normally makes an incremental backup except if the current hour is the one
-given as argument.  In this case, `tumblr_backup` will make a full backup
+given as argument. In this case, `tumblr_backup` will make a full backup
 including the theme and the XML posts. An example invocation is
 `tumblr_backup.py -qa4` to do a full backup at 4 in the morning. This option
 obviates the need for shell script logic to determine what to backup.
