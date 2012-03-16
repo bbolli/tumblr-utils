@@ -212,12 +212,16 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         base += '/api/read'
 
         # make sure there are folders to save in
-        global save_folder, image_folder
+        global save_folder, image_folder, post_ext, post_dir
         if options.blosxom:
             save_folder = root_folder
+            post_ext = '.txt'
+            post_dir = os.curdir
+            post_class = BlosxomPost
         else:
             save_folder = join(root_folder, account)
             image_folder = join(save_folder, image_dir)
+            post_class = TumblrPost
         mkdir(save_folder, True)
 
         self.post_count = 0
@@ -291,7 +295,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             soup = xmltramp.parse(response.read())
 
             for p in soup.posts['post':]:
-                post = TumblrPost(p)
+                post = post_class(p)
                 if ident_max and long(post.ident) <= ident_max:
                     i = None
                     break
@@ -362,10 +366,7 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
-            if options.blosxom:
-                append(post['photo-url'], u'<img alt="" src="%s">')
-            else:
-                append((image_dir, save_image(unicode(post['photo-url']))), u'<img alt="" src="../%s/%s">')
+            append(self.get_image_url(post['photo-url']), u'<img alt="" src="%s">')
             url = get_try('photo-link-url')
             if url:
                 content[0] = '<a href=%s>%s</a>' % (url, content[0])
@@ -405,9 +406,12 @@ class TumblrPost:
 
         self.content = '\n'.join(content)
 
-    def get_html(self):
+    def get_image_url(self, url):
+        return u'../%s/%s' % (image_dir, save_image(unicode(url)))
+
+    def get_post(self):
         """returns this post in HTML"""
-        post = '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
+        post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>\n' % time.strftime('%x %X', self.tm)
         post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
         post += u'<a class=tlink href=%s>●</a></p>\n' % self.url
@@ -416,22 +420,8 @@ class TumblrPost:
         post += self.content
         if self.tags:
             post += u'\n<p class=tags>%s</p>' % u' '.join(u'#' + t for t in self.tags)
-        post += '\n</article>'
+        post += '\n</article>\n\n' + footer
         return post
-
-    def get_blosxom(self):
-        """returns this post as a Blosxom post"""
-        post = self.title + '\nmeta-id: _' + self.ident + '\nmeta-url: ' + self.url
-        if self.tags:
-            post += '\nmeta-tags: ' + ' '.join(t.replace(' ', '+') for t in self.tags)
-        post += '\n\n' + self.content
-        return post
-
-    def get_post(self):
-        if options.blosxom:
-            return self.get_blosxom()
-        else:
-            return post_header + self.get_html() + '\n\n' + footer
 
     def save_post(self):
         """saves this post locally"""
@@ -444,7 +434,20 @@ class TumblrPost:
             with open_text(xml_dir, self.ident + '.xml') as f:
                 f.write(self.xml_content)
 
-class LocalPost(TumblrPost):
+class BlosxomPost(TumblrPost):
+
+    def get_image_url(self, url):
+        return url
+
+    def get_post(self):
+        """returns this post as a Blosxom post"""
+        post = self.title + '\nmeta-id: _' + self.ident + '\nmeta-url: ' + self.url
+        if self.tags:
+            post += '\nmeta-tags: ' + ' '.join(t.replace(' ', '+') for t in self.tags)
+        post += '\n\n' + self.content
+        return post
+
+class LocalPost:
 
     def __init__(self, post_file):
         with codecs.open(post_file, 'r', 'utf-8') as f:
@@ -502,9 +505,6 @@ if __name__ == '__main__':
     )
     options, args = parser.parse_args()
 
-    if options.blosxom:
-        post_ext = '.txt'
-        post_dir = os.curdir
     if options.auto is not None:
         if options.auto == time.localtime().tm_hour:
             options.incremental = False
