@@ -124,25 +124,13 @@ class TumblrBackup:
 
     def save_style(self):
         with open_text(theme_dir, backup_css) as css:
-            css.write('''
-body {
-    width: 720px; margin: 0 auto;
-}
-img {
-    max-width: 720px;
-}
-.archive h1, .subtitle, article {
-    padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; margin-bottom: 0.75em;
-}
-.meta a {
-    text-decoration: none;
-}
-.post a.llink, .archive a.tlink {
-    display: none;
-}
-blockquote {
-    margin-left: 0; border-left: 8px #999 solid; padding: 0 24px;
-}
+            css.write('''\
+body { width: 720px; margin: 0 auto; }
+img { max-width: 720px; }
+blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
+.archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
+.post a.llink, .archive a.tlink { display: none; }
+.meta a { text-decoration: none; }
 ''')
 
     def build_index(self):
