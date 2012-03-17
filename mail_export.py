@@ -54,7 +54,7 @@ class TumblrToMail:
         open(self.db_file, 'w').write(repr(self.db))
 
     def get_links(self):
-        url = 'http://%s.tumblr.com/api/read/json?type=link' % self.user
+        url = 'http://%s.tumblr.com/api/read/json?type=link&filter=text' % self.user
         posts = urllib.urlopen(url).read()
         posts = re.sub(r'^.*?(\{.*\});*$', r'\1', posts)   # extract the JSON structure
         posts = json.loads(posts)
@@ -69,12 +69,6 @@ class TumblrToMail:
         mail = self.lw.fill(u'%s: %s' % (link['link-text'], urlparse.urlunsplit(url)))
         desc = link['link-description']
         if desc:
-            if link['format'] == 'html':
-                # FIXME: poor man's HTML to text conversion
-                desc = re.sub(r'<.*?>', ' ', desc)
-                desc = re.sub(r'\s+', ' ', desc).strip()
-                desc = re.sub(r'&#(\d+);', lambda m: unichr(int(m.group(1))), desc)
-                desc = re.sub(r'(?i)&#x([0-9a-f]+);', lambda m: unichr(int(m.group(1), 16)), desc)
             mail += '\n\n' + self.tw.fill(desc)
         return mail
 
