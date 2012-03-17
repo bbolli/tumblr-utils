@@ -42,6 +42,7 @@ image_dir = 'images'
 archive_dir = 'archive'
 theme_dir = 'theme'
 backup_css = '_local.css'
+avatar_base = 'avatar'
 
 # HTML fragments
 post_header = ''
@@ -137,6 +138,9 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         for f in glob(join(save_folder, post_dir, '*.html')):
             post = LocalPost(f)
             self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+        for f in glob(join(save_folder, theme_dir, avatar_base + '.*')):
+            self.avatar = os.path.split(f)[1]
+            break
 
     def save_index(self):
         with open_text('index.html') as idx:
@@ -197,7 +201,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             if avatar_url:
                 mkdir(join(save_folder, theme_dir))
                 avatar = urllib2.urlopen(avatar_url)
-                avatar_file = 'avatar.' + avatar_url.split('.')[-1]
+                avatar_file = avatar_base + '.' + avatar_url.split('.')[-1]
                 with open(join(save_folder, theme_dir, avatar_file), 'wb') as f:
                     f.write(avatar.read())
                     self.avatar = avatar_file
