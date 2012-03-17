@@ -54,14 +54,13 @@ class TumblrToMail:
         open(self.db_file, 'w').write(repr(self.db))
 
     def get_links(self):
-        url = 'http://%s.tumblr.com/api/read/json' % self.user
+        url = 'http://%s.tumblr.com/api/read/json?type=link' % self.user
         posts = urllib.urlopen(url).read()
         posts = re.sub(r'^.*?(\{.*\});*$', r'\1', posts)   # extract the JSON structure
         posts = json.loads(posts)
         return [
             p for p in posts['posts']
-            if int(p['id']) > self.latest and p['type'] == 'link'
-            and self.tag in p['tags']
+            if int(p['id']) > self.latest and self.tag in p['tags']
         ]
 
     def make_mail(self, link):
