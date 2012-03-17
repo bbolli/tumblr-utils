@@ -149,6 +149,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
+            idx.write('<p>Generated on %s.</p>\n' % time.strftime('%x %X'))
             idx.write(footer)
 
     def save_year(self, idx, year):
