@@ -67,10 +67,13 @@ def mkdir(dir, recursive=False):
         else:
             os.mkdir(dir)
 
+def path_to(*parts):
+    return join(save_folder, *parts)
+
 def open_text(*parts):
     if len(parts) > 1:
-        mkdir(join(save_folder, *parts[:-1]))
-    return codecs.open(join(save_folder, *parts), 'w', 'utf-8')
+        mkdir(path_to(*parts[:-1]))
+    return codecs.open(path_to(*parts), 'w', 'utf-8')
 
 def save_image(image_url):
     """saves an image if not saved yet"""
@@ -135,10 +138,10 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 ''')
 
     def build_index(self):
-        for f in glob(join(save_folder, post_dir, '*.html')):
+        for f in glob(path_to(post_dir, '*.html')):
             post = LocalPost(f)
             self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
-        for f in glob(join(save_folder, theme_dir, avatar_base + '.*')):
+        for f in glob(path_to(theme_dir, avatar_base + '.*')):
             self.avatar = os.path.split(f)[1]
             break
 
@@ -176,7 +179,8 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         return file_name
 
     def get_theme(self, account, host, user, password):
-        subprocess.call(['/bin/rm', '-rf', join(save_folder, theme_dir)])
+        theme_folder = path_to(theme_dir)
+        subprocess.call(['/bin/rm', '-rf', theme_folder])
         try:
             info = urllib2.urlopen('http://%s/api/authenticate' % host,
                 urllib.urlencode({
@@ -200,10 +204,10 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
                     f.write(log['theme-source'][0])
             avatar_url = attrs.get('avatar-url')
             if avatar_url:
-                mkdir(join(save_folder, theme_dir))
+                mkdir(theme_folder)
                 avatar = urllib2.urlopen(avatar_url)
                 avatar_file = avatar_base + '.' + avatar_url.split('.')[-1]
-                with open(join(save_folder, theme_dir, avatar_file), 'wb') as f:
+                with open(join(theme_folder, avatar_file), 'wb') as f:
                     f.write(avatar.read())
                     self.avatar = avatar_file
 
@@ -225,7 +229,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             post_class = BlosxomPost
         else:
             save_folder = join(root_folder, account)
-            image_folder = join(save_folder, image_dir)
+            image_folder = path_to(image_dir)
             post_class = TumblrPost
         mkdir(save_folder, True)
 
@@ -257,7 +261,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             try:
                 ident_max = max(
                     long(os.path.splitext(os.path.split(f)[1])[0])
-                    for f in glob(join(save_folder, post_dir, '*' + post_ext))
+                    for f in glob(path_to(post_dir, '*' + post_ext))
                 )
                 log('Backing up posts after %d\n' % ident_max)
             except ValueError:  # max() arg is an empty sequence
@@ -432,7 +436,7 @@ class TumblrPost:
         """saves this post locally"""
         with open_text(post_dir, self.file_name) as f:
             f.write(self.get_post())
-        os.utime(join(save_folder, post_dir, self.file_name),
+        os.utime(path_to(post_dir, self.file_name),
             (self.date, self.date)
         )
         if options.xml:
