@@ -292,6 +292,22 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         total_posts = options.count or int(soup.posts('total'))
         last_post = options.skip + total_posts
 
+        def _backup(posts):
+            for p in posts:
+                post = post_class(p)
+                if ident_max and long(post.ident) <= ident_max:
+                    return False
+                if options.period:
+                    if post.date >= p_stop:
+                        continue
+                    if post.date < p_start:
+                        return False
+                if post.error:
+                    sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
+                post.save_post()
+                self.post_count += 1
+            return True
+
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
         MAX = 50
@@ -303,23 +319,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             response = urllib2.urlopen('%s?num=%d&start=%d' % (base, j - i, i))
             soup = xmltramp.parse(response.read())
 
-            for p in soup.posts['post':]:
-                post = post_class(p)
-                if ident_max and long(post.ident) <= ident_max:
-                    i = None
-                    break
-                if options.period:
-                    if post.date >= p_stop:
-                        continue
-                    if post.date < p_start:
-                        i = None
-                        break
-                if post.error:
-                    sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
-                post.save_post()
-                self.post_count += 1
-
-            if i is None:
+            if not _backup(soup.posts['post':]):
                 break
 
         if not options.blosxom and self.post_count:
