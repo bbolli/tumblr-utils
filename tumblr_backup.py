@@ -141,14 +141,13 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         for f in glob(path_to(post_dir, '*.html')):
             post = LocalPost(f)
             self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
-        for f in glob(path_to(theme_dir, avatar_base + '.*')):
-            self.avatar = os.path.split(f)[1]
-            break
 
     def save_index(self):
+        f = glob(path_to(theme_dir, avatar_base + '.*'))
+        avatar = os.path.split(f[0])[1] if f else None
         with open_text('index.html') as idx:
             idx.write(header(self.title, self.title, body_class='index',
-                subtitle=self.subtitle, avatar=self.avatar
+                subtitle=self.subtitle, avatar=avatar
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
@@ -209,7 +208,6 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
                 avatar_file = avatar_base + '.' + avatar_url.split('.')[-1]
                 with open(join(theme_folder, avatar_file), 'wb') as f:
                     f.write(avatar.read())
-                    self.avatar = avatar_file
 
     def backup(self, account):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -234,7 +232,6 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         mkdir(save_folder, True)
 
         self.post_count = 0
-        self.avatar = None
 
         # prepare the period start and end timestamps
         if options.period:
