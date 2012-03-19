@@ -531,9 +531,5 @@ if __name__ == '__main__':
         args = ['bbolli']
 
     tb = TumblrBackup()
-    try:
-        for account in args:
-            tb.backup(account)
-    except Exception, e:
-        sys.stderr.write('%r\n' % e)
-        sys.exit(1)
+    for account in args:
+        tb.backup(account)
