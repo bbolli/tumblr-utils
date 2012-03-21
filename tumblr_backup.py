@@ -290,7 +290,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         last_post = options.skip + total_posts
 
         def _backup(posts):
-            for p in posts:
+            for p in sorted(posts, key=lambda x: long(x('id')), reverse=True):
                 post = post_class(p)
                 if ident_max and long(post.ident) <= ident_max:
                     return False
