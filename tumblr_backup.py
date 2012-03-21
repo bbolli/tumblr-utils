@@ -14,7 +14,7 @@ from collections import defaultdict
 import time
 import netrc
 import locale
-import subprocess
+import shutil
 from glob import glob
 
 # extra required packages
@@ -179,7 +179,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 
     def get_theme(self, account, host, user, password):
         theme_folder = path_to(theme_dir)
-        subprocess.call(['/bin/rm', '-rf', theme_folder])
+        shutil.rmtree(theme_folder, True)
         try:
             info = urllib2.urlopen('http://%s/api/authenticate' % host,
                 urllib.urlencode({
