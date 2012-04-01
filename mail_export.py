@@ -61,7 +61,7 @@ class TumblrToMail:
         posts = json.loads(posts)
         return [
             p for p in posts['posts']
-            if int(p['id']) > self.latest and self.tag in p['tags']
+            if int(p['id']) > self.latest and self.tag in p.get('tags', [])
         ]
 
     def make_mail(self, link):
