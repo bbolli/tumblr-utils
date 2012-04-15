@@ -91,9 +91,7 @@ def save_image(image_url):
     if '.' not in image_filename:
         image_type = imghdr.what(None, image_data[:32])
         if image_type:
-            if image_type == 'jpeg':
-                image_type = 'jpg'
-            image_filename += '.' + image_type
+            image_filename += '.' + image_type.replace('jpeg', 'jpg')
     # save the image
     mkdir(image_folder)
     with open(join(image_folder, image_filename), 'wb') as image_file:
