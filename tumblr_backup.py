@@ -388,7 +388,7 @@ class TumblrPost:
             append_try('quote-source', u'<p>%s</p>')
 
         elif self.typ == 'video':
-            source = unicode(post['video-source'])
+            source = unicode(post['video-source']).strip()
             if source.startswith('<iframe') or source.startswith('<object'):
                 append(source, u'<p>%s</p>')
                 append_try('video-caption')
