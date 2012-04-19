@@ -370,11 +370,14 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
-            append(self.get_image_url(post['photo-url']), u'<img alt="" src="%s">')
             url = get_try('photo-link-url')
-            if url:
-                content[0] = '<a href=%s>%s</a>' % (url, content[0])
-            content[0] = '<p>' + content[0] + '</p>'
+            for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
+                append(self.get_image_url(p['photo-url']), u'<img alt="" src="%s">')
+                if url:
+                    content[-1] = '<a href="%s">%s</a>' % (url, content[-1])
+                content[-1] = '<p>' + content[-1] + '</p>'
+                if p._name == 'photo' and p('caption'):
+                    append(p('caption'), u'<p>%s</p>')
             append_try('photo-caption')
 
         elif self.typ == 'link':
