@@ -8,6 +8,7 @@ import sys
 import urllib
 import urllib2
 from xml.sax.saxutils import escape
+from xml.sax import SAXException
 import codecs
 import imghdr
 from collections import defaultdict
@@ -74,6 +75,24 @@ def open_text(*parts):
     if len(parts) > 1:
         mkdir(path_to(*parts[:-1]))
     return codecs.open(path_to(*parts), 'w', 'utf-8')
+
+def xmlparse(url, data=None):
+    for _ in range(10):
+        try:
+            resp = urllib2.urlopen(url, data)
+        except (urllib2.URLError, urllib2.HTTPError) as e:
+            sys.stderr.write('%r getting %s\n' % (e, url))
+            continue
+        if resp.info().gettype() == 'text/xml':
+            break
+    else:
+        return None
+    xml = resp.read()
+    try:
+        return xmltramp.parse(xml)
+    except SAXException as e:
+        sys.stderr.write('%s %r\n\n%r\n\n%s\n' % (resp.info().gettype(), resp.msg, e, xml))
+        return None
 
 def save_image(image_url):
     """saves an image if not saved yet"""
@@ -178,16 +197,12 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
     def get_theme(self, account, host, user, password):
         theme_folder = path_to(theme_dir)
         shutil.rmtree(theme_folder, True)
-        try:
-            info = urllib2.urlopen('http://%s/api/authenticate' % host,
-                urllib.urlencode({
-                    'email': user, 'password': password, 'include-theme': '1'
-                })
-            )
-        except urllib2.URLError:
-            return
-        tumblr = xmltramp.parse(info.read())
-        if tumblr._name != 'tumblr':
+        tumblr = xmlparse('http://%s/api/authenticate' % host,
+            urllib.urlencode({
+                'email': user, 'password': password, 'include-theme': '1'
+            })
+        )
+        if tumblr is None or tumblr._name != 'tumblr':
             return
         for log in tumblr['tumblelog':]:
             attrs = log()
@@ -264,12 +279,9 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 
         # start by calling the API with just a single post
         log("Getting basic information\r")
-        try:
-            response = urllib2.urlopen(base + '?num=1')
-        except urllib2.URLError:
-            sys.stderr.write("Invalid URL %s\n" % base)
+        soup = xmlparse(base + '?num=1')
+        if not soup:
             return
-        soup = xmltramp.parse(response.read())
 
         # collect all the meta information
         tumblelog = soup.tumblelog
@@ -311,8 +323,9 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             j = min(i + MAX, last_post)
             log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
 
-            response = urllib2.urlopen('%s?num=%d&start=%d' % (base, j - i, i))
-            soup = xmltramp.parse(response.read())
+            soup = xmlparse('%s?num=%d&start=%d' % (base, j - i, i))
+            if soup is None:
+                return
 
             if not _backup(soup.posts['post':]):
                 break
