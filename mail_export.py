@@ -58,7 +58,11 @@ class TumblrToMail:
         url = 'http://%s.tumblr.com/api/read/json?type=link&filter=text' % self.user
         posts = urllib.urlopen(url).read()
         posts = re.sub(r'^.*?(\{.*\});*$', r'\1', posts)   # extract the JSON structure
-        posts = json.loads(posts)
+        try:
+            posts = json.loads(posts)
+        except ValueError:
+            print posts
+            return []
         return [
             p for p in posts['posts']
             if int(p['id']) > self.latest and self.tag in p.get('tags', [])
