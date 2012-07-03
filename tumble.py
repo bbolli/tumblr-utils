@@ -36,6 +36,7 @@ def tumble(feed):
             return [post(auth, e) for e in feed.entries]
 
 def post(auth, entry):
+    # the first enclosure determines the media type
     enc = entry.get('enclosures', [])
     if enc: enc = enc[0]
     if enc and enc.type.startswith('image/'):
@@ -74,6 +75,9 @@ def post(auth, entry):
         data['group'] = BLOG
     if POST:
         data['post-id'] = POST
+        rc = 'edit'
+    else:
+        rc = 'ok'
     if DEBUG:
         return 'debug', entry.get('id'), data
 
@@ -83,7 +87,7 @@ def post(auth, entry):
             data[k] = data[k].encode('utf-8')
 
     try:
-        return 'ok', urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
+        return rc, urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
     except Exception, e:
         return 'error', str(e)
 
