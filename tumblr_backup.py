@@ -419,6 +419,13 @@ class TumblrPost:
             self.title = post.question
             append(post.answer)
 
+        elif self.typ == 'conversation':
+            self.title = get_try('conversation-title')
+            append(
+                '<br>\n'.join(escape(unicode(l)) for l in post.conversation['line':]),
+                u'<p>%s</p>'
+            )
+
         else:
             raise ValueError('Unknown post type: ' + self.typ)
 
