@@ -89,7 +89,7 @@ def post(auth, entry):
     try:
         return rc, urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
     except Exception, e:
-        return 'error', str(e)
+        return 'error', e.read(), e.headers
 
 if __name__ == '__main__':
     try:
