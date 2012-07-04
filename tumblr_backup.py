@@ -89,10 +89,11 @@ def xmlparse(url, data=None):
         return None
     xml = resp.read()
     try:
-        return xmltramp.parse(xml)
+        doc = xmltramp.parse(xml)
     except SAXException as e:
         sys.stderr.write('%s %r\n\n%r\n\n%s\n' % (resp.info().gettype(), resp.msg, e, xml))
         return None
+    return doc if doc._name == 'tumblr' else None
 
 def save_image(image_url):
     """saves an image if not saved yet"""
@@ -202,7 +203,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
                 'email': user, 'password': password, 'include-theme': '1'
             })
         )
-        if tumblr is None or tumblr._name != 'tumblr':
+        if not tumblr:
             return
         for log in tumblr['tumblelog':]:
             attrs = log()
