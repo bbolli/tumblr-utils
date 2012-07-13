@@ -120,6 +120,18 @@ def save_image(image_url):
         image_file.write(image_data)
     return image_filename
 
+def save_style():
+    with open_text(backup_css) as css:
+        css.write('''\
+body { width: 720px; margin: 0 auto; }
+img { max-width: 720px; }
+blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
+.archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
+.post a.llink, .archive a.tlink { display: none; }
+.meta a { text-decoration: none; }
+.avatar { float: right; }
+''')
+
 def header(heading, title='', body_class='', subtitle='', avatar=''):
     root_rel = '' if body_class == 'index' else '../'
     css_rel = root_rel + (custom_css if have_custom_css else backup_css)
@@ -142,20 +154,36 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
         h += u'<p class=subtitle>%s</p>\n' % subtitle
     return h
 
+def get_theme(account, host, user, password):
+    theme_folder = path_to(theme_dir)
+    shutil.rmtree(theme_folder, True)
+    tumblr = xmlparse('http://%s/api/authenticate' % host,
+        urllib.urlencode({
+            'email': user, 'password': password, 'include-theme': '1'
+        })
+    )
+    if not tumblr:
+        return
+    for log in tumblr['tumblelog':]:
+        attrs = log()
+        if attrs.get('name') != account:
+            continue
+        if hasattr(log, 'custom-css') and len(log['custom-css']):
+            with open_text(theme_dir, 'custom.css') as f:
+                f.write(log['custom-css'][0])
+        if hasattr(log, 'theme-source') and len(log['theme-source']):
+            with open_text(theme_dir, 'theme.html') as f:
+                f.write(log['theme-source'][0])
+        avatar_url = attrs.get('avatar-url')
+        if avatar_url:
+            mkdir(theme_folder)
+            avatar = urllib2.urlopen(avatar_url)
+            avatar_file = avatar_base + '.' + avatar_url.split('.')[-1]
+            with open(join(theme_folder, avatar_file), 'wb') as f:
+                f.write(avatar.read())
+
 
 class TumblrBackup:
-
-    def save_style(self):
-        with open_text(backup_css) as css:
-            css.write('''\
-body { width: 720px; margin: 0 auto; }
-img { max-width: 720px; }
-blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
-.archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
-.post a.llink, .archive a.tlink { display: none; }
-.meta a { text-decoration: none; }
-.avatar { float: right; }
-''')
 
     def build_index(self):
         for f in glob(path_to(post_dir, '*.html')):
@@ -196,34 +224,6 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
                 footer
             ]))
         return file_name
-
-    def get_theme(self, account, host, user, password):
-        theme_folder = path_to(theme_dir)
-        shutil.rmtree(theme_folder, True)
-        tumblr = xmlparse('http://%s/api/authenticate' % host,
-            urllib.urlencode({
-                'email': user, 'password': password, 'include-theme': '1'
-            })
-        )
-        if not tumblr:
-            return
-        for log in tumblr['tumblelog':]:
-            attrs = log()
-            if attrs.get('name') != account:
-                continue
-            if hasattr(log, 'custom-css') and len(log['custom-css']):
-                with open_text(theme_dir, 'custom.css') as f:
-                    f.write(log['custom-css'][0])
-            if hasattr(log, 'theme-source') and len(log['theme-source']):
-                with open_text(theme_dir, 'theme.html') as f:
-                    f.write(log['theme-source'][0])
-            avatar_url = attrs.get('avatar-url')
-            if avatar_url:
-                mkdir(theme_folder)
-                avatar = urllib2.urlopen(avatar_url)
-                avatar_file = avatar_base + '.' + avatar_url.split('.')[-1]
-                with open(join(theme_folder, avatar_file), 'wb') as f:
-                    f.write(avatar.read())
 
     def backup(self, account):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -267,7 +267,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             auth = netrc.netrc().authenticators(host)
             if auth:
                 log("Getting the theme\r")
-                self.get_theme(account, host, auth[0], auth[2])
+                get_theme(account, host, auth[0], auth[2])
 
         # get the highest post id already saved
         ident_max = None
@@ -336,7 +336,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 
         if not options.blosxom and self.post_count:
             if not have_custom_css:
-                self.save_style()
+                save_style()
             self.index = defaultdict(lambda: defaultdict(list))
             self.build_index()
             self.save_index()
