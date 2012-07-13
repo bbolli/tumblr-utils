@@ -42,7 +42,8 @@ xml_dir = 'xml'
 image_dir = 'images'
 archive_dir = 'archive'
 theme_dir = 'theme'
-backup_css = '_local.css'
+backup_css = 'backup.css'
+custom_css = 'custom.css'
 avatar_base = 'avatar'
 
 # HTML fragments
@@ -50,6 +51,7 @@ post_header = ''
 footer = u'</body>\n</html>\n'
 
 post_ext = '.html'
+have_custom_css = False
 
 # ensure the right date/time format
 try:
@@ -119,22 +121,21 @@ def save_image(image_url):
     return image_filename
 
 def header(heading, title='', body_class='', subtitle='', avatar=''):
-    theme_rel = '../' + theme_dir
+    root_rel = '' if body_class == 'index' else '../'
+    css_rel = root_rel + (custom_css if have_custom_css else backup_css)
     if body_class:
-        if body_class == 'index':
-            theme_rel = theme_dir
         body_class = ' class=' + body_class
     h = u'''<!DOCTYPE html>
 <html>
 <head><meta charset=utf-8><title>%s</title>
-<link rel=stylesheet type=text/css href=%s/%s>
+<link rel=stylesheet type=text/css href=%s>
 </head>
 
 <body%s>
 
-''' % (heading, theme_rel, backup_css, body_class)
+''' % (heading, css_rel, body_class)
     if avatar:
-        h += '<img src=%s/%s alt=Avatar class=avatar>\n' % (theme_rel, avatar)
+        h += '<img src=%s%s/%s alt=Avatar class=avatar>\n' % (root_rel, theme_dir, avatar)
     if title:
         h += u'<h1>%s</h1>\n' % title
     if subtitle:
@@ -145,7 +146,7 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
 class TumblrBackup:
 
     def save_style(self):
-        with open_text(theme_dir, backup_css) as css:
+        with open_text(backup_css) as css:
             css.write('''\
 body { width: 720px; margin: 0 auto; }
 img { max-width: 720px; }
@@ -234,7 +235,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
         base += '/api/read'
 
         # make sure there are folders to save in
-        global save_folder, image_folder, post_ext, post_dir
+        global save_folder, image_folder, post_ext, post_dir, have_custom_css
         if options.blosxom:
             save_folder = root_folder
             post_ext = '.txt'
@@ -244,6 +245,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
             save_folder = join(root_folder, account)
             image_folder = path_to(image_dir)
             post_class = TumblrPost
+            have_custom_css = os.access(path_to(custom_css), os.R_OK)
         mkdir(save_folder, True)
 
         self.post_count = 0
@@ -333,7 +335,8 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
                 break
 
         if not options.blosxom and self.post_count:
-            self.save_style()
+            if not have_custom_css:
+                self.save_style()
             self.index = defaultdict(lambda: defaultdict(list))
             self.build_index()
             self.save_index()

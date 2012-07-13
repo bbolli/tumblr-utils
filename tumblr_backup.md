@@ -75,6 +75,8 @@ The generated directory structure looks like this:
     ./ - the current directory
         <blog-name>/ - your blog backup
             index.html - table of contents with links to the monthly pages
+            backup.css - the default backup style sheet
+            custom.css - the user's style sheet (optional)
             archive/
                 <yyyy-mm>.html - the monthly pages
                 …
@@ -88,7 +90,6 @@ The generated directory structure looks like this:
                 <id>.xml - the original XML posts
                 …
             theme/
-                _local.css - the local style sheet
                 theme.html - the saved HTML template
                 custom.css - the CSS customizations
                 avatar.<ext> - your avatar image
@@ -102,6 +103,10 @@ The index pages are recreated from scratch after every backup, based on the
 existing single post pages. Normally, the index and monthly pages are in reverse
 chronological order, i.e. more recent entries on top. The options `-R` and `-r`
 can be used to reverse the order.
+
+If you want to use a custom CSS file, call it `custom.css`, put it in the
+backup folder and do a complete backup. Without a custom CSS file,
+`tumblr_backup` saves a default style sheet in `backup.css`.
 
 Tumblr saves most image files without extension. This probably saves a few
 million bytes in their database. `tumblr_backup` restores the image extensions.
