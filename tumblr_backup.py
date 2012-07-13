@@ -134,7 +134,7 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
 
 ''' % (heading, theme_rel, backup_css, body_class)
     if avatar:
-        h += '<img src=%s/%s alt=Avatar style="float: right;">\n' % (theme_rel, avatar)
+        h += '<img src=%s/%s alt=Avatar class=avatar>\n' % (theme_rel, avatar)
     if title:
         h += u'<h1>%s</h1>\n' % title
     if subtitle:
@@ -153,6 +153,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
 .post a.llink, .archive a.tlink { display: none; }
 .meta a { text-decoration: none; }
+.avatar { float: right; }
 ''')
 
     def build_index(self):
