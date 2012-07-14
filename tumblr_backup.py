@@ -207,8 +207,9 @@ class TumblrBackup:
         for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
             month_name = self.save_month(year, month, tm)
-            idx.write('    <li><a href=%s/%s>%s</a></li>\n' % (
-                archive_dir, month_name, time.strftime('%B', tm).decode('utf-8')
+            idx.write('    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
+                archive_dir, month_name, len(self.index[year][month]),
+                time.strftime('%B', tm).decode('utf-8')
             ))
         idx.write('</ul>\n')
 
