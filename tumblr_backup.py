@@ -139,7 +139,9 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
         body_class = ' class=' + body_class
     h = u'''<!DOCTYPE html>
 <html>
-<head><meta charset=utf-8><title>%s</title>
+<head>
+<meta charset=utf-8>
+<title>%s</title>
 <link rel=stylesheet type=text/css href=%s>
 </head>
 
