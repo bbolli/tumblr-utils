@@ -54,6 +54,8 @@ page](http://drbeat.li/tumblr).
                             YYYY: the given year
                             YYYY-MM: the given month
                             YYYY-MM-DD: the given day
+    -P PASSWORD, --private=PASSWORD
+                          password to a private tumblr
 
 ### 2.3. Arguments
 
