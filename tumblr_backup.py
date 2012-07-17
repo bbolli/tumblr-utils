@@ -1,4 +1,4 @@
-#!/usr/bin/env python -u
+#!/usr/bin/python -u
 # encoding: utf-8
 
 # standard Python library imports
