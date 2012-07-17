@@ -1,4 +1,4 @@
-#!/usr/bin/python -u
+#!/usr/bin/env python -u
 # encoding: utf-8
 
 # standard Python library imports
@@ -77,6 +77,20 @@ def open_text(*parts):
     if len(parts) > 1:
         mkdir(path_to(*parts[:-1]))
     return codecs.open(path_to(*parts), 'w', 'utf-8')
+
+def get_api_url(account):
+    """construct the tumblr API URL"""
+    base = 'http://' + account
+    if '.' not in account:
+        base += '.tumblr.com'
+    base += '/api/read'
+    if options.private:
+        password_manager = urllib2.HTTPPasswordMgrWithDefaultRealm()
+        password_manager.add_password(None, base, '', options.private)
+        auth_manager = urllib2.HTTPBasicAuthHandler(password_manager)
+        opener = urllib2.build_opener(auth_manager)
+        urllib2.install_opener(opener)
+    return base
 
 def xmlparse(url, data=None):
     for _ in range(10):
@@ -231,11 +245,7 @@ class TumblrBackup:
     def backup(self, account):
         """makes single files and an index for every post on a public Tumblr blog account"""
 
-        # construct the tumblr API URL
-        base = 'http://' + account
-        if '.' not in account:
-            base += '.tumblr.com'
-        base += '/api/read'
+        base = get_api_url(account)
 
         # make sure there are folders to save in
         global save_folder, image_folder, post_ext, post_dir, have_custom_css
@@ -538,6 +548,8 @@ if __name__ == '__main__':
     parser.add_option('-p', '--period', help="limit the backup to PERIOD"
         " ('y', 'm', 'd' or YYYY[MM[DD]])"
     )
+    parser.add_option('-P', '--private', help="password for a private tumblr",
+        metavar='PASSWORD')
     options, args = parser.parse_args()
 
     if options.auto is not None:
