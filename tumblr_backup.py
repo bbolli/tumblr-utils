@@ -202,6 +202,9 @@ def get_theme(account, host, user, password):
 
 class TumblrBackup:
 
+    def __init__(self):
+        self.total_count = 0
+
     def build_index(self):
         for f in glob(path_to(post_dir, '*.html')):
             post = LocalPost(f)
@@ -357,6 +360,7 @@ class TumblrBackup:
             self.save_index()
 
         log("%d posts backed up" % self.post_count + 50 * ' ' + '\n')
+        self.total_count += self.post_count
 
 
 class TumblrPost:
@@ -574,3 +578,5 @@ if __name__ == '__main__':
     tb = TumblrBackup()
     for account in args:
         tb.backup(account)
+
+    sys.exit(0 if tb.total_count else 1)
