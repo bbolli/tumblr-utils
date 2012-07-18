@@ -327,8 +327,9 @@ class TumblrBackup:
                         continue
                     if post.date < p_start:
                         return False
+                post.generate_content()
                 if post.error:
-                    sys.stderr.write('%r in post #%s%s\n' % (post.error, post.ident, 50 * ' '))
+                    sys.stderr.write('%s%s\n' % (post.error, 50 * ' '))
                 post.save_post()
                 self.post_count += 1
             return True
@@ -362,6 +363,7 @@ class TumblrPost:
 
     def __init__(self, post):
         self.content = ''
+        self.post = post
         self.xml_content = post.__repr__(1, 1)
         self.ident = post('id')
         self.url = post('url')
@@ -372,14 +374,10 @@ class TumblrPost:
         self.tags = []
         self.file_name = self.ident + post_ext
         self.error = None
-        try:
-            self.generate_content(post)
-        except Exception, e:
-            self.error = e
-            self.content = u'<p class=error>%r</p>\n<pre>%s</pre>' % (e, escape(self.xml_content))
 
-    def generate_content(self, post):
+    def generate_content(self):
         """generates the content for this post"""
+        post = self.post
         content = []
 
         def append(s, fmt=u'%s'):
@@ -446,7 +444,8 @@ class TumblrPost:
             )
 
         else:
-            raise ValueError('Unknown post type: ' + self.typ)
+            self.error = u"Unknown post type '%s' in post #%s" % (self.typ, self.ident)
+            append(escape(self.xml_content), u'<pre>%s</pre>')
 
         self.tags = [u'%s' % t for t in post['tag':]]
 
