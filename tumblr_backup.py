@@ -553,7 +553,8 @@ if __name__ == '__main__':
         " ('y', 'm', 'd' or YYYY[MM[DD]])"
     )
     parser.add_option('-P', '--private', help="password for a private tumblr",
-        metavar='PASSWORD')
+        metavar='PASSWORD'
+    )
     options, args = parser.parse_args()
 
     if options.auto is not None:
