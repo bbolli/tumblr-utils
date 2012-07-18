@@ -1,12 +1,16 @@
-## 0. What is this?
+## 0. Description
 
-`tumblr_backup` is a Python script that backs up your
-[Tumblr](http://tumblr.com) blog locally in HTML format. The backup includes
-all images from image posts. An index links to monthly pages, which contain all
-the posts from the respective month with links to single post pages. There are
-many options to select which posts to backup or to set the output format.
+`tumblr_backup.py` is a script that backs up your [Tumblr](http://tumblr.com)
+blog locally.
 
-You can see an example of `tumblr_backup`’s output [on my home
+The backup includes all images from photo and photoset posts. An index links to
+monthly pages, which contain all the posts from the respective month with links
+to single post pages. Command line options select which posts to backup and set
+the output format.
+
+By default, all posts of a blog are backed up in minimally styled HTML.
+
+You can see an example of its output [on my home
 page](http://drbeat.li/tumblr).
 
 
@@ -17,21 +21,22 @@ page](http://drbeat.li/tumblr).
 2. Install `xmltramp.py` somewhere on your Python path like
    `/usr/local/lib/python2.6/dist-packages`.
 3. Download and unzip
-   [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master).
+   [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
+   or clone the Github repo from `git://github.com/bbolli/tumblr-utils.git`.
 4. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
    `~/bin` or `/usr/local/bin`.
-5. Run `tumblr_backup.py` _blog-name_ as often as you like manually
-   or from a cron job. The recommendation is to do a hourly incremental backup
-   and a daily complete one.
+5. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
+   cron job. The recommendation is to do a hourly incremental backup and a
+   daily complete one.
 
 
 ## 2. Usage
 
-### 2.1. Synopsis
+### Synopsis
 
     tumblr_backup.py [options] blog-name ...
 
-### 2.2. Options
+### Options
 
     -h, --help            show this help message and exit
     -q, --quiet           suppress progress messages
@@ -57,9 +62,9 @@ page](http://drbeat.li/tumblr).
     -P PASSWORD, --private=PASSWORD
                           password to a private tumblr
 
-### 2.3. Arguments
+### Arguments
 
-_blog-name_: The name of your blog.
+_blog-name_: The name of the blog to backup.
 
 If your blog is under `.tumblr.com`, you can give just the first domain name
 part; if your blog is under your own domain, give the whole domain name. You
@@ -67,7 +72,12 @@ can give more than one _blog-name_ to backup multiple blogs in one go.
 
 The default blog name can be changed in the script.
 
-### 2.4. Exit code
+### Environment variables
+
+`LC_ALL`, `LC_TIME`, `LANG`: These variables, in decreasing importance, determine the
+locale for month names and the date/time format.
+
+### Exit code
 
 The exit code is 0 if at least one post has been backed up, 1 if no post has
 been backed up, and 2 on invocation errors.
@@ -75,7 +85,7 @@ been backed up, and 2 on invocation errors.
 
 ## 3. Operation
 
-By default, `tumblr_backup` backs up all posts.
+By default, `tumblr_backup` backs up all posts in HTML format.
 
 The generated directory structure looks like this:
 
@@ -154,7 +164,9 @@ will be backed up.
 In order to successfully backup your blog theme with `-t`, you need to define
 your Tumblr login information in the file `~/.netrc` with an entry like this:
 
-`machine www.tumblr.com login` _login-email_ `password` _tumblr-password_
+    machine www.tumblr.com
+        login <login-email>
+        password <tumblr-password>
 
 This file should have mode 0600 (read/write by owner only).
 
