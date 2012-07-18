@@ -98,7 +98,7 @@ def xmlparse(url, data=None):
         try:
             resp = urllib2.urlopen(url, data)
         except (urllib2.URLError, urllib2.HTTPError) as e:
-            sys.stderr.write('%r getting %s\n' % (e, url))
+            sys.stderr.write('%s getting %s\n' % (e, url))
             continue
         if resp.info().gettype() == 'text/xml':
             break
