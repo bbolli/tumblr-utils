@@ -1,4 +1,4 @@
-#!/usr/bin/python -u
+#!/usr/bin/env python
 # encoding: utf-8
 
 # standard Python library imports
@@ -61,7 +61,8 @@ except locale.Error:
 
 def log(s):
     if not options.quiet:
-        print s,
+        sys.stdout.write(s)
+        sys.stdout.flush()
 
 def mkdir(dir, recursive=False):
     if not os.path.exists(dir):
