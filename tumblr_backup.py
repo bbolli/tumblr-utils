@@ -46,10 +46,7 @@ backup_css = 'backup.css'
 custom_css = 'custom.css'
 avatar_base = 'avatar'
 
-# HTML fragments
 post_header = ''
-footer = u'</body>\n</html>\n'
-
 post_ext = '.html'
 have_custom_css = False
 
@@ -153,12 +150,10 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
     if body_class:
         body_class = ' class=' + body_class
     h = u'''<!DOCTYPE html>
-<html>
-<head>
+
 <meta charset=utf-8>
 <title>%s</title>
-<link rel=stylesheet type=text/css href=%s>
-</head>
+<link rel=stylesheet href=%s>
 
 <body%s>
 
@@ -220,7 +215,6 @@ class TumblrBackup:
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
             idx.write('<p>Generated on %s.</p>\n' % time.strftime('%x %X'))
-            idx.write(footer)
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
@@ -231,18 +225,17 @@ class TumblrBackup:
                 archive_dir, month_name, len(self.index[year][month]),
                 time.strftime('%B', tm).decode('utf-8')
             ))
-        idx.write('</ul>\n')
+        idx.write('</ul>\n\n')
 
     def save_month(self, year, month, tm):
         file_name = '%d-%02d.html' % (year, month)
         with open_text(archive_dir, file_name) as arch:
             arch.write('\n\n'.join([
                 header(self.title, time.strftime('%B %Y', tm).decode('utf-8'), body_class='archive'),
-                '\n\n'.join(p.get_post() for p in sorted(
+                '\n'.join(p.get_post() for p in sorted(
                     self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
                 )),
-                '<p><a href=../>Index</a></p>',
-                footer
+                '<p><a href=../>Index</a></p>\n'
             ]))
         return file_name
 
@@ -469,7 +462,7 @@ class TumblrPost:
         post += self.content
         if self.tags:
             post += u'\n<p class=tags>%s</p>' % u' '.join(u'#' + t for t in self.tags)
-        post += '\n</article>\n\n' + footer
+        post += '\n</article>\n'
         return post
 
     def save_post(self):
