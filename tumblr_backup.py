@@ -17,6 +17,7 @@ import netrc
 import locale
 import shutil
 from glob import glob
+import re
 
 # extra required packages
 import xmltramp
@@ -447,6 +448,10 @@ class TumblrPost:
         self.tags = [u'%s' % t for t in post['tag':]]
 
         self.content = '\n'.join(content)
+
+        # fix wrongly nested HTML tags
+        for p in ('<p>(<(%s)>)', '(</(%s)>)</p>'):
+            self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url):
         return u'../%s/%s' % (image_dir, save_image(unicode(url)))
