@@ -42,7 +42,6 @@ page](http://drbeat.li/tumblr).
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
     -x, --xml             save the original XML source
-    -t, --theme           save the blog's theme (needs a ~/.netrc entry)
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
     -R, --reverse-index   reverse the index file order
@@ -106,10 +105,6 @@ The generated directory structure looks like this:
             xml/
                 <id>.xml - the original XML posts
                 …
-            theme/
-                theme.html - the saved HTML template
-                custom.css - the CSS customizations
-                avatar.<ext> - your avatar image
 
 The name of the single post pages is their numeric post id. The modification
 time of the single post pages is set to the post’s timestamp. `tumblr_backup`
@@ -140,10 +135,10 @@ under the `xml/` folder in addition to the HTML format.
 
 Automatic archive mode `-a` is designed to be used from an hourly cron script.
 It normally makes an incremental backup except if the current hour is the one
-given as argument. In this case, `tumblr_backup` will make a full backup
-including the theme. An example invocation is `tumblr_backup.py -qa4` to do a
-full backup at 4 in the morning. This option obviates the need for shell script
-logic to determine what to backup.
+given as argument. In this case, `tumblr_backup` will make a full backup. An
+example invocation is `tumblr_backup.py -qa4` to do a full backup at 4 in the
+morning. This option obviates the need for shell script logic to determine what
+options to pass.
 
 In Blosxom format mode, the posts generated are saved in a format suitable for
 re-publishing in [Blosxom](http://www.blosxom.com) with the [Meta
@@ -161,17 +156,8 @@ to rebuild the index pages.
 If you combine `-n`, `-s`, `-i` and `-p`, only posts matching all criteria
 will be backed up.
 
-In order to successfully backup your blog theme with `-t`, you need to define
-your Tumblr login information in the file `~/.netrc` with an entry like this:
-
-    machine www.tumblr.com
-        login <login-email>
-        password <tumblr-password>
-
-This file should have mode 0600 (read/write by owner only).
-
-All options except `-t` use only public Tumblr APIs, so you can use the
-program to backup blogs that you don’t own.
+All options use only public Tumblr APIs, so you can use the program to backup
+blogs that you don’t own.
 
 `tumblr_backup` is developed and tested on Linux and OS X. If you want to
 run it under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)

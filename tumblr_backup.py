@@ -13,7 +13,6 @@ import codecs
 import imghdr
 from collections import defaultdict
 import time
-import netrc
 import locale
 import shutil
 from glob import glob
@@ -167,34 +166,6 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
         h += u'<p class=subtitle>%s</p>\n' % subtitle
     return h
 
-def get_theme(account, host, user, password):
-    theme_folder = path_to(theme_dir)
-    shutil.rmtree(theme_folder, True)
-    tumblr = xmlparse('http://%s/api/authenticate' % host,
-        urllib.urlencode({
-            'email': user, 'password': password, 'include-theme': '1'
-        })
-    )
-    if not tumblr:
-        return
-    for log in tumblr['tumblelog':]:
-        attrs = log()
-        if attrs.get('name') != account:
-            continue
-        if hasattr(log, 'custom-css') and len(log['custom-css']):
-            with open_text(theme_dir, 'custom.css') as f:
-                f.write(log['custom-css'][0])
-        if hasattr(log, 'theme-source') and len(log['theme-source']):
-            with open_text(theme_dir, 'theme.html') as f:
-                f.write(log['theme-source'][0])
-        avatar_url = attrs.get('avatar-url')
-        if avatar_url:
-            mkdir(theme_folder)
-            avatar = urllib2.urlopen(avatar_url)
-            avatar_file = avatar_base + '.' + avatar_url.split('.')[-1]
-            with open(join(theme_folder, avatar_file), 'wb') as f:
-                f.write(avatar.read())
-
 
 class TumblrBackup:
 
@@ -271,14 +242,6 @@ class TumblrBackup:
             p_start = time.mktime(tm)
             tm[i] += 1
             p_stop = time.mktime(tm)
-
-        if options.theme:
-            # if .netrc contains the login, get the style info
-            host = 'www.tumblr.com'
-            auth = netrc.netrc().authenticators(host)
-            if auth:
-                log("Getting the theme\r")
-                get_theme(account, host, auth[0], auth[2])
 
         # get the highest post id already saved
         ident_max = None
@@ -527,9 +490,6 @@ if __name__ == '__main__':
     parser.add_option('-x', '--xml', action='store_true',
         help="save the original XML source"
     )
-    parser.add_option('-t', '--theme', action='store_true',
-        help="save the blog's theme (needs a ~/.netrc entry)"
-    )
     parser.add_option('-b', '--blosxom', action='store_true',
         help="save the posts in blosxom format"
     )
@@ -558,10 +518,8 @@ if __name__ == '__main__':
     if options.auto is not None:
         if options.auto == time.localtime().tm_hour:
             options.incremental = False
-            options.theme = True
         else:
             options.incremental = True
-            options.theme = False
     if options.period:
         try:
             options.period = time.strftime(
