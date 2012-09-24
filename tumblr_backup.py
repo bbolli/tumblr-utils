@@ -46,6 +46,7 @@ backup_css = 'backup.css'
 custom_css = 'custom.css'
 avatar_base = 'avatar'
 
+blog_name = ''
 post_header = ''
 post_ext = '.html'
 have_custom_css = False
@@ -78,10 +79,11 @@ def open_text(*parts):
 
 def get_api_url(account):
     """construct the tumblr API URL"""
-    base = 'http://' + account
+    global blog_name
+    blog_name = account
     if '.' not in account:
-        base += '.tumblr.com'
-    base += '/api/read'
+        blog_name += '.tumblr.com'
+    base = 'http://' + blog_name + '/api/read'
     if options.private:
         password_manager = urllib2.HTTPPasswordMgrWithDefaultRealm()
         password_manager.add_password(None, base, '', options.private)
@@ -165,6 +167,18 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
     if subtitle:
         h += u'<p class=subtitle>%s</p>\n' % subtitle
     return h
+
+def get_avatar():
+    try:
+        resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
+        avatar_data = resp.read()
+    except:
+        return
+    theme_folder = path_to(theme_dir)
+    mkdir(theme_folder)
+    avatar_file = avatar_base + '.' + imghdr.what(None, avatar_data[:32])
+    with open(join(theme_folder, avatar_file), 'wb') as f:
+        f.write(avatar_data)
 
 
 class TumblrBackup:
@@ -310,6 +324,7 @@ class TumblrBackup:
                 break
 
         if not options.blosxom and self.post_count:
+            get_avatar()
             if not have_custom_css:
                 save_style()
             self.index = defaultdict(lambda: defaultdict(list))

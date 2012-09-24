@@ -105,6 +105,8 @@ The generated directory structure looks like this:
             xml/
                 <id>.xml - the original XML posts
                 …
+            theme/
+                avatar.<ext> - the blog’s avatar
 
 The name of the single post pages is their numeric post id. The modification
 time of the single post pages is set to the post’s timestamp. `tumblr_backup`
