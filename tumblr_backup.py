@@ -14,7 +14,6 @@ import imghdr
 from collections import defaultdict
 import time
 import locale
-import shutil
 from glob import glob
 import re
 
