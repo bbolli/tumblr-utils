@@ -23,45 +23,41 @@ BLOG = None             # or a sub-blog of your account
 POST = None             # or the post-id of a post to edit
 DEBUG = False
 
-HOST = 'www.tumblr.com'
+URL_FMT = 'http://api.tumblr.com/v2/blog/%s/post'
+CONFIG = '~/.config/tumblr'
+
 
 def tumble(feed):
-    auth = netrc.netrc().authenticators(HOST)
-    if auth is not None:
-        auth = {'email': auth[0], 'password': auth[2]}
-        feed = feedparser.parse(feed)
-        if POST:
-            return [post(auth, feed.entries[0])]
-        else:
-            return [post(auth, e) for e in feed.entries]
+    feed = feedparser.parse(feed)
+    if POST:
+        return [post(feed.entries[0])]
+    else:
+        return [post(e) for e in feed.entries]
 
-def post(auth, entry):
+def post(entry):
     # the first enclosure determines the media type
     enc = entry.get('enclosures', [])
-    if enc: enc = enc[0]
+    if enc:
+        enc = enc[0]
     if enc and enc.type.startswith('image/'):
         data = {
             'type': 'photo', 'source': enc.href,
-            'caption': entry.title, 'click-through-url': entry.link
+            'caption': entry.title, 'link': entry.link
         }
     elif enc and enc.type.startswith('audio/'):
         data = {
-            'type': 'audio', 'caption': entry.title, 'externally-hosted-url': enc.href
-        }
-    elif enc and enc.type.startswith('video/'):
-        data = {
-            'type': 'video', 'caption': entry.title, 'embed': enc.href
+            'type': 'audio', 'caption': entry.title, 'external-url': enc.href
         }
     elif 'link' in entry:
-        data = {'type': 'link', 'url': entry.link, 'name': entry.title}
+        data = {'type': 'link', 'url': entry.link, 'title': entry.title}
         if 'content' in entry:
             data['description'] = entry.content[0].value
         elif 'summary' in entry:
             data['description'] = entry.summary
     elif 'content' in entry:
-        data = {'type': 'regular', 'title': entry.title, 'body': entry.content[0].value}
+        data = {'type': 'text', 'title': entry.title, 'body': entry.content[0].value}
     elif 'summary' in entry:
-        data = {'type': 'regular', 'title': entry.title, 'body': entry.summary}
+        data = {'type': 'text', 'title': entry.title, 'body': entry.summary}
     else:
         return 'unknown', entry
     if 'tags' in entry:
@@ -71,27 +67,32 @@ def post(auth, entry):
             pub = datetime.fromtimestamp(timegm(entry.get(d)))
             data['date'] = pub.isoformat(' ')
             break
-    if BLOG:
-        data['group'] = BLOG
-    if POST:
-        data['post-id'] = POST
-        rc = 'edit'
-    else:
-        rc = 'ok'
-    if DEBUG:
-        return 'debug', entry.get('id'), data
 
-    data.update(auth)
+    url = URL_FMT % BLOG
+    if POST:
+        data['id'] = POST
+        op = 'edit'
+        url += '/' + op
+    else:
+        op = 'post'
+    if DEBUG:
+        return url, entry.get('id'), data
+
     for k in data:
         if type(data[k]) is unicode:
             data[k] = data[k].encode('utf-8')
 
     try:
-        return rc, urllib2.urlopen('http://' + HOST + '/api/write', urllib.urlencode(data)).read()
+        resp = urllib2.urlopen(url, urllib.urlencode(data)).read()
     except Exception, e:
-        return 'error', e.read(), e.headers
+        return 'error', e.read(), e.headers.items()
 
 if __name__ == '__main__':
+    try:
+        (BLOG, TOKEN, SECRET) = open(os.path.expanduser(CONFIG)).read().strip().split(':')
+    except:
+        sys.stderr.write('Config file %s not found or not readable\n' % CONFIG);
+        sys.exit(1)
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hb:e:d')
     except:
