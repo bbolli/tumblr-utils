@@ -2,9 +2,6 @@
 
 """Read a feed from stdin and post its entries to tumblr.
 
-User name and password are read from your ~/.netrc entry for
-machine www.tumblr.com.
-
 Options:
     -b sub-blog         Post to a sub-blog of your account.
     -e post-id          Edit the existing post with the given ID.
@@ -13,13 +10,42 @@ Options:
                         of posting it to tumblr.com.
 """
 
-import sys, os, getopt, urllib, urllib2, netrc
-import feedparser
+"""Authorization is handled via OAuth. Prepare the file ~/.config/tumblr
+with 5 lines:
 
+    - your default blog name
+    - the consumer key
+    - the consumer secret
+    - the access token
+    - the access secret
+
+You get these values by registering for a new application on the tumblr
+developer site and running the included oauth.py with the consumer key and
+secret as arguments to get an access token and secret.
+
+Non-standard Python dependencies:
+    - simplejson (http://pypi.python.org/pypi/simplejson/; for Python <= 2.6)
+    - oauth2 (http://pypi.python.org/pypi/oauth2/)
+    - httplib2 (http://pypi.python.org/pypi/httplib2/)
+"""
+
+import sys
+import os
+import getopt
+import urllib
 from datetime import datetime
 from calendar import timegm
+try:
+    import simplejson as json   # for Python <= 2.6
+except ImportError:
+    import json
+
+import oauth2 as oauth
+import feedparser
 
 BLOG = None             # or a sub-blog of your account
+CONSUMER_TOKEN = CONSUMER_SECRET = None
+ACCESS_TOKEN = ACCESS_SECRET = None
 POST = None             # or the post-id of a post to edit
 DEBUG = False
 
@@ -72,7 +98,7 @@ def post(entry):
     if POST:
         data['id'] = POST
         op = 'edit'
-        url += '/' + op
+        url += '/edit'
     else:
         op = 'post'
     if DEBUG:
@@ -82,14 +108,27 @@ def post(entry):
         if type(data[k]) is unicode:
             data[k] = data[k].encode('utf-8')
 
+    # do the OAuth thing
+    consumer = oauth.Consumer(CONSUMER_TOKEN, CONSUMER_SECRET)
+    token = oauth.Token(ACCESS_TOKEN, ACCESS_SECRET)
+    client = oauth.Client(consumer, token)
     try:
-        resp = urllib2.urlopen(url, urllib.urlencode(data)).read()
+        headers, resp = client.request(url, method='POST', body=urllib.urlencode(data))
+        resp = json.loads(resp)
+    except ValueError, e:
+        return 'error', 'json', resp
     except Exception, e:
-        return 'error', e.read(), e.headers.items()
+        return 'error', str(e)
+    if resp['meta']['status'] in (200, 201):
+        return op, str(resp['response']['id'])
+    else:
+        return 'error', headers, resp
 
 if __name__ == '__main__':
     try:
-        (BLOG, TOKEN, SECRET) = open(os.path.expanduser(CONFIG)).read().strip().split(':')
+        (BLOG, CONSUMER_TOKEN, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_SECRET) = (
+            s.strip() for s in open(os.path.expanduser(CONFIG))
+        )
     except:
         sys.stderr.write('Config file %s not found or not readable\n' % CONFIG);
         sys.exit(1)
@@ -108,6 +147,8 @@ if __name__ == '__main__':
             POST = v
         elif o == '-d':
             DEBUG = True
+    if not '.' in BLOG:
+        BLOG += '.tumblr.com'
     result = tumble(sys.stdin)
     if result:
         import pprint
