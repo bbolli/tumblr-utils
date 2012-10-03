@@ -330,7 +330,7 @@ class TumblrBackup:
             self.build_index()
             self.save_index()
 
-        log("%d posts backed up" % self.post_count + 50 * ' ' + '\n')
+        log("%s: %d posts backed up" % (account, self.post_count) + 50 * ' ' + '\n')
         self.total_count += self.post_count
 
 
