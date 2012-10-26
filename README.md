@@ -4,7 +4,7 @@ This is a collection of utilities dealing with Tumblr blogs.
 
 - `tumble.py` creates new posts from RSS or Atom feeds
 - `tumblr_backup.py` makes a local backup of posts and images
-- `export_email.py` mails tagged links to a recipient list
+- `mail_export.py` mails tagged links to a recipient list
 - `delicious_import.py` imports delicious.com links into Tumblr
 
 These scripts are or have been useful to me over the years.
