@@ -220,7 +220,7 @@ class TumblrBackup:
                 '\n'.join(p.get_post() for p in sorted(
                     self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
                 )),
-                '<p><a href=../>Index</a></p>\n'
+                '<p><a href=../ rel=contents>Index</a></p>\n'
             ]))
         return file_name
 
@@ -438,7 +438,7 @@ class TumblrPost:
         post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>\n' % time.strftime('%x %X', self.tm)
         post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
-        post += u'<a class=tlink href=%s>●</a></p>\n' % self.url
+        post += u'<a class=tlink href=%s rel=canonical>●</a></p>\n' % self.url
         if self.title:
             post += '<h2>%s</h2>\n' % self.title
         post += self.content
