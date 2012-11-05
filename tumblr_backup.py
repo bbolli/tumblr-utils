@@ -140,7 +140,7 @@ body { width: 720px; margin: 0 auto; }
 img { max-width: 720px; }
 blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
-.post a.llink, .archive a.tlink { display: none; }
+.post a.llink { display: none; }
 .meta a { text-decoration: none; }
 .avatar { float: right; }
 ''')
@@ -438,7 +438,7 @@ class TumblrPost:
         post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>\n' % time.strftime('%x %X', self.tm)
         post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
-        post += u'<a class=tlink href=%s rel=canonical>●</a></p>\n' % self.url
+        post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
         if self.title:
             post += '<h2>%s</h2>\n' % self.title
         post += self.content
