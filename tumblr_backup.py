@@ -199,7 +199,7 @@ class TumblrBackup:
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
-            idx.write('<p>Generated on %s.</p>\n' % time.strftime('%x %X'))
+            idx.write('<p>Generated on %s.</p>\n' % unicode(time.strftime('%x %X'), 'utf-8'))
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
@@ -436,7 +436,7 @@ class TumblrPost:
     def get_post(self):
         """returns this post in HTML"""
         post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
-        post += '<p class=meta><span class=date>%s</span>\n' % time.strftime('%x %X', self.tm)
+        post += '<p class=meta><span class=date>%s</span>\n' % unicode(time.strftime('%x %X', self.tm), 'utf_8')
         post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
         post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
         if self.title:
