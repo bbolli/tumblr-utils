@@ -392,7 +392,7 @@ class TumblrPost:
             append_try('link-description')
 
         elif self.typ == 'quote':
-            append(post['quote-text'], u'<blockquote>%s</blockquote>')
+            append(post['quote-text'], u'<blockquote><p>%s</p></blockquote>')
             append_try('quote-source', u'<p>%s</p>')
 
         elif self.typ == 'video':
