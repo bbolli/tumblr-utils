@@ -16,3 +16,7 @@ More documentation can be found in each script's docstring or in
 
 tumblr_backup.py was initially forked from
 [bdoms/tumblr_backup](https://github.com/bdoms/tumblr_backup).
+
+### License
+
+[GPL3](http://www.gnu.org/licenses/gpl-3.0.txt).
