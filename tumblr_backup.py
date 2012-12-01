@@ -375,9 +375,10 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
-            url = get_try('photo-link-url')
+            url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
-                append(self.get_image_url(p['photo-url']), u'<img alt="" src="%s">')
+                src = unicode(p['photo-url'])
+                append(escape(self.get_image_url(src)), u'<img alt="" src="%s">')
                 if url:
                     content[-1] = '<a href="%s">%s</a>' % (url, content[-1])
                 content[-1] = '<p>' + content[-1] + '</p>'
@@ -386,7 +387,8 @@ class TumblrPost:
             append_try('photo-caption')
 
         elif self.typ == 'link':
-            self.title = u'<a href="%s">%s</a>' % (post['link-url'], post['link-text'])
+            url = escape(unicode(post['link-url']))
+            self.title = u'<a href="%s">%s</a>' % (url, post['link-text'])
             append_try('link-description')
 
         elif self.typ == 'quote':
@@ -401,7 +403,7 @@ class TumblrPost:
             else:
                 append(post['video-player'], u'<p>%s</p>')
                 append_try('video-caption')
-                append(source, u'<p><a href="%s">Original</a></p>')
+                append(escape(source), u'<p><a href="%s">Original</a></p>')
 
         elif self.typ == 'audio':
             append(post['audio-player'])
@@ -431,7 +433,7 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url):
-        return u'../%s/%s' % (image_dir, save_image(unicode(url)))
+        return u'../%s/%s' % (image_dir, save_image(url))
 
     def get_post(self):
         """returns this post in HTML"""
