@@ -77,6 +77,11 @@ def open_text(*parts):
         mkdir(path_to(*parts[:-1]))
     return codecs.open(path_to(*parts), 'w', encoding, 'xmlcharrefreplace')
 
+def strftime(format, t=None):
+    if t is None:
+        t = time.localtime()
+    return time.strftime(format, t).decode(encoding)
+
 def get_api_url(account):
     """construct the tumblr API URL"""
     global blog_name
@@ -200,7 +205,7 @@ class TumblrBackup:
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
-            idx.write('<p>Generated on %s.</p>\n' % time.strftime('%x %X').decode(encoding))
+            idx.write('<p>Generated on %s.</p>\n' % strftime('%x %X'))
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
@@ -209,7 +214,7 @@ class TumblrBackup:
             month_name = self.save_month(year, month, tm)
             idx.write('    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
                 archive_dir, month_name, len(self.index[year][month]),
-                time.strftime('%B', tm).decode(encoding)
+                strftime('%B', tm)
             ))
         idx.write('</ul>\n\n')
 
@@ -217,7 +222,7 @@ class TumblrBackup:
         file_name = '%d-%02d.html' % (year, month)
         with open_text(archive_dir, file_name) as arch:
             arch.write('\n\n'.join([
-                header(self.title, time.strftime('%B %Y', tm).decode(encoding), body_class='archive'),
+                header(self.title, strftime('%B %Y', tm), body_class='archive'),
                 '\n'.join(p.get_post() for p in sorted(
                     self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
                 )),
@@ -439,7 +444,7 @@ class TumblrPost:
     def get_post(self):
         """returns this post in HTML"""
         post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
-        post += '<p class=meta><span class=date>%s</span>\n' % time.strftime('%x %X', self.tm).decode(encoding)
+        post += '<p class=meta><span class=date>%s</span>\n' % strftime('%x %X', self.tm)
         post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
         post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
         if self.title:
