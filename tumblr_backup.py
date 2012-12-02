@@ -55,6 +55,7 @@ try:
     locale.setlocale(locale.LC_TIME, '')
 except locale.Error:
     pass
+encoding = 'utf-8'
 
 def log(s):
     if not options.quiet:
@@ -74,7 +75,7 @@ def path_to(*parts):
 def open_text(*parts):
     if len(parts) > 1:
         mkdir(path_to(*parts[:-1]))
-    return codecs.open(path_to(*parts), 'w', 'utf-8')
+    return codecs.open(path_to(*parts), 'w', encoding, 'xmlcharrefreplace')
 
 def get_api_url(account):
     """construct the tumblr API URL"""
@@ -152,13 +153,13 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
         body_class = ' class=' + body_class
     h = u'''<!DOCTYPE html>
 
-<meta charset=utf-8>
+<meta charset=%s>
 <title>%s</title>
 <link rel=stylesheet href=%s>
 
 <body%s>
 
-''' % (heading, css_rel, body_class)
+''' % (encoding, heading, css_rel, body_class)
     if avatar:
         h += '<img src=%s%s/%s alt=Avatar class=avatar>\n' % (root_rel, theme_dir, avatar)
     if title:
@@ -199,7 +200,7 @@ class TumblrBackup:
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
-            idx.write('<p>Generated on %s.</p>\n' % unicode(time.strftime('%x %X'), 'utf-8'))
+            idx.write('<p>Generated on %s.</p>\n' % time.strftime('%x %X').decode(encoding))
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
@@ -208,7 +209,7 @@ class TumblrBackup:
             month_name = self.save_month(year, month, tm)
             idx.write('    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
                 archive_dir, month_name, len(self.index[year][month]),
-                time.strftime('%B', tm).decode('utf-8')
+                time.strftime('%B', tm).decode(encoding)
             ))
         idx.write('</ul>\n\n')
 
@@ -216,7 +217,7 @@ class TumblrBackup:
         file_name = '%d-%02d.html' % (year, month)
         with open_text(archive_dir, file_name) as arch:
             arch.write('\n\n'.join([
-                header(self.title, time.strftime('%B %Y', tm).decode('utf-8'), body_class='archive'),
+                header(self.title, time.strftime('%B %Y', tm).decode(encoding), body_class='archive'),
                 '\n'.join(p.get_post() for p in sorted(
                     self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
                 )),
@@ -438,7 +439,7 @@ class TumblrPost:
     def get_post(self):
         """returns this post in HTML"""
         post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
-        post += '<p class=meta><span class=date>%s</span>\n' % unicode(time.strftime('%x %X', self.tm), 'utf_8')
+        post += '<p class=meta><span class=date>%s</span>\n' % time.strftime('%x %X', self.tm).decode(encoding)
         post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
         post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
         if self.title:
@@ -476,7 +477,7 @@ class BlosxomPost(TumblrPost):
 class LocalPost:
 
     def __init__(self, post_file):
-        with codecs.open(post_file, 'r', 'utf-8') as f:
+        with codecs.open(post_file, 'r', encoding) as f:
             self.lines = f.readlines()
         # remove header and footer
         while self.lines and '<article ' not in self.lines[0]:
