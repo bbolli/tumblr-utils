@@ -56,6 +56,7 @@ try:
 except locale.Error:
     pass
 encoding = 'utf-8'
+time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
 def log(s):
     if not options.quiet:
@@ -80,7 +81,7 @@ def open_text(*parts):
 def strftime(format, t=None):
     if t is None:
         t = time.localtime()
-    return time.strftime(format, t).decode(encoding)
+    return time.strftime(format, t).decode(time_encoding)
 
 def get_api_url(account):
     """construct the tumblr API URL"""
