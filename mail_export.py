@@ -34,7 +34,9 @@ except ImportError:
 class TumblrToMail:
 
     def __init__(self, user, tag, recipients):
-        self.user = user
+        self.user = self.domain = user
+        if '.' not in self.domain:
+            self.domain += '.tumblr.com'
         self.tag = tag
         self.recipients = recipients
         self.db_file = '/var/local/tumblr_mail.latest'
@@ -55,7 +57,7 @@ class TumblrToMail:
             open(self.db_file, 'w').write(repr(self.db))
 
     def get_links(self):
-        url = 'http://%s.tumblr.com/api/read/json?type=link&filter=text' % self.user
+        url = 'http://%s/api/read/json?type=link&filter=text' % self.domain
         posts = urllib.urlopen(url).read()
         posts = re.sub(r'^.*?(\{.*\});*$', r'\1', posts)   # extract the JSON structure
         try:
@@ -85,8 +87,8 @@ class TumblrToMail:
         body = ('\n\n'.join(self.make_mail(l) for l in links)).strip() + """
 
 -- 
-http://%s.tumblr.com
-""" % self.user
+http://%s
+""" % self.domain
 
         self.latest = max(int(l['id']) for l in links) if not options.dry_run else None
 
