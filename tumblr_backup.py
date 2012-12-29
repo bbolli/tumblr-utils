@@ -58,9 +58,11 @@ except locale.Error:
 encoding = 'utf-8'
 time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
-def log(s):
+def log(account, s):
     if not options.quiet:
-        sys.stdout.write(s)
+        if account:
+            sys.stdout.write('%s: ' % account)
+        sys.stdout.write(s[:-1] + ' ' * 20 + s[-1:])
         sys.stdout.flush()
 
 def mkdir(dir, recursive=False):
@@ -271,12 +273,13 @@ class TumblrBackup:
                     long(os.path.splitext(os.path.split(f)[1])[0])
                     for f in glob(path_to(post_dir, '*' + post_ext))
                 )
-                log('Backing up posts after %d\n' % ident_max)
+                log(account, "Backing up posts after %d\r" % ident_max)
             except ValueError:  # max() arg is an empty sequence
                 pass
+        else:
+            log(account, "Getting basic information\r")
 
         # start by calling the API with just a single post
-        log("Getting basic information\r")
         soup = xmlparse(base + '?num=1')
         if not soup:
             return
@@ -320,7 +323,7 @@ class TumblrBackup:
         for i in range(options.skip, last_post, MAX):
             # find the upper bound
             j = min(i + MAX, last_post)
-            log("Getting posts %d to %d of %d...\r" % (i, j - 1, total_posts))
+            log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, total_posts))
 
             soup = xmlparse('%s?num=%d&start=%d' % (base, j - i, i))
             if soup is None:
@@ -337,7 +340,7 @@ class TumblrBackup:
             self.build_index()
             self.save_index()
 
-        log("%s: %d posts backed up" % (account, self.post_count) + 50 * ' ' + '\n')
+        log(account, "%d posts backed up\n" % self.post_count)
         self.total_count += self.post_count
 
 
