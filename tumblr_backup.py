@@ -397,8 +397,10 @@ class TumblrPost:
             append_try('photo-caption')
 
         elif self.typ == 'link':
-            url = escape(unicode(post['link-url']))
-            self.title = u'<a href="%s">%s</a>' % (url, post['link-text'])
+            url = unicode(post['link-url'])
+            self.title = u'<a href="%s">%s</a>' % (escape(url),
+                post['link-text'] if 'link-text' in post else url
+            )
             append_try('link-description')
 
         elif self.typ == 'quote':
