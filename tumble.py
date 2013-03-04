@@ -43,92 +43,97 @@ except ImportError:
 import oauth2 as oauth
 import feedparser
 
-BLOG = None             # or a sub-blog of your account
-CONSUMER_TOKEN = CONSUMER_SECRET = None
-ACCESS_TOKEN = ACCESS_SECRET = None
-POST = None             # or the post-id of a post to edit
-DEBUG = False
-
 URL_FMT = 'http://api.tumblr.com/v2/blog/%s/post'
 CONFIG = '~/.config/tumblr'
 
 
-def tumble(feed):
-    feed = feedparser.parse(feed)
-    if POST:
-        return [post(feed.entries[0])]
-    else:
-        return [post(e) for e in feed.entries]
+class Tumble:
 
-def post(entry):
-    # the first enclosure determines the media type
-    enc = entry.get('enclosures', [])
-    if enc:
-        enc = enc[0]
-    if enc and enc.type.startswith('image/'):
-        data = {
-            'type': 'photo', 'source': enc.href,
-            'caption': entry.title, 'link': entry.link
-        }
-    elif enc and enc.type.startswith('audio/'):
-        data = {
-            'type': 'audio', 'caption': entry.title, 'external-url': enc.href
-        }
-    elif 'link' in entry:
-        data = {'type': 'link', 'url': entry.link, 'title': entry.title}
-        if 'content' in entry:
-            data['description'] = entry.content[0].value
+    def __init__(self, config_file):
+        (
+            self.blog,
+            self.consumer_token, self.consumer_secret,
+            self.access_token, self.access_secret
+        ) = (s.strip() for s in open(config_file))
+        self.post_id = None
+        self.debug = False
+
+    def tumble(self, feed):
+        feed = feedparser.parse(feed)
+        if self.post_id:
+            return [self.post(feed.entries[0])]
+        else:
+            return [self.post(e) for e in feed.entries]
+
+    def post(self, entry):
+        # the first enclosure determines the media type
+        enc = entry.get('enclosures', [])
+        if enc:
+            enc = enc[0]
+        if enc and enc.type.startswith('image/'):
+            data = {
+                'type': 'photo', 'source': enc.href,
+                'caption': entry.title, 'link': entry.link
+            }
+        elif enc and enc.type.startswith('audio/'):
+            data = {
+                'type': 'audio', 'caption': entry.title, 'external-url': enc.href
+            }
+        elif 'link' in entry:
+            data = {'type': 'link', 'url': entry.link, 'title': entry.title}
+            if 'content' in entry:
+                data['description'] = entry.content[0].value
+            elif 'summary' in entry:
+                data['description'] = entry.summary
+        elif 'content' in entry:
+            data = {'type': 'text', 'title': entry.title, 'body': entry.content[0].value}
         elif 'summary' in entry:
-            data['description'] = entry.summary
-    elif 'content' in entry:
-        data = {'type': 'text', 'title': entry.title, 'body': entry.content[0].value}
-    elif 'summary' in entry:
-        data = {'type': 'text', 'title': entry.title, 'body': entry.summary}
-    else:
-        return 'unknown', entry
-    if 'tags' in entry:
-        data['tags'] = ','.join('"%s"' % t.term for t in entry.tags)
-    for d in ('published_parsed', 'updated_parsed'):
-        if d in entry:
-            pub = datetime.fromtimestamp(timegm(entry.get(d)))
-            data['date'] = pub.isoformat(' ')
-            break
+            data = {'type': 'text', 'title': entry.title, 'body': entry.summary}
+        else:
+            return 'unknown', entry
+        if 'tags' in entry:
+            data['tags'] = ','.join('"%s"' % t.term for t in entry.tags)
+        for d in ('published_parsed', 'updated_parsed'):
+            if d in entry:
+                pub = datetime.fromtimestamp(timegm(entry.get(d)))
+                data['date'] = pub.isoformat(' ')
+                break
 
-    url = URL_FMT % BLOG
-    if POST:
-        data['id'] = POST
-        op = 'edit'
-        url += '/edit'
-    else:
-        op = 'post'
-    if DEBUG:
-        return url, entry.get('id'), data
+        if not '.' in self.blog:
+            self.blog += '.tumblr.com'
+        url = URL_FMT % self.blog
+        if self.post_id:
+            data['id'] = self.post_id
+            op = 'edit'
+            url += '/edit'
+        else:
+            op = 'post'
+        if self.debug:
+            return url, entry.get('id'), data
 
-    for k in data:
-        if type(data[k]) is unicode:
-            data[k] = data[k].encode('utf-8')
+        for k in data:
+            if type(data[k]) is unicode:
+                data[k] = data[k].encode('utf-8')
 
-    # do the OAuth thing
-    consumer = oauth.Consumer(CONSUMER_TOKEN, CONSUMER_SECRET)
-    token = oauth.Token(ACCESS_TOKEN, ACCESS_SECRET)
-    client = oauth.Client(consumer, token)
-    try:
-        headers, resp = client.request(url, method='POST', body=urllib.urlencode(data))
-        resp = json.loads(resp)
-    except ValueError, e:
-        return 'error', 'json', resp
-    except Exception, e:
-        return 'error', str(e)
-    if resp['meta']['status'] in (200, 201):
-        return op, str(resp['response']['id'])
-    else:
-        return 'error', headers, resp
+        # do the OAuth thing
+        consumer = oauth.Consumer(self.consumer_token, self.consumer_secret)
+        token = oauth.Token(self.access_token, self.access_secret)
+        client = oauth.Client(consumer, token)
+        try:
+            headers, resp = client.request(url, method='POST', body=urllib.urlencode(data))
+            resp = json.loads(resp)
+        except ValueError, e:
+            return 'error', 'json', resp
+        except Exception, e:
+            return 'error', str(e)
+        if resp['meta']['status'] in (200, 201):
+            return op, str(resp['response']['id'])
+        else:
+            return 'error', headers, resp
 
 if __name__ == '__main__':
     try:
-        (BLOG, CONSUMER_TOKEN, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_SECRET) = (
-            s.strip() for s in open(os.path.expanduser(CONFIG))
-        )
+        t = Tumble(os.path.expanduser(CONFIG))
     except:
         sys.stderr.write('Config file %s not found or not readable\n' % CONFIG);
         sys.exit(1)
@@ -142,14 +147,12 @@ if __name__ == '__main__':
             print __doc__.strip()
             sys.exit(0)
         if o == '-b':
-            BLOG = v
+            t.blog = v
         elif o == '-e':
-            POST = v
+            t.post_id = v
         elif o == '-d':
-            DEBUG = True
-    if not '.' in BLOG:
-        BLOG += '.tumblr.com'
-    result = tumble(sys.stdin)
+            t.debug = True
+    result = t.tumble(sys.stdin)
     if result:
         import pprint
         pprint.pprint(result)
