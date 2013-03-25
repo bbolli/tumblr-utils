@@ -75,10 +75,18 @@ def mkdir(dir, recursive=False):
 def path_to(*parts):
     return join(save_folder, *parts)
 
-def open_text(*parts):
+def open_file(open_fn, parts):
     if len(parts) > 1:
         mkdir(path_to(*parts[:-1]))
-    return codecs.open(path_to(*parts), 'w', encoding, 'xmlcharrefreplace')
+    return open_fn(path_to(*parts))
+
+def open_text(*parts):
+    return open_file(
+        lambda f: codecs.open(f, 'w', encoding, 'xmlcharrefreplace'), parts
+    )
+
+def open_image(*parts):
+    return open_file(lambda f: open(f, 'wb'), parts)
 
 def strftime(format, t=None):
     if t is None:
@@ -141,8 +149,7 @@ def save_image(image_url):
         if image_type:
             image_filename += '.' + image_type.replace('jpeg', 'jpg')
     # save the image
-    mkdir(image_folder)
-    with open(join(image_folder, image_filename), 'wb') as image_file:
+    with open_image(image_dir, image_filename) as image_file:
         image_file.write(image_data)
     return image_filename
 
@@ -186,10 +193,8 @@ def get_avatar():
         avatar_data = resp.read()
     except:
         return
-    theme_folder = path_to(theme_dir)
-    mkdir(theme_folder)
     avatar_file = avatar_base + '.' + imghdr.what(None, avatar_data[:32])
-    with open(join(theme_folder, avatar_file), 'wb') as f:
+    with open_image(theme_dir, avatar_file) as f:
         f.write(avatar_data)
 
 
