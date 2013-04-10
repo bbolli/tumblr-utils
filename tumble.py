@@ -79,7 +79,7 @@ class Tumble:
             data = {
                 'type': 'audio', 'caption': entry.title, 'external-url': enc.href
             }
-        elif 'link' in entry:
+        elif 'link' in entry and entry.link:
             data = {'type': 'link', 'url': entry.link, 'title': entry.title}
             if 'content' in entry:
                 data['description'] = entry.content[0].value
