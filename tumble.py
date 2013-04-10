@@ -109,7 +109,7 @@ class Tumble:
         else:
             op = 'post'
         if self.debug:
-            return url, entry.get('id'), data
+            return dict(url=url, entry=entry, data=data)
 
         for k in data:
             if type(data[k]) is unicode:
@@ -156,6 +156,6 @@ if __name__ == '__main__':
     if result:
         import pprint
         pprint.pprint(result)
-        if 'error' in [r[0] for r in result]:
+        if not t.debug and 'error' in [r[0] for r in result]:
             sys.exit(2)
     sys.exit(0)
