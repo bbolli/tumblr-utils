@@ -471,6 +471,7 @@ class TumblrPost:
         if self.tags:
             post += u'\n<p class=tags>%s</p>' % u' '.join(u'#' + t for t in self.tags)
         post += '\n</article>\n'
+        post = post.replace('src="//www','src="http://www')
         return post
 
     def save_post(self):
