@@ -199,6 +199,24 @@ def get_avatar():
     with open_image(theme_dir, avatar_file) as f:
         f.write(avatar_data)
 
+def get_style():
+    """Get the blog's CSS by brute-forcing it from the home page.
+    The v2 API has no method for getting the style directly.
+    See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
+    try:
+        resp = urllib2.urlopen('http://%s/' % blog_name)
+        page_data = resp.read()
+    except:
+        return
+    match = re.search(r'(?s)<style type=.text/css.>(.*?)</style>', page_data)
+    if match:
+        css = match.group(1).strip()
+        if not css:
+            return
+        css = css.replace('\r', '').replace('\n    ', '\n')
+        with open_text(theme_dir, 'style.css') as f:
+            f.write(css + '\n')
+
 
 class TumblrBackup:
 
@@ -345,6 +363,7 @@ class TumblrBackup:
 
         if not options.blosxom and self.post_count:
             get_avatar()
+            get_style()
             if not have_custom_css:
                 save_style()
             self.index = defaultdict(lambda: defaultdict(list))

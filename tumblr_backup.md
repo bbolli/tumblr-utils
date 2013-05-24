@@ -107,6 +107,7 @@ The generated directory structure looks like this:
                 …
             theme/
                 avatar.<ext> - the blog’s avatar
+                style.css - the blog’s style sheet
 
 The name of the single post pages is their numeric post id. The modification
 time of the single post pages is set to the post’s timestamp. `tumblr_backup`
@@ -120,7 +121,8 @@ can be used to reverse the order.
 
 If you want to use a custom CSS file, call it `custom.css`, put it in the
 backup folder and do a complete backup. Without a custom CSS file,
-`tumblr_backup` saves a default style sheet in `backup.css`.
+`tumblr_backup` saves a default style sheet in `backup.css`. The blog's style
+sheet itself is always saved in `theme/style.css`.
 
 Tumblr saves most image files without extension. This probably saves a few
 million bytes in their database. `tumblr_backup` restores the image extensions.
