@@ -10,8 +10,7 @@ the output format.
 
 By default, all posts of a blog are backed up in minimally styled HTML.
 
-You can see an example of its output [on my home
-page](http://drbeat.li/tumblr).
+You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 
 
 ## 1. Installation
@@ -73,8 +72,8 @@ The default blog name can be changed in the script.
 
 ### Environment variables
 
-`LC_ALL`, `LC_TIME`, `LANG`: These variables, in decreasing importance, determine the
-locale for month names and the date/time format.
+`LC_ALL`, `LC_TIME`, `LANG`: These variables, in decreasing importance,
+determine the locale for month names and the date/time format.
 
 ### Exit code
 
@@ -115,9 +114,9 @@ applies a simple style to the saved pages. All generated pages are
 [HTML5](http://html5.org).
 
 The index pages are recreated from scratch after every backup, based on the
-existing single post pages. Normally, the index and monthly pages are in reverse
-chronological order, i.e. more recent entries on top. The options `-R` and `-r`
-can be used to reverse the order.
+existing single post pages. Normally, the index and monthly pages are in
+reverse chronological order, i.e. more recent entries on top. The options `-R`
+and `-r` can be used to reverse the order.
 
 If you want to use a custom CSS file, call it `custom.css`, put it in the
 backup folder and do a complete backup. Without a custom CSS file,
@@ -148,23 +147,23 @@ In Blosxom format mode, the posts generated are saved in a format suitable for
 re-publishing in [Blosxom](http://www.blosxom.com) with the [Meta
 plugin](http://www.blosxom.com/plugins/meta/meta.htm). Images are not
 downloaded; instead, the image links point back to the original image on
-Tumblr. The posts are saved in the current folder with a `.txt` extension.
-The index is not updated.
+Tumblr. The posts are saved in the current folder with a `.txt` extension. The
+index is not updated.
 
 In order to limit the set of backed up posts, use the `-n` and `-s` options.
 The most recent post is always number 0, so the option `-n 200` would select
-the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip
-the 200 most recent posts and backup the next 100. `-n 1` is the fastest way
-to rebuild the index pages.
+the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip the
+200 most recent posts and backup the next 100. `-n 1` is the fastest way to
+rebuild the index pages.
 
-If you combine `-n`, `-s`, `-i` and `-p`, only posts matching all criteria
-will be backed up.
+If you combine `-n`, `-s`, `-i` and `-p`, only posts matching all criteria will
+be backed up.
 
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
 
-`tumblr_backup` is developed and tested on Linux and OS X. If you want to
-run it under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)
+`tumblr_backup` is developed and tested on Linux and OS X. If you want to run
+it under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)
 environment.
 
 
