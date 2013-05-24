@@ -129,12 +129,14 @@ def xmlparse(url, data=None):
 
 def save_image(image_url):
     """saves an image if not saved yet, returns the local file name"""
+    def _url(fn):
+        return u'../%s/%s' % (image_dir, fn)
     image_filename = image_url.split('/')[-1]
     glob_filter = '' if '.' in image_filename else '.*'
     # check if a file with this name already exists
     image_glob = glob(join(image_folder, image_filename + glob_filter))
     if image_glob:
-        return os.path.split(image_glob[0])[1]
+        return _url(os.path.split(image_glob[0])[1])
     # download the image data
     try:
         image_response = urllib2.urlopen(image_url)
@@ -151,7 +153,7 @@ def save_image(image_url):
     # save the image
     with open_image(image_dir, image_filename) as image_file:
         image_file.write(image_data)
-    return image_filename
+    return _url(image_filename)
 
 def save_style():
     with open_text(backup_css) as css:
@@ -454,10 +456,7 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url):
-        url = save_image(url)
-        if '://' in url:        # in case of download errors
-            return url
-        return u'../%s/%s' % (image_dir, url)
+        return save_image(url)
 
     def get_post(self):
         """returns this post in HTML"""
