@@ -439,12 +439,14 @@ class TumblrPost:
 
         elif self.typ == 'video':
             source = unicode(post['video-source']).strip()
-            if source.startswith('<iframe') or source.startswith('<object'):
-                append(source, u'<p>%s</p>')
-                append_try('video-caption')
+            if source.startswith('<'):
+                player = source
+                source = ''
             else:
-                append(post['video-player'], u'<p>%s</p>')
-                append_try('video-caption')
+                player = unicode(post['video-player']).strip()
+            append(player)
+            append_try('video-caption')
+            if '//' in source:
                 append(escape(source), u'<p><a href="%s">Original</a></p>')
 
         elif self.typ == 'audio':
