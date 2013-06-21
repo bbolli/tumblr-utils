@@ -444,6 +444,7 @@ class TumblrPost:
                 source = ''
             else:
                 player = unicode(post['video-player']).strip()
+            player = player.replace('src="//', 'src="http://')
             append(player)
             append_try('video-caption')
             if '//' in source:
