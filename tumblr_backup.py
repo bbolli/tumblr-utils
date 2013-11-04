@@ -215,7 +215,7 @@ def get_style():
             return
         css = css.replace('\r', '').replace('\n    ', '\n')
         with open_text(theme_dir, 'style.css') as f:
-            f.write(css + '\n')
+            f.write(css.encode('UTF-8') + '\n')
 
 
 class TumblrBackup:
