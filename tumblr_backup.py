@@ -210,7 +210,7 @@ def get_style():
         return
     match = re.search(r'(?s)<style type=.text/css.>(.*?)</style>', page_data)
     if match:
-        css = match.group(1).strip()
+        css = match.group(1).strip().decode(encoding, 'replace')
         if not css:
             return
         css = css.replace('\r', '').replace('\n    ', '\n')
