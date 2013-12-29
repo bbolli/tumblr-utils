@@ -339,6 +339,8 @@ class TumblrBackup:
                         continue
                     if post.date < p_start:
                         return False
+                if options.tags and not options.tags.intersection(post.tags):
+                    continue
                 post.generate_content()
                 if post.error:
                     sys.stderr.write('%s%s\n' % (post.error, 50 * ' '))
@@ -386,7 +388,7 @@ class TumblrPost:
         self.date = int(post('unix-timestamp'))
         self.tm = time.localtime(self.date)
         self.title = ''
-        self.tags = []
+        self.tags = [u'%s' % t for t in post['tag':]]
         self.file_name = self.ident + post_ext
         self.error = None
 
@@ -472,8 +474,6 @@ class TumblrPost:
             self.error = u"Unknown post type '%s' in post #%s" % (self.typ, self.ident)
             append(escape(self.xml_content), u'<pre>%s</pre>')
 
-        self.tags = [u'%s' % t for t in post['tag':]]
-
         self.content = '\n'.join(content)
 
         # fix wrongly nested HTML tags
@@ -542,6 +542,10 @@ class LocalPost:
 
 if __name__ == '__main__':
     import optparse
+
+    def tags_callback(option, opt, value, parser):
+        setattr(parser.values, option.dest, set(value.split(',')))
+
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
     )
@@ -576,6 +580,9 @@ if __name__ == '__main__':
     )
     parser.add_option('-P', '--private', help="password for a private tumblr",
         metavar='PASSWORD'
+    )
+    parser.add_option('-t', '--tags', type='string', action='callback',
+        callback=tags_callback, help="save only posts tagged TAGS (comma-separated values)"
     )
     options, args = parser.parse_args()
 

@@ -59,6 +59,7 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
                             YYYY-MM-DD: the given day
     -P PASSWORD, --private=PASSWORD
                           password to a private tumblr
+    -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values)
 
 ### Arguments
 
@@ -156,8 +157,8 @@ the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip the
 200 most recent posts and backup the next 100. `-n 1` is the fastest way to
 rebuild the index pages.
 
-If you combine `-n`, `-s`, `-i` and `-p`, only posts matching all criteria will
-be backed up.
+If you combine `-n`, `-s`, `-i`, `-p` and `-t`, only posts matching all criteria
+will be backed up.
 
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
