@@ -456,7 +456,10 @@ class TumblrPost:
 
         elif self.typ == 'answer':
             self.title = post.question
-            append(post.answer)
+            try:
+                append(post.answer)
+            except AttributeError:
+                pass
 
         elif self.typ == 'conversation':
             self.title = get_try('conversation-title')
