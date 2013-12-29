@@ -341,6 +341,8 @@ class TumblrBackup:
                         return False
                 if options.tags and not options.tags.intersection(post.tags):
                     continue
+                if options.type and not post.typ in options.type:
+                    continue
                 post.generate_content()
                 if post.error:
                     sys.stderr.write('%s%s\n' % (post.error, 50 * ' '))
@@ -546,6 +548,10 @@ if __name__ == '__main__':
     def tags_callback(option, opt, value, parser):
         setattr(parser.values, option.dest, set(value.split(',')))
 
+    def type_callback(option, opt, value, parser):
+        value = value.replace('text', 'regular').replace('chat', 'conversation').replace('photoset', 'photo')
+        setattr(parser.values, option.dest, value.split(','))
+
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
     )
@@ -583,6 +589,9 @@ if __name__ == '__main__':
     )
     parser.add_option('-t', '--tags', type='string', action='callback',
         callback=tags_callback, help="save only posts tagged TAGS (comma-separated values)"
+    )
+    parser.add_option('-T', '--type', type='string', action='callback',
+        callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
     )
     options, args = parser.parse_args()
 

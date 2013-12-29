@@ -60,6 +60,7 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -P PASSWORD, --private=PASSWORD
                           password to a private tumblr
     -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values)
+    -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values)
 
 ### Arguments
 
@@ -157,8 +158,12 @@ the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip the
 200 most recent posts and backup the next 100. `-n 1` is the fastest way to
 rebuild the index pages.
 
-If you combine `-n`, `-s`, `-i`, `-p` and `-t`, only posts matching all criteria
-will be backed up.
+The option `-T` limits the backup to posts of the given type. The recognized
+types are: text or regular, link, answer, quote, chat or conversation, photo or
+photoset, audio and video.
+
+If you combine `-n`, `-s`, `-i`, `-p`, `-t` and `-T`, only posts matching all
+criteria will be backed up.
 
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
