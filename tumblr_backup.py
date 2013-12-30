@@ -20,6 +20,9 @@ import re
 # extra required packages
 import xmltramp
 
+# default blog name(s)
+DEFAULT_BLOGS = ['bbolli']
+
 join = os.path.join
 
 # add another JPEG recognizer
@@ -613,8 +616,8 @@ if __name__ == '__main__':
         if len(options.period) not in (4, 6, 8):
             parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
     if not args:
-        args = ['bbolli']
-    elif options.outdir and len(args) > 1:
+        args = DEFAULT_BLOGS
+    if options.outdir and len(args) > 1:
         parser.error("-O can only be used for a single blog-name")
 
     tb = TumblrBackup()
