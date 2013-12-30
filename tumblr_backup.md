@@ -38,6 +38,8 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 ### Options
 
     -h, --help            show this help message and exit
+    -O OUTDIR, --outdir=OUTDIR
+                          set the output directory (default: blog-name)
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
     -x, --xml             save the original XML source
@@ -90,7 +92,7 @@ By default, `tumblr_backup` backs up all posts in HTML format.
 The generated directory structure looks like this:
 
     ./ - the current directory
-        <blog-name>/ - your blog backup
+        <outdir>/ - your blog backup
             index.html - table of contents with links to the monthly pages
             backup.css - the default backup style sheet
             custom.css - the user's style sheet (optional)
@@ -109,6 +111,8 @@ The generated directory structure looks like this:
             theme/
                 avatar.<ext> - the blog’s avatar
                 style.css - the blog’s style sheet
+
+The default `outdir` is the `blog-name`.
 
 The name of the single post pages is their numeric post id. The modification
 time of the single post pages is set to the post’s timestamp. `tumblr_backup`

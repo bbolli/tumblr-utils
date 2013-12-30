@@ -275,7 +275,7 @@ class TumblrBackup:
             post_dir = os.curdir
             post_class = BlosxomPost
         else:
-            save_folder = join(root_folder, account)
+            save_folder = join(root_folder, options.outdir or account)
             image_folder = path_to(image_dir)
             post_class = TumblrPost
             have_custom_css = os.access(path_to(custom_css), os.R_OK)
@@ -555,6 +555,9 @@ if __name__ == '__main__':
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
     )
+    parser.add_option('-O', '--outdir', help="set the output directory"
+        " (default: blog-name)"
+    )
     parser.add_option('-q', '--quiet', action='store_true',
         help="suppress progress messages"
     )
@@ -611,6 +614,8 @@ if __name__ == '__main__':
             parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
     if not args:
         args = ['bbolli']
+    elif options.outdir and len(args) > 1:
+        parser.error("-O can only be used for a single blog-name")
 
     tb = TumblrBackup()
     for account in args:
