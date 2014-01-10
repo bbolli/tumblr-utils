@@ -4,6 +4,7 @@
 # standard Python library imports
 from __future__ import with_statement
 import os
+from os.path import join, split, splitext
 import sys
 import urllib
 import urllib2
@@ -22,8 +23,6 @@ import xmltramp
 
 # default blog name(s)
 DEFAULT_BLOGS = ['bbolli']
-
-join = os.path.join
 
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
@@ -139,7 +138,7 @@ def save_image(image_url):
     # check if a file with this name already exists
     image_glob = glob(join(image_folder, image_filename + glob_filter))
     if image_glob:
-        return _url(os.path.split(image_glob[0])[1])
+        return _url(split(image_glob[0])[1])
     # download the image data
     try:
         image_response = urllib2.urlopen(image_url)
@@ -233,7 +232,7 @@ class TumblrBackup:
 
     def save_index(self):
         f = glob(path_to(theme_dir, avatar_base + '.*'))
-        avatar = os.path.split(f[0])[1] if f else None
+        avatar = split(f[0])[1] if f else None
         with open_text('index.html') as idx:
             idx.write(header(self.title, self.title, body_class='index',
                 subtitle=self.subtitle, avatar=avatar
@@ -302,7 +301,7 @@ class TumblrBackup:
         if options.incremental:
             try:
                 ident_max = max(
-                    long(os.path.splitext(os.path.split(f)[1])[0])
+                    long(splitext(split(f)[1])[0])
                     for f in glob(path_to(post_dir, '*' + post_ext))
                 )
                 log(account, "Backing up posts after %d\r" % ident_max)
@@ -536,8 +535,8 @@ class LocalPost:
             del self.lines[0]
         while self.lines and '</article>' not in self.lines[-1]:
             del self.lines[-1]
-        self.file_name = os.path.split(post_file)[1]
-        self.ident = os.path.splitext(self.file_name)[0]
+        self.file_name = split(post_file)[1]
+        self.ident = splitext(self.file_name)[0]
         self.date = os.stat(post_file).st_mtime
         self.tm = time.localtime(self.date)
 
