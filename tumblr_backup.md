@@ -40,6 +40,7 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -h, --help            show this help message and exit
     -O OUTDIR, --outdir=OUTDIR
                           set the output directory (default: blog-name)
+    -D, --dirs            save each post in its own folder
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
     -x, --xml             save the original XML source
@@ -114,10 +115,37 @@ The generated directory structure looks like this:
 
 The default `outdir` is the `blog-name`.
 
-The name of the single post pages is their numeric post id. The modification
-time of the single post pages is set to the post’s timestamp. `tumblr_backup`
-applies a simple style to the saved pages. All generated pages are
-[HTML5](http://html5.org).
+If option `-D` is used, the one folder per post is generated, and the post's
+images are saved in the same folder. The monthly archive is also stored in a
+folder per month. This results in the same URL structure as on the Tumblr page.
+
+The directories look like this:
+
+    ./ - the current directory
+        <outdir>/ - your blog backup
+            index.html - table of contents with links to the monthly pages
+            backup.css - the default backup style sheet
+            custom.css - the user's style sheet (optional)
+            archive/
+                <yyyy-mm>/
+                    index.html - the monthly page
+                …
+            posts/
+                <id>/
+                    index.html - the single post page
+                    <image.ext> - the image file(s) for this post
+                    …
+                …
+            xml/
+                <id>.xml - the original XML posts
+                …
+            theme/
+                avatar.<ext> - the blog’s avatar
+                style.css - the blog’s style sheet
+
+The modification time of the single post pages is set to the post’s timestamp.
+`tumblr_backup` applies a simple style to the saved pages. All generated pages
+are [HTML5](http://html5.org).
 
 The index pages are recreated from scratch after every backup, based on the
 existing single post pages. Normally, the index and monthly pages are in
@@ -130,7 +158,7 @@ backup folder and do a complete backup. Without a custom CSS file,
 sheet itself is always saved in `theme/style.css`.
 
 Tumblr saves most image files without extension. This probably saves a few
-million bytes in their database. `tumblr_backup` restores the image extensions.
+billion bytes in their database. `tumblr_backup` restores the image extensions.
 If an image is already backed up, it is not downloaded again. If an image is
 re-uploaded/edited, the old image is kept in the backup, but no post links to
 it.

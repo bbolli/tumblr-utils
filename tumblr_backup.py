@@ -43,9 +43,11 @@ xml_dir = 'xml'
 image_dir = 'images'
 archive_dir = 'archive'
 theme_dir = 'theme'
+save_dir = '../'
 backup_css = 'backup.css'
 custom_css = 'custom.css'
 avatar_base = 'avatar'
+dir_index = 'index.html'
 
 blog_name = ''
 post_header = ''
@@ -79,7 +81,7 @@ def path_to(*parts):
 
 def open_file(open_fn, parts):
     if len(parts) > 1:
-        mkdir(path_to(*parts[:-1]))
+        mkdir(path_to(*parts[:-1]), (len(parts) > 2))
     return open_fn(path_to(*parts))
 
 def open_text(*parts):
@@ -132,7 +134,7 @@ def xmlparse(url, data=None):
 def save_image(image_url):
     """saves an image if not saved yet, returns the local file name"""
     def _url(fn):
-        return u'../%s/%s' % (image_dir, fn)
+        return u'%s%s/%s' % (save_dir, image_dir, fn)
     image_filename = image_url.split('/')[-1]
     glob_filter = '' if '.' in image_filename else '.*'
     # check if a file with this name already exists
@@ -170,7 +172,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 ''')
 
 def header(heading, title='', body_class='', subtitle='', avatar=''):
-    root_rel = '' if body_class == 'index' else '../'
+    root_rel = '' if body_class == 'index' else save_dir
     css_rel = root_rel + (custom_css if have_custom_css else backup_css)
     if body_class:
         body_class = ' class=' + body_class
@@ -226,14 +228,15 @@ class TumblrBackup:
         self.total_count = 0
 
     def build_index(self):
-        for f in glob(path_to(post_dir, '*.html')):
+        filter = join('*', dir_index) if options.dirs else '*' + post_ext
+        for f in glob(path_to(post_dir, filter)):
             post = LocalPost(f)
             self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
 
     def save_index(self):
         f = glob(path_to(theme_dir, avatar_base + '.*'))
         avatar = split(f[0])[1] if f else None
-        with open_text('index.html') as idx:
+        with open_text(dir_index) as idx:
             idx.write(header(self.title, self.title, body_class='index',
                 subtitle=self.subtitle, avatar=avatar
             ))
@@ -253,14 +256,20 @@ class TumblrBackup:
         idx.write('</ul>\n\n')
 
     def save_month(self, year, month, tm):
-        file_name = '%d-%02d.html' % (year, month)
-        with open_text(archive_dir, file_name) as arch:
+        file_name = '%d-%02d' % (year, month)
+        if options.dirs:
+            arch = open_text(archive_dir, file_name, dir_index)
+            file_name += '/'
+        else:
+            file_name += '.html'
+            arch = open_text(archive_dir, file_name)
+        with arch:
             arch.write('\n\n'.join([
                 header(self.title, strftime('%B %Y', tm), body_class='archive'),
                 '\n'.join(p.get_post() for p in sorted(
                     self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
                 )),
-                '<p><a href=../ rel=contents>Index</a></p>\n'
+                '<p><a href=%s rel=contents>Index</a></p>\n' % save_dir
             ]))
         return file_name
 
@@ -270,7 +279,7 @@ class TumblrBackup:
         base = get_api_url(account)
 
         # make sure there are folders to save in
-        global save_folder, image_folder, post_ext, post_dir, have_custom_css
+        global save_folder, image_folder, post_ext, post_dir, save_dir, have_custom_css
         if options.blosxom:
             save_folder = root_folder
             post_ext = '.txt'
@@ -279,9 +288,14 @@ class TumblrBackup:
         else:
             save_folder = join(root_folder, options.outdir or account)
             image_folder = path_to(image_dir)
+            if options.dirs:
+                post_ext = ''
+                save_dir = '../../'
+                mkdir(path_to(post_dir), True)
+            else:
+                mkdir(save_folder, True)
             post_class = TumblrPost
             have_custom_css = os.access(path_to(custom_css), os.R_OK)
-        mkdir(save_folder, True)
 
         self.post_count = 0
 
@@ -393,7 +407,8 @@ class TumblrPost:
         self.tm = time.localtime(self.date)
         self.title = ''
         self.tags = [u'%s' % t for t in post['tag':]]
-        self.file_name = self.ident + post_ext
+        self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
+        self.llink = self.ident if options.dirs else self.file_name
         self.error = None
 
     def generate_content(self):
@@ -421,6 +436,10 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
+            if options.dirs:
+                global image_dir, image_folder
+                image_dir = join(post_dir, self.ident)
+                image_folder = path_to(post_dir, self.ident)
             url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
                 src = unicode(p['photo-url'])
@@ -491,7 +510,7 @@ class TumblrPost:
         """returns this post in HTML"""
         post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>\n' % strftime('%x %X', self.tm)
-        post += u'<a class=llink href=../%s/%s>¶</a>\n' % (post_dir, self.file_name)
+        post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
         post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
         if self.title:
             post += '<h2>%s</h2>\n' % self.title
@@ -503,11 +522,13 @@ class TumblrPost:
 
     def save_post(self):
         """saves this post locally"""
-        with open_text(post_dir, self.file_name) as f:
+        if options.dirs:
+            f = open_text(post_dir, self.ident, dir_index)
+        else:
+            f = open_text(post_dir, self.file_name)
+        with f:
             f.write(self.get_post())
-        os.utime(path_to(post_dir, self.file_name),
-            (self.date, self.date)
-        )
+        os.utime(f.stream.name, (self.date, self.date)) # XXX: is f.stream.name portable?
         if options.xml:
             with open_text(xml_dir, self.ident + '.xml') as f:
                 f.write(self.xml_content)
@@ -535,8 +556,13 @@ class LocalPost:
             del self.lines[0]
         while self.lines and '</article>' not in self.lines[-1]:
             del self.lines[-1]
-        self.file_name = split(post_file)[1]
-        self.ident = splitext(self.file_name)[0]
+        parts = post_file.split(os.sep)
+        if parts[-1] == dir_index:  # .../<post_id>/index.html
+            self.file_name = os.sep.join(parts[-2:])
+            self.ident = parts[-2]
+        else:
+            self.file_name = parts[-1]
+            self.ident = splitext(self.file_name)[0]
         self.date = os.stat(post_file).st_mtime
         self.tm = time.localtime(self.date)
 
@@ -559,6 +585,9 @@ if __name__ == '__main__':
     )
     parser.add_option('-O', '--outdir', help="set the output directory"
         " (default: blog-name)"
+    )
+    parser.add_option('-D', '--dirs', action='store_true',
+        help="save each post in its own folder"
     )
     parser.add_option('-q', '--quiet', action='store_true',
         help="suppress progress messages"
