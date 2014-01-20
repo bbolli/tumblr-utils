@@ -516,7 +516,7 @@ class TumblrPost:
             post += '<h2>%s</h2>\n' % self.title
         post += self.content
         if self.tags:
-            post += u'\n<p class=tags>%s</p>' % u' '.join(u'#' + t for t in self.tags)
+            post += u'\n<p class=tags>%s</p>' % u' '.join(u'#' + escape(t) for t in self.tags)
         post += '\n</article>\n'
         return post
 
