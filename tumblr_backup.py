@@ -112,6 +112,17 @@ def get_api_url(account):
         urllib2.install_opener(opener)
     return base
 
+def set_period():
+    """Prepare the period start and end timestamps"""
+    i = 0; tm = [int(options.period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
+    if len(options.period) >= 6:
+        i = 1; tm[1] = int(options.period[4:6])
+    if len(options.period) == 8:
+        i = 2; tm[2] = int(options.period[6:8])
+    options.p_start = time.mktime(tm)
+    tm[i] += 1
+    options.p_stop = time.mktime(tm)
+
 def xmlparse(url, data=None):
     for _ in range(10):
         try:
@@ -299,17 +310,6 @@ class TumblrBackup:
 
         self.post_count = 0
 
-        # prepare the period start and end timestamps
-        if options.period:
-            i = 0; tm = [int(options.period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
-            if len(options.period) >= 6:
-                i = 1; tm[1] = int(options.period[4:6])
-            if len(options.period) == 8:
-                i = 2; tm[2] = int(options.period[6:8])
-            p_start = time.mktime(tm)
-            tm[i] += 1
-            p_stop = time.mktime(tm)
-
         # get the highest post id already saved
         ident_max = None
         if options.incremental:
@@ -351,9 +351,9 @@ class TumblrBackup:
                 if ident_max and long(post.ident) <= ident_max:
                     return False
                 if options.period:
-                    if post.date >= p_stop:
+                    if post.date >= options.p_stop:
                         continue
-                    if post.date < p_start:
+                    if post.date < options.p_start:
                         return False
                 if options.tags and not options.tags.intersection(post.tags):
                     continue
@@ -633,13 +633,18 @@ if __name__ == '__main__':
         options.incremental = True
     if options.period:
         try:
-            options.period = time.strftime(
-                {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[options.period]
-            )
+            pformat = {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[options.period]
         except KeyError:
             options.period = options.period.replace('-', '')
+            try:
+                int(options.period)  # must be numeric
+            except ValueError:
+                options.period = ''  # trigger the length check below
+        else:
+            options.period = time.strftime(pformat)
         if len(options.period) not in (4, 6, 8):
             parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
+        set_period()
     if not args:
         args = DEFAULT_BLOGS
     if options.outdir and len(args) > 1:
