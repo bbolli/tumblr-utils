@@ -629,11 +629,8 @@ if __name__ == '__main__':
     )
     options, args = parser.parse_args()
 
-    if options.auto is not None:
-        if options.auto == time.localtime().tm_hour:
-            options.incremental = False
-        else:
-            options.incremental = True
+    if options.auto is not None and options.auto != time.localtime().tm_hour:
+        options.incremental = True
     if options.period:
         try:
             options.period = time.strftime(
