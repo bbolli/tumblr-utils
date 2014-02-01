@@ -179,7 +179,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
 .post a.llink { display: none; }
 .meta a { text-decoration: none; }
-.avatar { float: right; }
+body > img { float: right; }
 ''')
 
 def header(heading, title='', body_class='', subtitle='', avatar=''):
@@ -197,7 +197,7 @@ def header(heading, title='', body_class='', subtitle='', avatar=''):
 
 ''' % (encoding, heading, css_rel, body_class)
     if avatar:
-        h += '<img src=%s%s/%s alt=Avatar class=avatar>\n' % (root_rel, theme_dir, avatar)
+        h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, avatar)
     if title:
         h += u'<h1>%s</h1>\n' % title
     if subtitle:
