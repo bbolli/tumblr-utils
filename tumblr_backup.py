@@ -123,10 +123,13 @@ def set_period():
     tm[i] += 1
     options.p_stop = time.mktime(tm)
 
-def xmlparse(url, data=None):
+def xmlparse(base, count, start=0):
+    url = base + '?num=%d' % count
+    if start > 0:
+        url += '&start=%d' % start
     for _ in range(10):
         try:
-            resp = urllib2.urlopen(url, data)
+            resp = urllib2.urlopen(url)
         except (urllib2.URLError, urllib2.HTTPError) as e:
             sys.stderr.write('%s getting %s\n' % (e, url))
             continue
@@ -325,7 +328,7 @@ class TumblrBackup:
             log(account, "Getting basic information\r")
 
         # start by calling the API with just a single post
-        soup = xmlparse(base + '?num=1')
+        soup = xmlparse(base, 1)
         if not soup:
             return
 
@@ -374,7 +377,7 @@ class TumblrBackup:
             j = min(i + MAX, last_post)
             log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, total_posts))
 
-            soup = xmlparse('%s?num=%d&start=%d' % (base, j - i, i))
+            soup = xmlparse(base, j - i, i)
             if soup is None:
                 return
 
