@@ -54,6 +54,8 @@ post_header = ''
 post_ext = '.html'
 have_custom_css = False
 
+MAX_POSTS = 50
+
 # ensure the right date/time format
 try:
     locale.setlocale(locale.LC_TIME, '')
@@ -124,9 +126,11 @@ def set_period():
     options.p_stop = time.mktime(tm)
 
 def xmlparse(base, count, start=0):
-    url = base + '?num=%d' % count
+    url = base; sep = '?'
+    if count != MAX_POSTS:
+        url += '%snum=%d' % (sep, count); sep = '&'
     if start > 0:
-        url += '&start=%d' % start
+        url += '%sstart=%d' % (sep, start)
     for _ in range(10):
         try:
             resp = urllib2.urlopen(url)
@@ -371,10 +375,9 @@ class TumblrBackup:
 
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
-        MAX = 50
-        for i in range(options.skip, last_post, MAX):
+        for i in range(options.skip, last_post, MAX_POSTS):
             # find the upper bound
-            j = min(i + MAX, last_post)
+            j = min(i + MAX_POSTS, last_post)
             log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, total_posts))
 
             soup = xmlparse(base, j - i, i)
