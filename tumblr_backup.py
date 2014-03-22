@@ -126,11 +126,12 @@ def set_period():
     options.p_stop = time.mktime(tm)
 
 def xmlparse(base, count, start=0):
-    url = base; sep = '?'
+    params = {}
     if count != MAX_POSTS:
-        url += '%snum=%d' % (sep, count); sep = '&'
+        params['num'] = count
     if start > 0:
-        url += '%sstart=%d' % (sep, start)
+        params['start'] = start
+    url = base + '?' + urllib.urlencode(params)
     for _ in range(10):
         try:
             resp = urllib2.urlopen(url)
