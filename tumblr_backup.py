@@ -24,6 +24,13 @@ import xmltramp
 # default blog name(s)
 DEFAULT_BLOGS = ['bbolli']
 
+# Format of displayed tags
+TAG_FMT = '#%s'
+
+# Format of tag link URLs; set to None to suppress the links.
+# Named placeholders that will be replaced: domain, tag
+TAGLINK_FMT = 'http://%(domain)s/tagged/%(tag)s'
+
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
 def test_jpg(h, f):
@@ -188,6 +195,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .post a.llink { display: none; }
 .meta a { text-decoration: none; }
 body > img { float: right; }
+.tags, .tags a { font-size: small; color: #999; text-decoration: none; }
 ''')
 
 def header(heading, title='', body_class='', subtitle='', avatar=''):
@@ -523,9 +531,16 @@ class TumblrPost:
             post += '<h2>%s</h2>\n' % self.title
         post += self.content
         if self.tags:
-            post += u'\n<p class=tags>%s</p>' % u' '.join(u'#' + escape(t) for t in self.tags)
+            post += u'\n<p class=tags>%s</p>' % u''.join(self.tag_link(t) for t in self.tags)
         post += '\n</article>\n'
         return post
+
+    def tag_link(self, tag):
+        tag_disp = escape(TAG_FMT % tag)
+        if not TAGLINK_FMT:
+            return tag_disp + ' '
+        url = TAGLINK_FMT % {'domain': blog_name, 'tag': urllib.quote(tag.encode('utf-8'))}
+        return u'<a href=%s>%s</a>\n' % (url, tag_disp)
 
     def save_post(self):
         """saves this post locally"""
