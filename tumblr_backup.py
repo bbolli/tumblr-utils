@@ -157,12 +157,21 @@ def xmlparse(base, count, start=0):
         return None
     return doc if doc._name == 'tumblr' else None
 
-def save_image(image_url):
+def save_image(image_url, ident, offset):
     """Saves an image if not saved yet. Returns the new URL or
     the original URL in case of download errors."""
+
     def _url(fn):
         return u'%s%s/%s' % (save_dir, image_dir, fn)
-    image_filename = image_url.split('/')[-1]
+
+    # determine the image file name
+    offset = '_' + offset if offset else ''
+    if options.image_names == 'i':
+        image_filename = ident + offset
+    elif options.image_names == 'bi':
+        image_filename = account + '_' + ident + offset
+    else:
+        image_filename = image_url.split('/')[-1]
     glob_filter = '' if '.' in image_filename else '.*'
     # check if a file with this name already exists
     image_glob = glob(join(image_folder, image_filename + glob_filter))
@@ -459,7 +468,7 @@ class TumblrPost:
             url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
                 src = unicode(p['photo-url'])
-                append(escape(self.get_image_url(src)), u'<img alt="" src="%s">')
+                append(escape(self.get_image_url(src, p().get('offset'))), u'<img alt="" src="%s">')
                 if url:
                     content[-1] = '<a href="%s">%s</a>' % (url, content[-1])
                 content[-1] = '<p>' + content[-1] + '</p>'
@@ -519,8 +528,8 @@ class TumblrPost:
         for p in ('<p>(<(%s)>)', '(</(%s)>)</p>'):
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
-    def get_image_url(self, url):
-        return save_image(url)
+    def get_image_url(self, url, offset=None):
+        return save_image(url, self.ident, offset)
 
     def get_post(self):
         """returns this post in HTML"""
@@ -558,7 +567,7 @@ class TumblrPost:
 
 class BlosxomPost(TumblrPost):
 
-    def get_image_url(self, url):
+    def get_image_url(self, url, offset=None):
         return url
 
     def get_post(self):
@@ -649,6 +658,10 @@ if __name__ == '__main__':
     )
     parser.add_option('-T', '--type', type='string', action='callback',
         callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
+    )
+    parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
+        default='o', metavar='FMT',
+        help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)"
     )
     options, args = parser.parse_args()
 

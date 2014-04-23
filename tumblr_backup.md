@@ -64,6 +64,9 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
                           password to a private tumblr
     -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values)
     -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values)
+    -I FMT, --image-names=FMT
+                          image filename format ('o'=original, 'i'=<post-id>,
+                          'bi'=<blog-name>_<post-id>)
 
 ### Arguments
 
@@ -161,7 +164,7 @@ Tumblr saves most image files without extension. This probably saves a few
 billion bytes in their database. `tumblr_backup` restores the image extensions.
 If an image is already backed up, it is not downloaded again. If an image is
 re-uploaded/edited, the old image is kept in the backup, but no post links to
-it.
+it. The format of the image file names can be selected with the `-I` option.
 
 In incremental backup mode, `tumblr_backup` saves only posts that have higher
 ids than the highest id saved locally. Note that posts that are edited after
