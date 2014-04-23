@@ -159,11 +159,18 @@ def xmlparse(base, count, start=0):
 
 def save_image(image_url, ident, offset):
     """saves an image if not saved yet, returns the local file name"""
+
     def _url(fn):
         return u'%s%s/%s' % (save_dir, image_dir, fn)
-    image_filename = '%s_%s' % (account, ident)
-    if offset:
-        image_filename += '_' + offset
+
+    # determine the image file name
+    offset = '_' + offset if offset else ''
+    if options.image_names == 'i':
+        image_filename = ident + offset
+    elif options.image_names == 'bi':
+        image_filename = account + '_' + ident + offset
+    else:
+        image_filename = image_url.split('/')[-1]
     glob_filter = '' if '.' in image_filename else '.*'
     # check if a file with this name already exists
     image_glob = glob(join(image_folder, image_filename + glob_filter))
@@ -650,6 +657,10 @@ if __name__ == '__main__':
     )
     parser.add_option('-T', '--type', type='string', action='callback',
         callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
+    )
+    parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
+        default='o', metavar='FMT',
+        help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)"
     )
     options, args = parser.parse_args()
 
