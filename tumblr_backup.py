@@ -158,27 +158,26 @@ def xmlparse(base, count, start=0):
         return None
     return doc if doc._name == 'tumblr' else None
 
-def add_exif(image_url, post):
+def add_exif(image_name, tags):
     try:
-        metadata = pyexiv2.ImageMetadata(image_url)
+        metadata = pyexiv2.ImageMetadata(image_name)
         metadata.read()
     except:
-        sys.stdout.write('Error reading metadata for image %s' % image_url)
+        sys.stderr.write('Error reading metadata for image %s\n' % image_name)
         return
+    KW_KEY = 'Iptc.Application2.Keywords'
     try:
-        previous_tags = metadata['Iptc.Application2.Keywords'].value
-    except:
-        previous_tags = []
-    tags = post.tags + previous_tags
-    if options.exif: tags += options.exif
-    tags = list(set([item.lower() for item in tags]))
-    metadata['Iptc.Application2.Keywords'] = pyexiv2.IptcTag('Iptc.Application2.Keywords', tags)
+        tags |= set(metadata[KW_KEY].value)
+    except KeyError:
+        pass
+    tags = list(tag.strip().lower() for tag in tags | options.exif)
+    metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, tags)
     try:
         metadata.write()
     except:
-        sys.stdout.write('Metadata failed for tags: %s' % tags)
+        sys.stderr.write('Writing metadata failed for tags: %s in: %s\n' % (tags, image_name))
 
-def save_image(image_url, ident, offset, post):
+def save_image(image_url, ident, offset, tags):
     """Saves an image if not saved yet. Returns the new URL or
     the original URL in case of download errors."""
 
@@ -186,8 +185,8 @@ def save_image(image_url, ident, offset, post):
         return u'%s%s/%s' % (save_dir, image_dir, fn)
 
     def _addexif(fn):
-       imagepath = glob(join(image_folder, image_filename))[0]
-       if imghdr.what(imagepath) == 'jpeg': add_exif(imagepath, post)
+       if fn.endswith('.jpg'):
+           add_exif(fn, set(tags))
 
     # determine the image file name
     offset = '_' + offset if offset else ''
@@ -201,7 +200,7 @@ def save_image(image_url, ident, offset, post):
     # check if a file with this name already exists
     image_glob = glob(join(image_folder, image_filename + glob_filter))
     if image_glob:
-        _addexif(image_filename + glob_filter)
+        _addexif(image_glob[0])
         return _url(split(image_glob[0])[1])
     # download the image data
     try:
@@ -219,7 +218,7 @@ def save_image(image_url, ident, offset, post):
     # save the image
     with open_image(image_dir, image_filename) as image_file:
         image_file.write(image_data)
-    _addexif(image_filename)
+    _addexif(join(image_dir, image_filename))
     return _url(image_filename)
 
 def save_style():
@@ -556,7 +555,7 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url, offset=None):
-        return save_image(url, self.ident, offset, self)
+        return save_image(url, self.ident, offset, self.tags)
 
     def get_post(self):
         """returns this post in HTML"""
@@ -640,7 +639,7 @@ if __name__ == '__main__':
         setattr(parser.values, option.dest, value.split(','))
 
     def exif_callback(option, opt, value, parser):
-        setattr(parser.values, option.dest, value.split(','))
+        setattr(parser.values, option.dest, set(value.split(',')))
 
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
@@ -694,7 +693,8 @@ if __name__ == '__main__':
         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)"
     )
     parser.add_option('-e', '--exif', type='string', action='callback',
-        callback=exif_callback, help="add EXIF tags to each picture (comma-separated values)"
+        callback=exif_callback, default=set(), metavar='KW',
+        help="add EXIF keyword tags to each picture (comma-separated values)"
     )
     options, args = parser.parse_args()
 
