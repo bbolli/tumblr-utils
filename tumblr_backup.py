@@ -157,14 +157,13 @@ def xmlparse(base, count, start=0):
         return None
     return doc if doc._name == 'tumblr' else None
 
-def save_image(image_url, post, offset):
+def save_image(image_url, ident, offset):
     """saves an image if not saved yet, returns the local file name"""
     def _url(fn):
         return u'%s%s/%s' % (save_dir, image_dir, fn)
-    if offset is None:
-        image_filename = '{0}_{1}'.format(account,post.ident)
-    else:
-        image_filename = '{0}_{1}_{2}'.format(account,post.ident,offset)
+    image_filename = '%s_%s' % (account, ident)
+    if offset:
+        image_filename += '_' + offset
     glob_filter = '' if '.' in image_filename else '.*'
     # check if a file with this name already exists
     image_glob = glob(join(image_folder, image_filename + glob_filter))
@@ -461,10 +460,7 @@ class TumblrPost:
             url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
                 src = unicode(p['photo-url'])
-                if p._name == 'photo' and p('offset'):
-                    append(escape(self.get_image_url(src, p('offset'))), u'<img alt="" src="%s">')
-                else:
-                    append(escape(self.get_image_url(src)), u'<img alt="" src="%s">')
+                append(escape(self.get_image_url(src, p().get('offset'))), u'<img alt="" src="%s">')
                 if url:
                     content[-1] = '<a href="%s">%s</a>' % (url, content[-1])
                 content[-1] = '<p>' + content[-1] + '</p>'
@@ -525,7 +521,7 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url, offset=None):
-        return save_image(url, self, offset)
+        return save_image(url, self.ident, offset)
 
     def get_post(self):
         """returns this post in HTML"""
@@ -563,7 +559,7 @@ class TumblrPost:
 
 class BlosxomPost(TumblrPost):
 
-    def get_image_url(self, url):
+    def get_image_url(self, url, offset=None):
         return url
 
     def get_post(self):
