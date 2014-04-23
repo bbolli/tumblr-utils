@@ -158,7 +158,8 @@ def xmlparse(base, count, start=0):
     return doc if doc._name == 'tumblr' else None
 
 def save_image(image_url):
-    """saves an image if not saved yet, returns the local file name"""
+    """Saves an image if not saved yet. Returns the new URL or
+    the original URL in case of download errors."""
     def _url(fn):
         return u'%s%s/%s' % (save_dir, image_dir, fn)
     image_filename = image_url.split('/')[-1]
