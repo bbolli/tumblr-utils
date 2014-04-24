@@ -636,15 +636,12 @@ class LocalPost:
 if __name__ == '__main__':
     import optparse
 
-    def tags_callback(option, opt, value, parser):
+    def csv_callback(option, opt, value, parser):
         setattr(parser.values, option.dest, set(value.split(',')))
 
     def type_callback(option, opt, value, parser):
         value = value.replace('text', 'regular').replace('chat', 'conversation').replace('photoset', 'photo')
-        setattr(parser.values, option.dest, value.split(','))
-
-    def exif_callback(option, opt, value, parser):
-        setattr(parser.values, option.dest, set(value.split(',')))
+        csv_callback(option, opt, value, parser)
 
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
@@ -688,7 +685,7 @@ if __name__ == '__main__':
         metavar='PASSWORD'
     )
     parser.add_option('-t', '--tags', type='string', action='callback',
-        callback=tags_callback, help="save only posts tagged TAGS (comma-separated values)"
+        callback=csv_callback, help="save only posts tagged TAGS (comma-separated values)"
     )
     parser.add_option('-T', '--type', type='string', action='callback',
         callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
@@ -698,7 +695,7 @@ if __name__ == '__main__':
         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)"
     )
     parser.add_option('-e', '--exif', type='string', action='callback',
-        callback=exif_callback, default=set(), metavar='KW',
+        callback=csv_callback, default=set(), metavar='KW',
         help="add EXIF keyword tags to each picture (comma-separated values;"
         " '-' to remove all tags, '' to add no extra tags)"
     )
