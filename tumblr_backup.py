@@ -20,7 +20,10 @@ import re
 
 # extra required packages
 import xmltramp
-import pyexiv2
+try:
+    import pyexiv2
+except ImportError:
+    pyexiv2 = None
 
 # default blog name(s)
 DEFAULT_BLOGS = ['bbolli']
@@ -185,7 +188,7 @@ def save_image(image_url, ident, offset, tags):
         return u'%s%s/%s' % (save_dir, image_dir, fn)
 
     def _addexif(fn):
-       if fn.endswith('.jpg'):
+       if options.exif and fn.endswith('.jpg'):
            add_exif(fn, set(tags))
 
     # determine the image file name
@@ -718,6 +721,8 @@ if __name__ == '__main__':
         args = DEFAULT_BLOGS
     if options.outdir and len(args) > 1:
         parser.error("-O can only be used for a single blog-name")
+    if options.exif and not pyexiv2:
+        parser.error("--exif: module 'pyexif2' is not installed")
 
     tb = TumblrBackup()
     for account in args:
