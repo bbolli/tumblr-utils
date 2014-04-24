@@ -67,6 +67,9 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -I FMT, --image-names=FMT
                           image filename format ('o'=original, 'i'=<post-id>,
                           'bi'=<blog-name>_<post-id>)
+    -e KW, --exif=KW      add EXIF keyword tags to each picture (comma-separated
+                          values; '-' to remove all tags, '' to add no extra
+                          tags)
 
 ### Arguments
 
@@ -165,6 +168,13 @@ billion bytes in their database. `tumblr_backup` restores the image extensions.
 If an image is already backed up, it is not downloaded again. If an image is
 re-uploaded/edited, the old image is kept in the backup, but no post links to
 it. The format of the image file names can be selected with the `-I` option.
+
+With option `-e`, IPTC keyword tags can be added to image files. There are
+three possibilities:
+
+1. `-e kw1,kw2` adds the post's tags plus `kw1` and `kw2` as keywords
+2. `-e ''` adds just the post's tags
+3. `-e -` removes all keywords from the image
 
 In incremental backup mode, `tumblr_backup` saves only posts that have higher
 ids than the highest id saved locally. Note that posts that are edited after
