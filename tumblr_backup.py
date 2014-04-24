@@ -169,12 +169,14 @@ def add_exif(image_name, tags):
         sys.stderr.write('Error reading metadata for image %s\n' % image_name)
         return
     KW_KEY = 'Iptc.Application2.Keywords'
-    try:
-        tags |= set(metadata[KW_KEY].value)
-    except KeyError:
-        pass
-    tags = list(tag.strip().lower() for tag in tags | options.exif)
-    metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, tags)
+    if '-' in options.exif:     # remove all tags
+        if KW_KEY in metadata.iptc_keys:
+            del metadata[KW_KEY]
+    else:                       # add tags
+        if KW_KEY in metadata.iptc_keys:
+            tags |= set(metadata[KW_KEY].value)
+        tags = list(tag.strip().lower() for tag in tags | options.exif if tag)
+        metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, tags)
     try:
         metadata.write()
     except:
@@ -697,7 +699,8 @@ if __name__ == '__main__':
     )
     parser.add_option('-e', '--exif', type='string', action='callback',
         callback=exif_callback, default=set(), metavar='KW',
-        help="add EXIF keyword tags to each picture (comma-separated values)"
+        help="add EXIF keyword tags to each picture (comma-separated values;"
+        " '-' to remove all tags, '' to add no extra tags)"
     )
     options, args = parser.parse_args()
 
