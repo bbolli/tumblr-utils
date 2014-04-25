@@ -61,7 +61,6 @@ avatar_base = 'avatar'
 dir_index = 'index.html'
 
 blog_name = ''
-post_header = ''
 post_ext = '.html'
 have_custom_css = False
 
@@ -393,8 +392,7 @@ class TumblrBackup:
         self.subtitle = unicode(tumblelog)
 
         # use the meta information to create a HTML header
-        global post_header
-        post_header = header(self.title, body_class='post')
+        TumblrPost.post_header = header(self.title, body_class='post')
 
         # find the total number of posts
         total_posts = options.count or int(soup.posts('total'))
@@ -453,6 +451,8 @@ class TumblrBackup:
 
 
 class TumblrPost:
+
+    post_header = ''    # set by TumblrBackup.backup()
 
     def __init__(self, post):
         self.content = ''
@@ -566,7 +566,7 @@ class TumblrPost:
 
     def get_post(self):
         """returns this post in HTML"""
-        post = post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
+        post = self.post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += '<p class=meta><span class=date>%s</span>\n' % strftime('%x %X', self.tm)
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
         post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
