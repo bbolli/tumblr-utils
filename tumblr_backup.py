@@ -20,6 +20,10 @@ import re
 
 # extra required packages
 import xmltramp
+try:
+    import pyexiv2
+except ImportError:
+    pyexiv2 = None
 
 # default blog name(s)
 DEFAULT_BLOGS = ['bbolli']
@@ -157,12 +161,37 @@ def xmlparse(base, count, start=0):
         return None
     return doc if doc._name == 'tumblr' else None
 
-def save_image(image_url, ident, offset):
+def add_exif(image_name, tags):
+    try:
+        metadata = pyexiv2.ImageMetadata(image_name)
+        metadata.read()
+    except:
+        sys.stderr.write('Error reading metadata for image %s\n' % image_name)
+        return
+    KW_KEY = 'Iptc.Application2.Keywords'
+    if '-' in options.exif:     # remove all tags
+        if KW_KEY in metadata.iptc_keys:
+            del metadata[KW_KEY]
+    else:                       # add tags
+        if KW_KEY in metadata.iptc_keys:
+            tags |= set(metadata[KW_KEY].value)
+        tags = list(tag.strip().lower() for tag in tags | options.exif if tag)
+        metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, tags)
+    try:
+        metadata.write()
+    except:
+        sys.stderr.write('Writing metadata failed for tags: %s in: %s\n' % (tags, image_name))
+
+def save_image(image_url, ident, offset, tags):
     """Saves an image if not saved yet. Returns the new URL or
     the original URL in case of download errors."""
 
     def _url(fn):
         return u'%s%s/%s' % (save_dir, image_dir, fn)
+
+    def _addexif(fn):
+       if options.exif and fn.endswith('.jpg'):
+           add_exif(fn, set(tags))
 
     # determine the image file name
     offset = '_' + offset if offset else ''
@@ -176,6 +205,7 @@ def save_image(image_url, ident, offset):
     # check if a file with this name already exists
     image_glob = glob(join(image_folder, image_filename + glob_filter))
     if image_glob:
+        _addexif(image_glob[0])
         return _url(split(image_glob[0])[1])
     # download the image data
     try:
@@ -193,6 +223,7 @@ def save_image(image_url, ident, offset):
     # save the image
     with open_image(image_dir, image_filename) as image_file:
         image_file.write(image_data)
+    _addexif(join(image_folder, image_filename))
     return _url(image_filename)
 
 def save_style():
@@ -529,7 +560,7 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url, offset=None):
-        return save_image(url, self.ident, offset)
+        return save_image(url, self.ident, offset, self.tags)
 
     def get_post(self):
         """returns this post in HTML"""
@@ -605,12 +636,12 @@ class LocalPost:
 if __name__ == '__main__':
     import optparse
 
-    def tags_callback(option, opt, value, parser):
+    def csv_callback(option, opt, value, parser):
         setattr(parser.values, option.dest, set(value.split(',')))
 
     def type_callback(option, opt, value, parser):
         value = value.replace('text', 'regular').replace('chat', 'conversation').replace('photoset', 'photo')
-        setattr(parser.values, option.dest, value.split(','))
+        csv_callback(option, opt, value, parser)
 
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
@@ -654,7 +685,7 @@ if __name__ == '__main__':
         metavar='PASSWORD'
     )
     parser.add_option('-t', '--tags', type='string', action='callback',
-        callback=tags_callback, help="save only posts tagged TAGS (comma-separated values)"
+        callback=csv_callback, help="save only posts tagged TAGS (comma-separated values)"
     )
     parser.add_option('-T', '--type', type='string', action='callback',
         callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
@@ -662,6 +693,11 @@ if __name__ == '__main__':
     parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
         default='o', metavar='FMT',
         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)"
+    )
+    parser.add_option('-e', '--exif', type='string', action='callback',
+        callback=csv_callback, default=set(), metavar='KW',
+        help="add EXIF keyword tags to each picture (comma-separated values;"
+        " '-' to remove all tags, '' to add no extra tags)"
     )
     options, args = parser.parse_args()
 
@@ -685,6 +721,8 @@ if __name__ == '__main__':
         args = DEFAULT_BLOGS
     if options.outdir and len(args) > 1:
         parser.error("-O can only be used for a single blog-name")
+    if options.exif and not pyexiv2:
+        parser.error("--exif: module 'pyexif2' is not installed")
 
     tb = TumblrBackup()
     for account in args:
