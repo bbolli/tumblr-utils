@@ -137,9 +137,7 @@ def set_period():
     options.p_stop = time.mktime(tm)
 
 def xmlparse(base, count, start=0):
-    params = {}
-    if count != MAX_POSTS:
-        params['num'] = count
+    params = {'num': count}
     if start > 0:
         params['start'] = start
     url = base + '?' + urllib.urlencode(params)
