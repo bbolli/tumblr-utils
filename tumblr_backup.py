@@ -423,7 +423,8 @@ class TumblrBackup:
 
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
-        for i in range(options.skip, last_post, MAX_POSTS):
+        i = options.skip
+        while i < last_post:
             # find the upper bound
             j = min(i + MAX_POSTS, last_post)
             log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, total_posts))
@@ -432,8 +433,11 @@ class TumblrBackup:
             if soup is None:
                 return
 
-            if not _backup(soup.posts['post':]):
+            posts = soup.posts['post':]
+            if not _backup(posts):
                 break
+
+            i += len(posts)
 
         if not options.blosxom and self.post_count:
             get_avatar()
