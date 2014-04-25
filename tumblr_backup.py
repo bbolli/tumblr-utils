@@ -179,50 +179,6 @@ def add_exif(image_name, tags):
     except:
         sys.stderr.write('Writing metadata failed for tags: %s in: %s\n' % (tags, image_name))
 
-def save_image(image_url, ident, offset, tags):
-    """Saves an image if not saved yet. Returns the new URL or
-    the original URL in case of download errors."""
-
-    def _url(fn):
-        return u'%s%s/%s' % (save_dir, image_dir, fn)
-
-    def _addexif(fn):
-       if options.exif and fn.endswith('.jpg'):
-           add_exif(fn, set(tags))
-
-    # determine the image file name
-    offset = '_' + offset if offset else ''
-    if options.image_names == 'i':
-        image_filename = ident + offset
-    elif options.image_names == 'bi':
-        image_filename = account + '_' + ident + offset
-    else:
-        image_filename = image_url.split('/')[-1]
-    glob_filter = '' if '.' in image_filename else '.*'
-    # check if a file with this name already exists
-    image_glob = glob(join(image_folder, image_filename + glob_filter))
-    if image_glob:
-        _addexif(image_glob[0])
-        return _url(split(image_glob[0])[1])
-    # download the image data
-    try:
-        image_response = urllib2.urlopen(image_url)
-    except urllib2.HTTPError:
-        # return the original URL
-        return image_url
-    image_data = image_response.read()
-    image_response.close()
-    # determine the file type if it's unknown
-    if '.' not in image_filename:
-        image_type = imghdr.what(None, image_data[:32])
-        if image_type:
-            image_filename += '.' + image_type.replace('jpeg', 'jpg')
-    # save the image
-    with open_image(image_dir, image_filename) as image_file:
-        image_file.write(image_data)
-    _addexif(join(image_folder, image_filename))
-    return _url(image_filename)
-
 def save_style():
     with open_text(backup_css) as css:
         css.write('''\
@@ -564,7 +520,51 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
     def get_image_url(self, url, offset=None):
-        return save_image(url, self.ident, offset, self.tags)
+        return self.save_image(url, offset)
+
+    def save_image(self, image_url, offset):
+        """Saves an image if not saved yet. Returns the new URL or
+        the original URL in case of download errors."""
+
+        def _url(fn):
+            return u'%s%s/%s' % (save_dir, image_dir, fn)
+
+        def _addexif(fn):
+           if options.exif and fn.endswith('.jpg'):
+               add_exif(fn, set(self.tags))
+
+        # determine the image file name
+        offset = '_' + offset if offset else ''
+        if options.image_names == 'i':
+            image_filename = self.ident + offset
+        elif options.image_names == 'bi':
+            image_filename = account + '_' + self.ident + offset
+        else:
+            image_filename = image_url.split('/')[-1]
+        glob_filter = '' if '.' in image_filename else '.*'
+        # check if a file with this name already exists
+        image_glob = glob(join(image_folder, image_filename + glob_filter))
+        if image_glob:
+            _addexif(image_glob[0])
+            return _url(split(image_glob[0])[1])
+        # download the image data
+        try:
+            image_response = urllib2.urlopen(image_url)
+        except urllib2.HTTPError:
+            # return the original URL
+            return image_url
+        image_data = image_response.read()
+        image_response.close()
+        # determine the file type if it's unknown
+        if '.' not in image_filename:
+            image_type = imghdr.what(None, image_data[:32])
+            if image_type:
+                image_filename += '.' + image_type.replace('jpeg', 'jpg')
+        # save the image
+        with open_image(image_dir, image_filename) as image_file:
+            image_file.write(image_data)
+        _addexif(join(image_folder, image_filename))
+        return _url(image_filename)
 
     def get_post(self):
         """returns this post in HTML"""
