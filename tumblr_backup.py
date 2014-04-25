@@ -223,7 +223,7 @@ def save_image(image_url, ident, offset, tags):
     # save the image
     with open_image(image_dir, image_filename) as image_file:
         image_file.write(image_data)
-    _addexif(join(image_dir, image_filename))
+    _addexif(join(image_folder, image_filename))
     return _url(image_filename)
 
 def save_style():
