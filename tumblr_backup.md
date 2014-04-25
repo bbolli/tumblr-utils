@@ -63,7 +63,8 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -P PASSWORD, --private=PASSWORD
                           password to a private tumblr
     -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values)
-    -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values)
+    -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values;
+                          case-insensitive)
     -I FMT, --image-names=FMT
                           image filename format ('o'=original, 'i'=<post-id>,
                           'bi'=<blog-name>_<post-id>)

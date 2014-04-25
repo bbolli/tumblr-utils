@@ -408,7 +408,7 @@ class TumblrBackup:
                         continue
                     if post.date < options.p_start:
                         return False
-                if options.tags and not options.tags.intersection(post.tags):
+                if options.tags and not options.tags & post.tags_lower:
                     continue
                 if options.type and not post.typ in options.type:
                     continue
@@ -465,6 +465,8 @@ class TumblrPost:
         self.tm = time.localtime(self.date)
         self.title = ''
         self.tags = [u'%s' % t for t in post['tag':]]
+        if options.tags:
+            self.tags_lower = set(t.lower() for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
         self.error = None
@@ -641,6 +643,9 @@ if __name__ == '__main__':
     def csv_callback(option, opt, value, parser):
         setattr(parser.values, option.dest, set(value.split(',')))
 
+    def tags_callback(option, opt, value, parser):
+        csv_callback(option, opt, value.lower(), parser)
+
     def type_callback(option, opt, value, parser):
         value = value.replace('text', 'regular').replace('chat', 'conversation').replace('photoset', 'photo')
         csv_callback(option, opt, value, parser)
@@ -687,7 +692,8 @@ if __name__ == '__main__':
         metavar='PASSWORD'
     )
     parser.add_option('-t', '--tags', type='string', action='callback',
-        callback=csv_callback, help="save only posts tagged TAGS (comma-separated values)"
+        callback=tags_callback, help="save only posts tagged TAGS (comma-separated values;"
+        " case-insensitive)"
     )
     parser.add_option('-T', '--type', type='string', action='callback',
         callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
