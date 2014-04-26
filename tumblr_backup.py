@@ -519,10 +519,7 @@ class TumblrPost:
         for p in ('<p>(<(%s)>)', '(</(%s)>)</p>'):
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
-    def get_image_url(self, url, offset=None):
-        return self.save_image(url, offset)
-
-    def save_image(self, image_url, offset):
+    def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
         the original URL in case of download errors."""
 
@@ -602,8 +599,8 @@ class TumblrPost:
 
 class BlosxomPost(TumblrPost):
 
-    def get_image_url(self, url, offset=None):
-        return url
+    def get_image_url(self, image_url, offset):
+        return image_url
 
     def get_post(self):
         """returns this post as a Blosxom post"""
