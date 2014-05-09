@@ -20,6 +20,8 @@ import re
 
 # extra required packages
 import xmltramp
+
+# extra optional packages
 try:
     import pyexiv2
 except ImportError:
