@@ -156,7 +156,9 @@ def xmlparse(base, count, start=0):
     try:
         doc = xmltramp.parse(xml)
     except SAXException as e:
-        sys.stderr.write('%s %r\n\n%r\n\n%s\n' % (resp.info().gettype(), resp.msg, e, xml))
+        sys.stderr.write('%s: %s\n%d %s %s\n%r\n' % (
+            e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), xml
+        ))
         return None
     return doc if doc._name == 'tumblr' else None
 
