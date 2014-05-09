@@ -389,7 +389,8 @@ class TumblrBackup:
 
             soup = xmlparse(base, j - i, i)
             if soup is None:
-                return
+                i += 50         # try the next batch
+                continue
 
             posts = soup.posts['post':]
             if not _backup(posts):
