@@ -356,7 +356,6 @@ class TumblrBackup:
 
         # find the total number of posts
         total_posts = options.count or int(soup.posts('total'))
-        last_post = options.skip + total_posts
 
         def _backup(posts):
             for p in sorted(posts, key=lambda x: long(x('id')), reverse=True):
@@ -382,9 +381,9 @@ class TumblrBackup:
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
         i = options.skip
-        while i < last_post:
+        while i < total_posts:
             # find the upper bound
-            j = min(i + MAX_POSTS, last_post)
+            j = min(i + MAX_POSTS, total_posts)
             log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, total_posts))
 
             soup = xmlparse(base, j - i, i)
