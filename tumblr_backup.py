@@ -196,28 +196,6 @@ body > img { float: right; }
 .tags, .tags a { font-size: small; color: #999; text-decoration: none; }
 ''')
 
-def header(heading, title='', body_class='', subtitle='', avatar=''):
-    root_rel = '' if body_class == 'index' else save_dir
-    css_rel = root_rel + (custom_css if have_custom_css else backup_css)
-    if body_class:
-        body_class = ' class=' + body_class
-    h = u'''<!DOCTYPE html>
-
-<meta charset=%s>
-<title>%s</title>
-<link rel=stylesheet href=%s>
-
-<body%s>
-
-''' % (encoding, heading, css_rel, body_class)
-    if avatar:
-        h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, avatar)
-    if title:
-        h += u'<h1>%s</h1>\n' % title
-    if subtitle:
-        h += u'<p class=subtitle>%s</p>\n' % subtitle
-    return h
-
 def get_avatar():
     try:
         resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
@@ -262,7 +240,7 @@ class TumblrBackup:
         f = glob(path_to(theme_dir, avatar_base + '.*'))
         avatar = split(f[0])[1] if f else None
         with open_text(dir_index) as idx:
-            idx.write(header(self.title, self.title, body_class='index',
+            idx.write(self.header(self.title, body_class='index',
                 subtitle=self.subtitle, avatar=avatar
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
@@ -290,13 +268,35 @@ class TumblrBackup:
             arch = open_text(archive_dir, file_name)
         with arch:
             arch.write('\n\n'.join([
-                header(self.title, strftime('%B %Y', tm), body_class='archive'),
+                self.header(strftime('%B %Y', tm), body_class='archive'),
                 '\n'.join(p.get_post() for p in sorted(
                     self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
                 )),
                 '<p><a href=%s rel=contents>Index</a></p>\n' % save_dir
             ]))
         return file_name
+
+    def header(self, title='', body_class='', subtitle='', avatar=''):
+        root_rel = '' if body_class == 'index' else save_dir
+        css_rel = root_rel + (custom_css if have_custom_css else backup_css)
+        if body_class:
+            body_class = ' class=' + body_class
+        h = u'''<!DOCTYPE html>
+
+<meta charset=%s>
+<title>%s</title>
+<link rel=stylesheet href=%s>
+
+<body%s>
+
+''' % (encoding, self.title, css_rel, body_class)
+        if avatar:
+            h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, avatar)
+        if title:
+            h += u'<h1>%s</h1>\n' % title
+        if subtitle:
+            h += u'<p class=subtitle>%s</p>\n' % subtitle
+        return h
 
     def backup(self, account):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -352,7 +352,7 @@ class TumblrBackup:
         self.subtitle = unicode(tumblelog)
 
         # use the meta information to create a HTML header
-        TumblrPost.post_header = header(self.title, body_class='post')
+        TumblrPost.post_header = self.header(body_class='post')
 
         # find the total number of posts
         total_posts = options.count or int(soup.posts('total'))
