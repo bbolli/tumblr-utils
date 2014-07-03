@@ -354,8 +354,8 @@ class TumblrBackup:
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
 
-        # find the total number of posts
-        total_posts = options.count or int(soup.posts('total'))
+        # find the post number limit to back up
+        last_post = options.count + options.skip if options.count else int(soup.posts('total'))
 
         def _backup(posts):
             for p in sorted(posts, key=lambda x: long(x('id')), reverse=True):
@@ -381,10 +381,10 @@ class TumblrBackup:
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
         i = options.skip
-        while i < total_posts:
+        while i < last_post:
             # find the upper bound
-            j = min(i + MAX_POSTS, total_posts)
-            log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, total_posts))
+            j = min(i + MAX_POSTS, last_post)
+            log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
 
             soup = xmlparse(base, j - i, i)
             if soup is None:
@@ -682,7 +682,9 @@ if __name__ == '__main__':
         help="do a full backup at HOUR hours, otherwise do an incremental backup"
         " (useful for cron jobs)"
     )
-    parser.add_option('-n', '--count', type='int', help="save only COUNT posts")
+    parser.add_option('-n', '--count', type='int', default=0,
+        help="save only COUNT posts"
+    )
     parser.add_option('-s', '--skip', type='int', default=0,
         help="skip the first SKIP posts"
     )
