@@ -245,14 +245,14 @@ class TumblrBackup:
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
-            idx.write('<p>Generated on %s.</p>\n' % strftime('%x %X'))
+            idx.write(u'<p>Generated on %s.</p>\n' % strftime('%x %X'))
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
         for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
             month_name = self.save_month(year, month, tm)
-            idx.write('    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
+            idx.write(u'    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
                 archive_dir, month_name, len(self.index[year][month]),
                 strftime('%B', tm)
             ))
@@ -465,7 +465,7 @@ class TumblrPost:
                 src = unicode(p['photo-url'])
                 append(escape(self.get_image_url(src, p().get('offset'))), u'<img alt="" src="%s">')
                 if url:
-                    content[-1] = '<a href="%s">%s</a>' % (url, content[-1])
+                    content[-1] = u'<a href="%s">%s</a>' % (url, content[-1])
                 content[-1] = '<p>' + content[-1] + '</p>'
                 if p._name == 'photo' and p('caption'):
                     append(p('caption'), u'<p>%s</p>')
@@ -509,7 +509,7 @@ class TumblrPost:
         elif self.typ == 'conversation':
             self.title = get_try('conversation-title')
             append(
-                '<br>\n'.join(escape(unicode(l)) for l in post.conversation['line':]),
+                u'<br>\n'.join(escape(unicode(l)) for l in post.conversation['line':]),
                 u'<p>%s</p>'
             )
 
@@ -569,12 +569,12 @@ class TumblrPost:
 
     def get_post(self):
         """returns this post in HTML"""
-        post = self.post_header + '<article class=%s id=p-%s>\n' % (self.typ, self.ident)
-        post += '<p class=meta><span class=date>%s</span>\n' % strftime('%x %X', self.tm)
+        post = self.post_header + u'<article class=%s id=p-%s>\n' % (self.typ, self.ident)
+        post += u'<p class=meta><span class=date>%s</span>\n' % strftime('%x %X', self.tm)
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
         post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
         if self.title:
-            post += '<h2>%s</h2>\n' % self.title
+            post += u'<h2>%s</h2>\n' % self.title
         post += self.content
         if self.tags:
             post += u'\n<p class=tags>%s</p>' % u''.join(self.tag_link(t) for t in self.tags)
