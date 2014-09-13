@@ -42,11 +42,13 @@ DEBUG = False
 
 HOST = 'www.tumblr.com'
 
+
 def tumble(links):
     auth = netrc.netrc().authenticators(HOST)
     if auth is not None:
         auth = {'email': auth[0], 'password': auth[2]}
         return [post(auth, e) for e in links]
+
 
 def post(auth, link):
     ''

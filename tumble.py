@@ -99,7 +99,7 @@ class Tumble:
                 data['date'] = pub.isoformat(' ')
                 break
 
-        if not '.' in self.blog:
+        if '.' not in self.blog:
             self.blog += '.tumblr.com'
         url = URL_FMT % self.blog
         if self.post_id:
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     try:
         t = Tumble(os.path.expanduser(CONFIG))
     except:
-        sys.stderr.write('Config file %s not found or not readable\n' % CONFIG);
+        sys.stderr.write('Config file %s not found or not readable\n' % CONFIG)
         sys.exit(1)
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hb:e:d')

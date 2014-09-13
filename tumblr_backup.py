@@ -37,6 +37,7 @@ TAG_FMT = '#%s'
 # Named placeholders that will be replaced: domain, tag
 TAGLINK_FMT = 'http://%(domain)s/tagged/%(tag)s'
 
+
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
 def test_jpg(h, f):
@@ -76,12 +77,14 @@ except locale.Error:
 encoding = 'utf-8'
 time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
+
 def log(account, s):
     if not options.quiet:
         if account:
             sys.stdout.write('%s: ' % account)
         sys.stdout.write(s[:-1] + ' ' * 20 + s[-1:])
         sys.stdout.flush()
+
 
 def mkdir(dir, recursive=False):
     if not os.path.exists(dir):
@@ -90,26 +93,32 @@ def mkdir(dir, recursive=False):
         else:
             os.mkdir(dir)
 
+
 def path_to(*parts):
     return join(save_folder, *parts)
+
 
 def open_file(open_fn, parts):
     if len(parts) > 1:
         mkdir(path_to(*parts[:-1]), (len(parts) > 2))
     return open_fn(path_to(*parts))
 
+
 def open_text(*parts):
     return open_file(
         lambda f: codecs.open(f, 'w', encoding, 'xmlcharrefreplace'), parts
     )
 
+
 def open_image(*parts):
     return open_file(lambda f: open(f, 'wb'), parts)
+
 
 def strftime(format, t=None):
     if t is None:
         t = time.localtime()
     return time.strftime(format, t).decode(time_encoding)
+
 
 def get_api_url(account):
     """construct the tumblr API URL"""
@@ -126,16 +135,21 @@ def get_api_url(account):
         urllib2.install_opener(opener)
     return base
 
+
 def set_period():
     """Prepare the period start and end timestamps"""
-    i = 0; tm = [int(options.period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
+    i = 0
+    tm = [int(options.period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
     if len(options.period) >= 6:
-        i = 1; tm[1] = int(options.period[4:6])
+        i = 1
+        tm[1] = int(options.period[4:6])
     if len(options.period) == 8:
-        i = 2; tm[2] = int(options.period[6:8])
+        i = 2
+        tm[2] = int(options.period[6:8])
     options.p_start = time.mktime(tm)
     tm[i] += 1
     options.p_stop = time.mktime(tm)
+
 
 def xmlparse(base, count, start=0):
     params = {'num': count}
@@ -162,6 +176,7 @@ def xmlparse(base, count, start=0):
         return None
     return doc if doc._name == 'tumblr' else None
 
+
 def add_exif(image_name, tags):
     try:
         metadata = pyexiv2.ImageMetadata(image_name)
@@ -183,6 +198,7 @@ def add_exif(image_name, tags):
     except:
         sys.stderr.write('Writing metadata failed for tags: %s in: %s\n' % (tags, image_name))
 
+
 def save_style():
     with open_text(backup_css) as css:
         css.write('''\
@@ -196,6 +212,7 @@ body > img { float: right; }
 .tags, .tags a { font-size: small; color: #999; text-decoration: none; }
 ''')
 
+
 def get_avatar():
     try:
         resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
@@ -205,6 +222,7 @@ def get_avatar():
     avatar_file = avatar_base + '.' + imghdr.what(None, avatar_data[:32])
     with open_image(theme_dir, avatar_file) as f:
         f.write(avatar_data)
+
 
 def get_style():
     """Get the blog's CSS by brute-forcing it from the home page.
@@ -369,7 +387,7 @@ class TumblrBackup:
                         return False
                 if options.tags and not options.tags & post.tags_lower:
                     continue
-                if options.type and not post.typ in options.type:
+                if options.type and post.typ not in options.type:
                     continue
                 post.generate_content()
                 if post.error:
@@ -531,8 +549,8 @@ class TumblrPost:
             return u'%s%s/%s' % (save_dir, image_dir, fn)
 
         def _addexif(fn):
-           if options.exif and fn.endswith('.jpg'):
-               add_exif(fn, set(self.tags))
+            if options.exif and fn.endswith('.jpg'):
+                add_exif(fn, set(self.tags))
 
         # determine the image file name
         offset = '_' + offset if offset else ''
@@ -596,10 +614,11 @@ class TumblrPost:
             f = open_text(post_dir, self.file_name)
         with f:
             f.write(self.get_post())
-        os.utime(f.stream.name, (self.date, self.date)) # XXX: is f.stream.name portable?
+        os.utime(f.stream.name, (self.date, self.date))  # XXX: is f.stream.name portable?
         if options.xml:
             with open_text(xml_dir, self.ident + '.xml') as f:
                 f.write(self.xml_content)
+
 
 class BlosxomPost(TumblrPost):
 
@@ -608,11 +627,12 @@ class BlosxomPost(TumblrPost):
 
     def get_post(self):
         """returns this post as a Blosxom post"""
-        post = self.title + '\nmeta-id: _' + self.ident + '\nmeta-url: ' + self.url
+        post = self.title + '\nmeta-id: p-' + self.ident + '\nmeta-url: ' + self.url
         if self.tags:
             post += '\nmeta-tags: ' + ' '.join(t.replace(' ', '+') for t in self.tags)
         post += '\n\n' + self.content
         return post
+
 
 class LocalPost:
 
@@ -648,7 +668,9 @@ if __name__ == '__main__':
         csv_callback(option, opt, value.lower(), parser)
 
     def type_callback(option, opt, value, parser):
-        value = value.replace('text', 'regular').replace('chat', 'conversation').replace('photoset', 'photo')
+        value = value.replace('text', 'regular')
+        value = value.replace('chat', 'conversation')
+        value = value.replace('photoset', 'photo')
         csv_callback(option, opt, value, parser)
 
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
