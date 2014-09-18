@@ -599,7 +599,8 @@ class TumblrPost:
         post += '\n</article>\n'
         return post
 
-    def tag_link(self, tag):
+    @staticmethod
+    def tag_link(tag):
         tag_disp = escape(TAG_FMT % tag)
         if not TAGLINK_FMT:
             return tag_disp + ' '
