@@ -740,16 +740,11 @@ if __name__ == '__main__':
     if options.period:
         try:
             pformat = {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[options.period]
+            options.period = time.strftime(pformat)
         except KeyError:
             options.period = options.period.replace('-', '')
-            try:
-                int(options.period)  # must be numeric
-            except ValueError:
-                options.period = ''  # trigger the length check below
-        else:
-            options.period = time.strftime(pformat)
-        if len(options.period) not in (4, 6, 8):
-            parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
+            if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
+                parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
     if not args:
         args = DEFAULT_BLOGS
