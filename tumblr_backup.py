@@ -3,20 +3,20 @@
 
 # standard Python library imports
 from __future__ import with_statement
+import codecs
+from collections import defaultdict
+from glob import glob
+import imghdr
+import locale
 import os
 from os.path import join, split, splitext
+import re
 import sys
+import time
 import urllib
 import urllib2
-from xml.sax.saxutils import escape
 from xml.sax import SAXException
-import codecs
-import imghdr
-from collections import defaultdict
-import time
-import locale
-from glob import glob
-import re
+from xml.sax.saxutils import escape
 
 # extra required packages
 import xmltramp
