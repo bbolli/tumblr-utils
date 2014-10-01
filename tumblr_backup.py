@@ -481,10 +481,9 @@ class TumblrPost:
             url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
                 src = unicode(p['photo-url'])
-                if options.skip_images:
-                    append(u'<img alt="" src="%s">' % (escape(src)))
-                else:
-                    append(escape(self.get_image_url(src, p().get('offset'))), u'<img alt="" src="%s">')
+                if not options.skip_images:
+                    src = self.get_image_url(src, p().get('offset'))
+                append(escape(src), u'<img alt="" src="%s">')
                 if url:
                     content[-1] = u'<a href="%s">%s</a>' % (url, content[-1])
                 content[-1] = '<p>' + content[-1] + '</p>'
@@ -693,7 +692,7 @@ if __name__ == '__main__':
         help="incremental backup mode"
     )
     parser.add_option('-k', '--skip-images', action='store_true',
-        help="Do not save images"
+        help="do not save images; link to Tumblr instead"
     )
     parser.add_option('-x', '--xml', action='store_true',
         help="save the original XML source"
