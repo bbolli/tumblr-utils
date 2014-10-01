@@ -571,11 +571,11 @@ class TumblrPost:
         # download the image data
         try:
             image_response = urllib2.urlopen(image_url)
+            image_data = image_response.read()
+            image_response.close()
         except urllib2.HTTPError:
             # return the original URL
             return image_url
-        image_data = image_response.read()
-        image_response.close()
         # determine the file type if it's unknown
         if '.' not in image_filename:
             image_type = imghdr.what(None, image_data[:32])
