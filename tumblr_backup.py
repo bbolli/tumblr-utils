@@ -470,10 +470,8 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
-            if options.dirs:
-                global image_dir, image_folder
-                image_dir = join(post_dir, self.ident)
-                image_folder = path_to(post_dir, self.ident)
+            self.image_dir = join(post_dir, self.ident) if options.dirs else image_dir
+            self.image_folder = path_to(self.image_dir)
             url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
                 src = unicode(p['photo-url'])
@@ -548,7 +546,7 @@ class TumblrPost:
         the original URL in case of download errors."""
 
         def _url(fn):
-            return u'%s%s/%s' % (save_dir, image_dir, fn)
+            return u'%s%s/%s' % (save_dir, self.image_dir, fn)
 
         def _addexif(fn):
             if options.exif and fn.endswith('.jpg'):
@@ -564,7 +562,7 @@ class TumblrPost:
             image_filename = image_url.split('/')[-1]
         glob_filter = '' if '.' in image_filename else '.*'
         # check if a file with this name already exists
-        image_glob = glob(join(image_folder, image_filename + glob_filter))
+        image_glob = glob(join(self.image_folder, image_filename + glob_filter))
         if image_glob:
             _addexif(image_glob[0])
             return _url(split(image_glob[0])[1])
@@ -582,7 +580,7 @@ class TumblrPost:
             if image_type:
                 image_filename += '.' + image_type.replace('jpeg', 'jpg')
         # save the image
-        with open_image(image_dir, image_filename) as image_file:
+        with open_image(self.image_dir, image_filename) as image_file:
             image_file.write(image_data)
         _addexif(join(image_folder, image_filename))
         return _url(image_filename)
