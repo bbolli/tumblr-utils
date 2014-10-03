@@ -389,10 +389,7 @@ class TumblrBackup:
                     continue
                 if options.type and post.typ not in options.type:
                     continue
-                post.generate_content()
-                if post.error:
-                    sys.stderr.write('%s%s\n' % (post.error, 50 * ' '))
-                post.save_post()
+                post.save_content()
                 self.post_count += 1
             return True
 
@@ -447,9 +444,8 @@ class TumblrPost:
             self.tags_lower = set(t.lower() for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
-        self.error = None
 
-    def generate_content(self):
+    def save_content(self):
         """generates the content for this post"""
         post = self.post
         content = []
@@ -534,7 +530,9 @@ class TumblrPost:
             )
 
         else:
-            self.error = u"Unknown post type '%s' in post #%s" % (self.typ, self.ident)
+            sys.stderr.write(
+                u"Unknown post type '%s' in post #%s%-50s\n" % (self.typ, self.ident, ' ')
+            )
             append(escape(self.xml_content), u'<pre>%s</pre>')
 
         self.content = '\n'.join(content)
@@ -542,6 +540,8 @@ class TumblrPost:
         # fix wrongly nested HTML tags
         for p in ('<p>(<(%s)>)', '(</(%s)>)</p>'):
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
+
+        self.save_post()
 
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
