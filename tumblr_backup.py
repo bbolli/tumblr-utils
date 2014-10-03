@@ -5,13 +5,16 @@
 from __future__ import with_statement
 import codecs
 from collections import defaultdict
+import errno
 from glob import glob
 import imghdr
 import locale
 import os
 from os.path import join, split, splitext
+import Queue
 import re
 import sys
+import threading
 import time
 import urllib
 import urllib2
@@ -88,10 +91,14 @@ def log(account, s):
 
 def mkdir(dir, recursive=False):
     if not os.path.exists(dir):
-        if recursive:
-            os.makedirs(dir)
-        else:
-            os.mkdir(dir)
+        try:
+            if recursive:
+                os.makedirs(dir)
+            else:
+                os.mkdir(dir)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
 
 
 def path_to(*parts):
@@ -375,6 +382,9 @@ class TumblrBackup:
         # find the post number limit to back up
         last_post = options.count + options.skip if options.count else int(soup.posts('total'))
 
+        # start the thread pool
+        backup_pool = ThreadPool()
+
         def _backup(posts):
             for p in sorted(posts, key=lambda x: long(x('id')), reverse=True):
                 post = post_class(p)
@@ -389,7 +399,7 @@ class TumblrBackup:
                     continue
                 if options.type and post.typ not in options.type:
                     continue
-                post.save_content()
+                backup_pool.add_work(post.save_content)
                 self.post_count += 1
             return True
 
@@ -412,6 +422,10 @@ class TumblrBackup:
 
             i += len(posts)
 
+        # wait until all posts have been saved
+        backup_pool.wait()
+
+        # postprocessing
         if not options.blosxom and self.post_count:
             get_avatar()
             get_style()
@@ -657,6 +671,34 @@ class LocalPost:
 
     def get_post(self):
         return u''.join(self.lines)
+
+
+class ThreadPool:
+
+    def __init__(self, count=20):
+        self.queue = Queue.Queue()
+        self.quit = threading.Event()
+        self.threads = [threading.Thread(target=self.handler) for _ in range(count)]
+        for t in self.threads:
+            t.start()
+
+    def add_work(self, work):
+        self.queue.put(work)
+
+    def wait(self):
+        self.quit.set()
+        self.queue.join()
+
+    def handler(self):
+        while True:
+            try:
+                work = self.queue.get(True, 0.1)
+            except Queue.Empty:
+                if self.quit.is_set():
+                    break
+            else:
+                work()
+                self.queue.task_done()
 
 
 if __name__ == '__main__':
