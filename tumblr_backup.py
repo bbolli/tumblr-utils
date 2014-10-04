@@ -680,6 +680,7 @@ class ThreadPool:
         self.quit = threading.Event()
         self.threads = [threading.Thread(target=self.handler) for _ in range(count)]
         for t in self.threads:
+            t.daemon = True
             t.start()
 
     def add_work(self, work):
@@ -799,7 +800,10 @@ if __name__ == '__main__':
         parser.error("--exif: module 'pyexif2' is not installed")
 
     tb = TumblrBackup()
-    for account in args:
-        tb.backup(account)
+    try:
+        for account in args:
+            tb.backup(account)
+    except KeyboardInterrupt:
+        log('', "\nUser interrupt\n")
 
     sys.exit(0 if tb.total_count else 1)
