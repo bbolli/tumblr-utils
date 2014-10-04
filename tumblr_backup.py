@@ -5,13 +5,16 @@
 from __future__ import with_statement
 import codecs
 from collections import defaultdict
+import errno
 from glob import glob
 import imghdr
 import locale
 import os
 from os.path import join, split, splitext
+import Queue
 import re
 import sys
+import threading
 import time
 import urllib
 import urllib2
@@ -88,10 +91,14 @@ def log(account, s):
 
 def mkdir(dir, recursive=False):
     if not os.path.exists(dir):
-        if recursive:
-            os.makedirs(dir)
-        else:
-            os.mkdir(dir)
+        try:
+            if recursive:
+                os.makedirs(dir)
+            else:
+                os.mkdir(dir)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
 
 
 def path_to(*parts):
@@ -375,6 +382,9 @@ class TumblrBackup:
         # find the post number limit to back up
         last_post = options.count + options.skip if options.count else int(soup.posts('total'))
 
+        # start the thread pool
+        backup_pool = ThreadPool()
+
         def _backup(posts):
             for p in sorted(posts, key=lambda x: long(x('id')), reverse=True):
                 post = post_class(p)
@@ -389,10 +399,7 @@ class TumblrBackup:
                     continue
                 if options.type and post.typ not in options.type:
                     continue
-                post.generate_content()
-                if post.error:
-                    sys.stderr.write('%s%s\n' % (post.error, 50 * ' '))
-                post.save_post()
+                backup_pool.add_work(post.save_content)
                 self.post_count += 1
             return True
 
@@ -415,6 +422,10 @@ class TumblrBackup:
 
             i += len(posts)
 
+        # wait until all posts have been saved
+        backup_pool.wait()
+
+        # postprocessing
         if not options.blosxom and self.post_count:
             get_avatar()
             get_style()
@@ -447,9 +458,8 @@ class TumblrPost:
             self.tags_lower = set(t.lower() for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
-        self.error = None
 
-    def generate_content(self):
+    def save_content(self):
         """generates the content for this post"""
         post = self.post
         content = []
@@ -474,10 +484,8 @@ class TumblrPost:
             append_try('regular-body')
 
         elif self.typ == 'photo':
-            if options.dirs:
-                global image_dir, image_folder
-                image_dir = join(post_dir, self.ident)
-                image_folder = path_to(post_dir, self.ident)
+            self.image_dir = join(post_dir, self.ident) if options.dirs else image_dir
+            self.image_folder = path_to(self.image_dir)
             url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
                 src = unicode(p['photo-url'])
@@ -534,7 +542,9 @@ class TumblrPost:
             )
 
         else:
-            self.error = u"Unknown post type '%s' in post #%s" % (self.typ, self.ident)
+            sys.stderr.write(
+                u"Unknown post type '%s' in post #%s%-50s\n" % (self.typ, self.ident, ' ')
+            )
             append(escape(self.xml_content), u'<pre>%s</pre>')
 
         self.content = '\n'.join(content)
@@ -543,12 +553,14 @@ class TumblrPost:
         for p in ('<p>(<(%s)>)', '(</(%s)>)</p>'):
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
+        self.save_post()
+
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
         the original URL in case of download errors."""
 
         def _url(fn):
-            return u'%s%s/%s' % (save_dir, image_dir, fn)
+            return u'%s%s/%s' % (save_dir, self.image_dir, fn)
 
         def _addexif(fn):
             if options.exif and fn.endswith('.jpg'):
@@ -564,7 +576,7 @@ class TumblrPost:
             image_filename = image_url.split('/')[-1]
         glob_filter = '' if '.' in image_filename else '.*'
         # check if a file with this name already exists
-        image_glob = glob(join(image_folder, image_filename + glob_filter))
+        image_glob = glob(join(self.image_folder, image_filename + glob_filter))
         if image_glob:
             _addexif(image_glob[0])
             return _url(split(image_glob[0])[1])
@@ -582,7 +594,7 @@ class TumblrPost:
             if image_type:
                 image_filename += '.' + image_type.replace('jpeg', 'jpg')
         # save the image
-        with open_image(image_dir, image_filename) as image_file:
+        with open_image(self.image_dir, image_filename) as image_file:
             image_file.write(image_data)
         _addexif(join(image_folder, image_filename))
         return _url(image_filename)
@@ -659,6 +671,34 @@ class LocalPost:
 
     def get_post(self):
         return u''.join(self.lines)
+
+
+class ThreadPool:
+
+    def __init__(self, count=20):
+        self.queue = Queue.Queue()
+        self.quit = threading.Event()
+        self.threads = [threading.Thread(target=self.handler) for _ in range(count)]
+        for t in self.threads:
+            t.start()
+
+    def add_work(self, work):
+        self.queue.put(work)
+
+    def wait(self):
+        self.quit.set()
+        self.queue.join()
+
+    def handler(self):
+        while True:
+            try:
+                work = self.queue.get(True, 0.1)
+            except Queue.Empty:
+                if self.quit.is_set():
+                    break
+            else:
+                work()
+                self.queue.task_done()
 
 
 if __name__ == '__main__':
