@@ -70,9 +70,16 @@ blog_name = ''
 post_ext = '.html'
 have_custom_css = False
 
+POST_TYPES = (
+    'text', 'quote', 'link', 'answer', 'video', 'audio', 'photo', 'chat'
+)
+POST_TYPES_SET = frozenset(POST_TYPES)
+
 MAX_POSTS = 50
 
-# bb-tumbpr-backup API key
+HTTP_TIMEOUT = 30
+
+# bb-tumblr-backup API key
 API_KEY = '8YUsKJvcJxo2MDwmWMDiXZGuMuIbeCwuQGP5ZHSEA4jBJPMnJT'
 
 # ensure the right date/time format
@@ -161,15 +168,15 @@ def apiparse(base, count, start=0):
     url = base + '?' + urllib.urlencode(params)
     for _ in range(10):
         try:
-            resp = urllib2.urlopen(url)
-        except (urllib2.URLError, urllib2.HTTPError) as e:
+            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
+            data = resp.read()
+        except (urllib2.URLError, IOError) as e:
             sys.stderr.write('%s getting %s\n' % (e, url))
             continue
         if resp.info().gettype() == 'application/json':
             break
     else:
         return None
-    data = resp.read()
     try:
         doc = json.loads(data)
     except ValueError as e:
@@ -218,7 +225,9 @@ body > img { float: right; }
 
 def get_avatar():
     try:
-        resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
+        resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name,
+            timeout=HTTP_TIMEOUT
+        )
         avatar_data = resp.read()
     except:
         return
@@ -232,7 +241,7 @@ def get_style():
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
     try:
-        resp = urllib2.urlopen('http://%s/' % blog_name)
+        resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT)
         page_data = resp.read()
     except:
         return
@@ -376,7 +385,9 @@ class TumblrBackup:
         TumblrPost.post_header = self.header(body_class='post')
 
         # find the post number limit to back up
-        last_post = options.count + options.skip if options.count else blog['posts']
+        last_post = blog['posts']
+        if options.count:
+            last_post = min(last_post, options.count + options.skip)
 
         # start the thread pool
         backup_pool = ThreadPool()
@@ -401,6 +412,7 @@ class TumblrBackup:
 
         # Get the JSON entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
+        last_batch = MAX_POSTS
         i = options.skip
         while i < last_post:
             # find the upper bound
@@ -409,14 +421,15 @@ class TumblrBackup:
 
             soup = apiparse(base, j - i, i)
             if soup is None:
-                i += 50         # try the next batch
+                i += last_batch     # try the next batch
                 continue
 
             posts = soup['response']['posts']
             if not _backup(posts):
                 break
 
-            i += len(posts)
+            last_batch = len(posts)
+            i += last_batch
 
         # wait until all posts have been saved
         backup_pool.wait()
@@ -562,10 +575,10 @@ class TumblrPost:
             return _url(split(image_glob[0])[1])
         # download the image data
         try:
-            image_response = urllib2.urlopen(image_url)
+            image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
             image_data = image_response.read()
             image_response.close()
-        except urllib2.HTTPError:
+        except:
             # return the original URL
             return image_url
         # determine the file type if it's unknown
@@ -655,10 +668,10 @@ class LocalPost:
 
 class ThreadPool:
 
-    def __init__(self, count=20):
-        self.queue = Queue.Queue()
+    def __init__(self, thread_count=20, max_queue=1000):
+        self.queue = Queue.Queue(max_queue)
         self.quit = threading.Event()
-        self.threads = [threading.Thread(target=self.handler) for _ in range(count)]
+        self.threads = [threading.Thread(target=self.handler) for _ in range(thread_count)]
         for t in self.threads:
             t.daemon = True
             t.start()
@@ -678,6 +691,8 @@ class ThreadPool:
                 if self.quit.is_set():
                     break
             else:
+                if self.quit.is_set() and self.queue.qsize() % MAX_POSTS == 0:
+                    log(account, "%d remaining posts to save\r" % self.queue.qsize())
                 work()
                 self.queue.task_done()
 
@@ -692,10 +707,10 @@ if __name__ == '__main__':
         csv_callback(option, opt, value.lower(), parser)
 
     def type_callback(option, opt, value, parser):
-        value = value.replace('text', 'regular')
-        value = value.replace('chat', 'conversation')
-        value = value.replace('photoset', 'photo')
-        csv_callback(option, opt, value, parser)
+        types = set(value.lower().split(','))
+        if not types <= POST_TYPES_SET:
+            parser.error("--type: invalid post types")
+        setattr(parser.values, option.dest, types)
 
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
@@ -748,7 +763,8 @@ if __name__ == '__main__':
         " case-insensitive)"
     )
     parser.add_option('-T', '--type', type='string', action='callback',
-        callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
+        callback=type_callback, help="save only posts of type TYPE"
+        " (comma-separated values from %s)" % ', '.join(POST_TYPES)
     )
     parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
         default='o', metavar='FMT',
