@@ -679,10 +679,10 @@ class LocalPost:
 
 class ThreadPool:
 
-    def __init__(self, count=20):
-        self.queue = Queue.Queue()
+    def __init__(self, thread_count=20, max_queue=1000):
+        self.queue = Queue.Queue(max_queue)
         self.quit = threading.Event()
-        self.threads = [threading.Thread(target=self.handler) for _ in range(count)]
+        self.threads = [threading.Thread(target=self.handler) for _ in range(thread_count)]
         for t in self.threads:
             t.daemon = True
             t.start()
@@ -702,6 +702,8 @@ class ThreadPool:
                 if self.quit.is_set():
                     break
             else:
+                if self.quit.is_set() and self.queue.qsize() % MAX_POSTS == 0:
+                    log(account, "%d remaining posts to save\r" % self.queue.qsize())
                 work()
                 self.queue.task_done()
 
