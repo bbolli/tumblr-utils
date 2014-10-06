@@ -384,7 +384,9 @@ class TumblrBackup:
         TumblrPost.post_header = self.header(body_class='post')
 
         # find the post number limit to back up
-        last_post = options.count + options.skip if options.count else int(soup.posts('total'))
+        last_post = int(soup.posts('total'))
+        if options.count:
+            last_post = min(last_post, options.count + options.skip)
 
         # start the thread pool
         backup_pool = ThreadPool()
