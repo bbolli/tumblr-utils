@@ -416,6 +416,7 @@ class TumblrBackup:
 
         # Get the XML entries from the API, which we can only do for max 50 posts at once.
         # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
+        last_batch = MAX_POSTS
         i = options.skip
         while i < last_post:
             # find the upper bound
@@ -424,14 +425,15 @@ class TumblrBackup:
 
             soup = xmlparse(base, j - i, i)
             if soup is None:
-                i += 50         # try the next batch
+                i += last_batch     # try the next batch
                 continue
 
             posts = soup.posts['post':]
             if not _backup(posts):
                 break
 
-            i += len(posts)
+            last_batch = len(posts)
+            i += last_batch
 
         # wait until all posts have been saved
         backup_pool.wait()
