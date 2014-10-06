@@ -70,6 +70,11 @@ blog_name = ''
 post_ext = '.html'
 have_custom_css = False
 
+POST_TYPES = (
+    'text', 'quote', 'link', 'answer', 'video', 'audio', 'photo', 'chat'
+)
+POST_TYPES_SET = frozenset(POST_TYPES)
+
 MAX_POSTS = 50
 
 HTTP_TIMEOUT = 30
@@ -720,9 +725,12 @@ if __name__ == '__main__':
         csv_callback(option, opt, value.lower(), parser)
 
     def type_callback(option, opt, value, parser):
+        value = value.lower()
+        types = set(value.split(','))
+        if not types <= POST_TYPES_SET:
+            parser.error("--type: invalid post types")
         value = value.replace('text', 'regular')
         value = value.replace('chat', 'conversation')
-        value = value.replace('photoset', 'photo')
         csv_callback(option, opt, value, parser)
 
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
@@ -776,7 +784,8 @@ if __name__ == '__main__':
         " case-insensitive)"
     )
     parser.add_option('-T', '--type', type='string', action='callback',
-        callback=type_callback, help="save only posts of type TYPE (comma-separated values)"
+        callback=type_callback, help="save only posts of type TYPE"
+        " (comma-separated values from %s)" % ', '.join(POST_TYPES)
     )
     parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
         default='o', metavar='FMT',
