@@ -72,6 +72,8 @@ have_custom_css = False
 
 MAX_POSTS = 50
 
+HTTP_TIMEOUT = 30
+
 # ensure the right date/time format
 try:
     locale.setlocale(locale.LC_TIME, '')
@@ -165,15 +167,15 @@ def xmlparse(base, count, start=0):
     url = base + '?' + urllib.urlencode(params)
     for _ in range(10):
         try:
-            resp = urllib2.urlopen(url)
-        except (urllib2.URLError, urllib2.HTTPError) as e:
+            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
+            xml = resp.read()
+        except (urllib2.URLError, IOError) as e:
             sys.stderr.write('%s getting %s\n' % (e, url))
             continue
         if resp.info().gettype() == 'text/xml':
             break
     else:
         return None
-    xml = resp.read()
     try:
         doc = xmltramp.parse(xml)
     except SAXException as e:
@@ -222,7 +224,9 @@ body > img { float: right; }
 
 def get_avatar():
     try:
-        resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
+        resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name,
+            timeout=HTTP_TIMEOUT
+        )
         avatar_data = resp.read()
     except:
         return
@@ -236,7 +240,7 @@ def get_style():
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
     try:
-        resp = urllib2.urlopen('http://%s/' % blog_name)
+        resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT)
         page_data = resp.read()
     except:
         return
@@ -582,10 +586,10 @@ class TumblrPost:
             return _url(split(image_glob[0])[1])
         # download the image data
         try:
-            image_response = urllib2.urlopen(image_url)
+            image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
             image_data = image_response.read()
             image_response.close()
-        except urllib2.HTTPError:
+        except:
             # return the original URL
             return image_url
         # determine the file type if it's unknown
