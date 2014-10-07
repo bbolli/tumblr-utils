@@ -587,9 +587,11 @@ class TumblrPost:
             image_filename = account + '_' + self.ident + offset
         else:
             image_filename = image_url.split('/')[-1]
-        glob_filter = '' if '.' in image_filename else '.*'
         # check if a file with this name already exists
-        image_glob = glob(join(self.image_folder, image_filename + glob_filter))
+        known_extension = '.' in image_filename[-5:]
+        image_glob = glob(join(self.image_folder, image_filename +
+            ('' if known_extension else '.*')
+        ))
         if image_glob:
             _addexif(image_glob[0])
             return _url(split(image_glob[0])[1])
@@ -602,7 +604,7 @@ class TumblrPost:
             # return the original URL
             return image_url
         # determine the file type if it's unknown
-        if '.' not in image_filename:
+        if not known_extension:
             image_type = imghdr.what(None, image_data[:32])
             if image_type:
                 image_filename += '.' + image_type.replace('jpeg', 'jpg')
