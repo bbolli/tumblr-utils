@@ -220,6 +220,7 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .meta a { text-decoration: none; }
 body > img { float: right; }
 .tags, .tags a { font-size: small; color: #999; text-decoration: none; }
+footer { padding: 1em 0; }
 ''')
 
 
@@ -259,12 +260,17 @@ class TumblrBackup:
 
     def __init__(self):
         self.total_count = 0
+        self.index = defaultdict(lambda: defaultdict(list))
+        self.archives = []
 
     def build_index(self):
         filter = join('*', dir_index) if options.dirs else '*' + post_ext
         for f in glob(path_to(post_dir, filter)):
             post = LocalPost(f)
             self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+        self.archives = sorted(((y, m) for y in self.index for m in self.index[y]),
+            reverse=options.reverse_month
+        )
 
     def save_index(self):
         f = glob(path_to(theme_dir, avatar_base + '.*'))
@@ -289,22 +295,58 @@ class TumblrBackup:
         idx.write('</ul>\n\n')
 
     def save_month(self, year, month, tm):
-        file_name = '%d-%02d' % (year, month)
-        if options.dirs:
-            arch = open_text(archive_dir, file_name, dir_index)
-            file_name += '/'
-        else:
-            file_name += '.html'
-            arch = open_text(archive_dir, file_name)
-        with arch:
-            arch.write('\n\n'.join([
-                self.header(strftime('%B %Y', tm), body_class='archive'),
-                '\n'.join(p.get_post() for p in sorted(
-                    self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month
-                )),
-                '<p><a href=%s rel=contents>Index</a></p>\n' % save_dir
-            ]))
-        return file_name
+        posts = sorted(self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month)
+        posts_month = len(posts)
+        posts_page = options.posts_per_page if options.posts_per_page >= 1 else posts_month
+
+        def pages_per_month(y, m):
+            posts = len(self.index[y][m])
+            return posts / posts_page + bool(posts % posts_page)
+
+        def next_month(direction):
+            i = self.archives.index((year, month))
+            i += -1 if direction else 1
+            if i < 0 or i >= len(self.archives):
+                return 0, 0
+            return self.archives[i]
+
+        pages_month = pages_per_month(year, month)
+        for page, start in enumerate(range(0, posts_month, posts_page), start=1):
+
+            archive = [self.header(strftime('%B %Y', tm), body_class='archive')]
+            archive.extend(p.get_post() for p in posts[start:start + posts_page])
+
+            file_name = '%d-%02d-p%s' % (year, month, page)
+            if options.dirs:
+                base = save_dir + archive_dir + '/'
+                suffix = '/'
+                arch = open_text(archive_dir, file_name, dir_index)
+                file_name += suffix
+            else:
+                base = ''
+                suffix = post_ext
+                file_name += suffix
+                arch = open_text(archive_dir, file_name)
+
+            if page > 1:
+                pp = '%d-%02d-p%s' % (year, month, page - 1)
+            else:
+                py, pm = next_month(not options.reverse_month)
+                pp = '%d-%02d-p%s' % (py, pm, pages_per_month(py, pm)) if py else ''
+                first_file = file_name
+
+            if page < pages_month:
+                np = '%d-%02d-p%s' % (year, month, page + 1)
+            else:
+                ny, nm = next_month(options.reverse_month)
+                np = '%d-%02d-p%s' % (ny, nm, 1) if ny else ''
+
+            archive.append(self.footer(base, pp, np, suffix))
+
+            with arch:
+                arch.write('\n'.join(archive))
+
+        return first_file
 
     def header(self, title='', body_class='', subtitle='', avatar=''):
         root_rel = '' if body_class == 'index' else save_dir
@@ -327,6 +369,16 @@ class TumblrBackup:
         if subtitle:
             h += u'<p class=subtitle>%s</p>\n' % subtitle
         return h
+
+    def footer(self, base, previous_page, next_page, suffix):
+        f = '<footer>'
+        f += '<a href=%s rel=index>Index</a>\n' % save_dir
+        if previous_page:
+            f += '| <a href=%s%s%s rel=prev>Previous</a>\n' % (base, previous_page, suffix)
+        if next_page:
+            f += '| <a href=%s%s%s rel=next>Next</a>\n'% (base, next_page, suffix)
+        f += '</footer>\n'
+        return f
 
     def backup(self, account):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -440,7 +492,6 @@ class TumblrBackup:
             get_style()
             if not have_custom_css:
                 save_style()
-            self.index = defaultdict(lambda: defaultdict(list))
             self.build_index()
             self.save_index()
 
@@ -567,9 +618,11 @@ class TumblrPost:
             image_filename = account + '_' + self.ident + offset
         else:
             image_filename = image_url.split('/')[-1]
-        glob_filter = '' if '.' in image_filename else '.*'
         # check if a file with this name already exists
-        image_glob = glob(join(self.image_folder, image_filename + glob_filter))
+        known_extension = '.' in image_filename[-5:]
+        image_glob = glob(join(self.image_folder, image_filename +
+            ('' if known_extension else '.*')
+        ))
         if image_glob:
             _addexif(image_glob[0])
             return _url(split(image_glob[0])[1])
@@ -582,7 +635,7 @@ class TumblrPost:
             # return the original URL
             return image_url
         # determine the file type if it's unknown
-        if '.' not in image_filename:
+        if not known_extension:
             image_type = imghdr.what(None, image_data[:32])
             if image_type:
                 image_filename += '.' + image_type.replace('jpeg', 'jpg')
@@ -687,7 +740,19 @@ class ThreadPool:
         while True:
             try:
                 work = self.queue.get(True, 0.1)
-            except Queue.Empty:
+            except Exception as e:
+                # Note: this bass-ackwards way of checking for a Queue.Empty
+                # exception was prompted by
+                #    <type 'exceptions.AttributeError'>:
+                #        'NoneType' object has no attribute 'Empty'
+                #    (most likely raised during interpreter shutdown)
+                if Queue is None:
+                    # During interpreter shutdown, Queue gets set to None.
+                    # This means this thread needs to stop.
+                    break
+                if not isinstance(e, Queue.Empty):
+                    # Other exceptions are reraised.
+                    raise
                 if self.quit.is_set():
                     break
             else:
@@ -754,6 +819,9 @@ if __name__ == '__main__':
     )
     parser.add_option('-p', '--period', help="limit the backup to PERIOD"
         " ('y', 'm', 'd' or YYYY[MM[DD]])"
+    )
+    parser.add_option('-N', '--posts-per-page', type='int', default=50,
+        metavar='COUNT', help="set the number of posts per monthly page"
     )
     parser.add_option('-P', '--private', help="password for a private tumblr",
         metavar='PASSWORD'
