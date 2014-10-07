@@ -759,7 +759,19 @@ class ThreadPool:
         while True:
             try:
                 work = self.queue.get(True, 0.1)
-            except Queue.Empty:
+            except Exception as e:
+                # Note: this bass-ackwards way of checking for a Queue.Empty
+                # exception was prompted by
+                #    <type 'exceptions.AttributeError'>:
+                #        'NoneType' object has no attribute 'Empty'
+                #    (most likely raised during interpreter shutdown)
+                if Queue is None:
+                    # During interpreter shutdown, Queue gets set to None.
+                    # This means this thread needs to stop.
+                    break
+                if not isinstance(e, Queue.Empty):
+                    # Other exceptions are reraised.
+                    raise
                 if self.quit.is_set():
                     break
             else:
