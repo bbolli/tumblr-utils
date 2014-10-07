@@ -227,7 +227,14 @@ See [here](https://github.com/bbolli/tumblr-utils/commits/master/tumblr_backup.p
 There are no formal releases so check back often!
 
 
-## 5. Author
+## 5. Acknowledgments
+
+- [bdoms](https://github.com/bdoms/tumblr_backup) for the initial implementation
+- [WyohKnott](https://github.com/WyohKnott) for numerous bug reports and patches
+- [Tumblr](https://www.tumblr.com) for their discontinued backup tool whose
+  output was the inspiration for the styling applied in `tumblr_backup`.
+
+## 6. Author
 
 Beat Bolli `<me+tumblr-utils@drbeat.li>`,
 [http://drbeat.li/py/](http://drbeat.li/py/)
