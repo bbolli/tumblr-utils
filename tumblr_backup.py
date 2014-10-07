@@ -264,6 +264,8 @@ class TumblrBackup:
 
     def __init__(self):
         self.total_count = 0
+        self.index = defaultdict(lambda: defaultdict(list))
+        self.archives = []
 
     def build_index(self):
         filter = join('*', dir_index) if options.dirs else '*' + post_ext
@@ -494,7 +496,6 @@ class TumblrBackup:
             get_style()
             if not have_custom_css:
                 save_style()
-            self.index = defaultdict(lambda: defaultdict(list))
             self.build_index()
             self.save_index()
 
