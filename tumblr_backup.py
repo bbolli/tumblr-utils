@@ -541,7 +541,7 @@ class TumblrPost:
         def append_try(elt, fmt=u'%s'):
             elt = get_try(elt)
             if elt:
-                if not options.skip_images:
+                if options.save_images:
                     elt = re.sub(r'''(?i)(<img [^>]*\bsrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_image, elt
                     )
@@ -559,7 +559,7 @@ class TumblrPost:
             url = escape(get_try('photo-link-url'))
             for p in post.photoset['photo':] if hasattr(post, 'photoset') else [post]:
                 src = unicode(p['photo-url'])
-                if not options.skip_images:
+                if options.save_images:
                     src = self.get_image_url(src, p().get('offset'))
                 append(escape(src), u'<img alt="" src="%s">')
                 if url:
@@ -834,8 +834,8 @@ if __name__ == '__main__':
     parser.add_option('-i', '--incremental', action='store_true',
         help="incremental backup mode"
     )
-    parser.add_option('-k', '--skip-images', action='store_true',
-        help="do not save images; link to Tumblr instead"
+    parser.add_option('-k', '--skip-images', action='store_false', default=True,
+        dest='save_images', help="do not save images; link to Tumblr instead"
     )
     parser.add_option('-x', '--xml', action='store_true',
         help="save the original XML source"
