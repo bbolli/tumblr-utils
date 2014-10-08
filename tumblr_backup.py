@@ -554,7 +554,7 @@ class TumblrPost:
                     content[-1] = u'<a href="%s">%s</a>' % (escape(url), content[-1])
                 content[-1] = '<p>' + content[-1] + '</p>'
                 if p['caption']:
-                    append(o['caption'], u'<p>%s</p>')
+                    append(p['caption'], u'<p>%s</p>')
             append_try('caption')
 
         elif self.typ == 'link':
