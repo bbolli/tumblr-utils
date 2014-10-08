@@ -162,7 +162,7 @@ def set_period():
 
 
 def apiparse(base, count, start=0):
-    params = {'api_key': API_KEY, 'num': count}
+    params = {'api_key': API_KEY, 'limit': count}
     if start > 0:
         params['offset'] = start
     url = base + '?' + urllib.urlencode(params)
