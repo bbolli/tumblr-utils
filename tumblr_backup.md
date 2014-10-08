@@ -3,7 +3,7 @@
 `tumblr_backup.py` is a script that backs up your [Tumblr](http://tumblr.com)
 blog locally.
 
-The backup includes all images from photo and photoset posts. An index links to
+The backup includes all images both from inline text as well as photo posts. An index links to
 monthly pages, which contain all the posts from the respective month with links
 to single post pages. Command line options select which posts to backup and set
 the output format.
@@ -18,7 +18,8 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 1. Download and unzip
    [xmltramp.zip](https://github.com/bbolli/xmltramp/zipball/master).
 2. Install `xmltramp.py` somewhere on your Python path like
-   `/usr/local/lib/python2.6/dist-packages`.
+   `/usr/local/lib/python2.6/dist-packages` or in the same folder as
+   `tumblr_backup.py`.
 3. Download and unzip
    [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
    or clone the Github repo from `git://github.com/bbolli/tumblr-utils.git`.
@@ -168,7 +169,7 @@ backup folder and do a complete backup. Without a custom CSS file,
 `tumblr_backup` saves a default style sheet in `backup.css`. The blog's style
 sheet itself is always saved in `theme/style.css`.
 
-Tumblr saves most image files without extension. This probably saves a few
+Tumblr saves some image files without extension. This probably saves a few
 billion bytes in their database. `tumblr_backup` restores the image extensions.
 If an image is already backed up, it is not downloaded again. If an image is
 re-uploaded/edited, the old image is kept in the backup, but no post links to
