@@ -95,7 +95,7 @@ determine the locale for month names and the date/time format.
 ### Exit code
 
 The exit code is 0 if at least one post has been backed up, 1 if no post has
-been backed up, and 2 on invocation errors.
+been backed up, 2 on invocation errors, or 3 if the backup was interrupted.
 
 
 ## 3. Operation
