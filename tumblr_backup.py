@@ -174,7 +174,7 @@ def xmlparse(base, count, start=0):
         try:
             resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
             xml = resp.read()
-        except (urllib2.URLError, IOError) as e:
+        except IOError as e:
             sys.stderr.write('%s getting %s\n' % (e, url))
             continue
         if resp.info().gettype() == 'text/xml':
@@ -672,7 +672,7 @@ class TumblrPost:
             image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
             image_data = image_response.read()
             image_response.close()
-        except:
+        except IOError:
             return None
         # determine the file type if it's unknown
         if not known_extension:
