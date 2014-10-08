@@ -541,6 +541,9 @@ class TumblrPost:
         def append_try(elt, fmt=u'%s'):
             elt = get_try(elt)
             if elt:
+                elt = re.sub(r'(<img [^\>]*src\s*=\s*["\'])(.*?)(["\'][^\>]*>)',
+                    self.get_inline_url, elt, flags=re.I
+                )
                 append(elt, fmt)
 
         if self.typ == 'regular':
@@ -593,10 +596,7 @@ class TumblrPost:
 
         elif self.typ == 'answer':
             self.title = post.question
-            try:
-                append(post.answer)
-            except AttributeError:
-                pass
+            append_try('answer')
 
         elif self.typ == 'conversation':
             self.title = get_try('conversation-title')
@@ -663,6 +663,43 @@ class TumblrPost:
         with open_image(self.image_dir, image_filename) as image_file:
             image_file.write(image_data)
         _addexif(join(image_folder, image_filename))
+        return _url(image_filename)
+
+    def get_inline_url(self, match):
+        """Saves an inline image if not saved yet. Returns the new URL or
+        the original URL in case of download errors."""
+
+        self.image_dir = join(post_dir, self.ident) if options.dirs else image_dir
+        self.image_folder = path_to(self.image_dir)
+        image_url = match.group(2)
+
+        def _url(fn):
+            return match.group(1) + u'%s%s/%s' % (save_dir, self.image_dir, fn) + match.group(3)
+
+        image_filename = image_url.split('/')[-1]
+        # check if a file with this name already exists
+        known_extension = '.' in image_filename[-5:]
+        image_glob = glob(join(self.image_folder, image_filename +
+            ('' if known_extension else '.*')
+        ))
+        if image_glob:
+            return _url(split(image_glob[0])[1])
+        # download the image data
+        try:
+            image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
+            image_data = image_response.read()
+            image_response.close()
+        except:
+            # return the original URL
+            return match.group(0)
+        # determine the file type if it's unknown
+        if not known_extension:
+            image_type = imghdr.what(None, image_data[:32])
+            if image_type:
+                image_filename += '.' + image_type.replace('jpeg', 'jpg')
+        # save the image
+        with open_image(self.image_dir, image_filename) as image_file:
+            image_file.write(image_data)
         return _url(image_filename)
 
     def get_post(self):
