@@ -307,9 +307,9 @@ class TumblrBackup:
             posts = len(self.index[y][m])
             return posts / posts_page + bool(posts % posts_page)
 
-        def next_month(direction):
+        def next_month(previous):
             i = self.archives.index((year, month))
-            i += -1 if direction else 1
+            i += -1 if previous else 1
             if i < 0 or i >= len(self.archives):
                 return 0, 0
             return self.archives[i]
@@ -335,14 +335,14 @@ class TumblrBackup:
             if page > 1:
                 pp = '%d-%02d-p%s' % (year, month, page - 1)
             else:
-                py, pm = next_month(not options.reverse_month)
+                py, pm = next_month(True)
                 pp = '%d-%02d-p%s' % (py, pm, pages_per_month(py, pm)) if py else ''
                 first_file = file_name
 
             if page < pages_month:
                 np = '%d-%02d-p%s' % (year, month, page + 1)
             else:
-                ny, nm = next_month(options.reverse_month)
+                ny, nm = next_month(False)
                 np = '%d-%02d-p%s' % (ny, nm, 1) if ny else ''
 
             archive.append(self.footer(base, pp, np, suffix))
