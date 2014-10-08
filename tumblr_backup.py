@@ -541,9 +541,10 @@ class TumblrPost:
         def append_try(elt, fmt=u'%s'):
             elt = get_try(elt)
             if elt:
-                elt = re.sub(r'''(?i)(<img [^>]*\bsrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
-                    self.get_inline_image, elt
-                )
+                if not options.skip_images:
+                    elt = re.sub(r'''(?i)(<img [^>]*\bsrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                        self.get_inline_image, elt
+                    )
                 append(elt, fmt)
 
         self.image_dir = join(post_dir, self.ident) if options.dirs else image_dir
