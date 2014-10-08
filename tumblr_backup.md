@@ -234,6 +234,7 @@ There are no formal releases so check back often!
 - [Tumblr](https://www.tumblr.com) for their discontinued backup tool whose
   output was the inspiration for the styling applied in `tumblr_backup`.
 
+
 ## 6. Author
 
 Beat Bolli `<me+tumblr-utils@drbeat.li>`,
