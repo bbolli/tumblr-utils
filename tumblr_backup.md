@@ -90,7 +90,7 @@ determine the locale for month names and the date/time format.
 ### Exit code
 
 The exit code is 0 if at least one post has been backed up, 1 if no post has
-been backed up, and 2 on invocation errors.
+been backed up, 2 on invocation errors, or 3 if the backup was interrupted.
 
 
 ## 3. Operation
@@ -169,6 +169,13 @@ billion bytes in their database. `tumblr_backup` restores the image extensions.
 If an image is already backed up, it is not downloaded again. If an image is
 re-uploaded/edited, the old image is kept in the backup, but no post links to
 it. The format of the image file names can be selected with the `-I` option.
+
+It must be noted that saved inline images (from non-photo posts) keep their
+name. This means that only the first image with any given name will be saved;
+the others with the same name will point to the first one.
+
+The download of images can be disabled with option `-k`. In this case, the
+image URLs will point to the original location.
 
 With option `-e`, IPTC keyword tags can be added to image files. There are
 three possibilities:

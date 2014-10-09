@@ -170,7 +170,7 @@ def apiparse(base, count, start=0):
         try:
             resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
             data = resp.read()
-        except (urllib2.URLError, IOError) as e:
+        except IOError as e:
             sys.stderr.write('%s getting %s\n' % (e, url))
             continue
         if resp.info().gettype() == 'application/json':
@@ -441,9 +441,6 @@ class TumblrBackup:
         if options.count:
             last_post = min(last_post, options.count + options.skip)
 
-        # start the thread pool
-        backup_pool = ThreadPool()
-
         def _backup(posts):
             for p in sorted(posts, key=lambda x: x['id'], reverse=True):
                 post = post_class(p)
@@ -462,26 +459,33 @@ class TumblrBackup:
                 self.post_count += 1
             return True
 
-        # Get the JSON entries from the API, which we can only do for max 50 posts at once.
-        # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
-        last_batch = MAX_POSTS
-        i = options.skip
-        while i < last_post:
-            # find the upper bound
-            j = min(i + MAX_POSTS, last_post)
-            log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
+        # start the thread pool
+        backup_pool = ThreadPool()
+        try:
+            # Get the JSON entries from the API, which we can only do for max 50 posts at once.
+            # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
+            last_batch = MAX_POSTS
+            i = options.skip
+            while i < last_post:
+                # find the upper bound
+                j = min(i + MAX_POSTS, last_post)
+                log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
 
-            soup = apiparse(base, j - i, i)
-            if soup is None:
-                i += last_batch     # try the next batch
-                continue
+                soup = apiparse(base, j - i, i)
+                if soup is None:
+                    i += last_batch     # try the next batch
+                    continue
 
-            posts = soup['response']['posts']
-            if not _backup(posts):
-                break
+                posts = soup['response']['posts']
+                if not _backup(posts):
+                    break
 
-            last_batch = len(posts)
-            i += last_batch
+                last_batch = len(posts)
+                i += last_batch
+        except:
+            # ensure proper thread pool termination
+            backup_pool.cancel()
+            raise
 
         # wait until all posts have been saved
         backup_pool.wait()
@@ -655,7 +659,7 @@ class TumblrPost:
             image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
             image_data = image_response.read()
             image_response.close()
-        except:
+        except IOError:
             return None
         # determine the file type if it's unknown
         if not known_extension:
@@ -746,9 +750,9 @@ class ThreadPool:
     def __init__(self, thread_count=20, max_queue=1000):
         self.queue = Queue.Queue(max_queue)
         self.quit = threading.Event()
+        self.abort = threading.Event()
         self.threads = [threading.Thread(target=self.handler) for _ in range(thread_count)]
         for t in self.threads:
-            t.daemon = True
             t.start()
 
     def add_work(self, work):
@@ -758,23 +762,19 @@ class ThreadPool:
         self.quit.set()
         self.queue.join()
 
+    def cancel(self):
+        self.abort.set()
+        for i, t in enumerate(self.threads, start=1):
+            log('', '\rStopping threads %s%s\r' %
+                (' ' * i, '.' * (len(self.threads) - i))
+            )
+            t.join()
+
     def handler(self):
-        while True:
+        while not self.abort.is_set():
             try:
                 work = self.queue.get(True, 0.1)
-            except Exception as e:
-                # Note: this bass-ackwards way of checking for a Queue.Empty
-                # exception was prompted by
-                #    <type 'exceptions.AttributeError'>:
-                #        'NoneType' object has no attribute 'Empty'
-                #    (most likely raised during interpreter shutdown)
-                if Queue is None:
-                    # During interpreter shutdown, Queue gets set to None.
-                    # This means this thread needs to stop.
-                    break
-                if not isinstance(e, Queue.Empty):
-                    # Other exceptions are reraised.
-                    raise
+            except Queue.Empty:
                 if self.quit.is_set():
                     break
             else:
@@ -890,6 +890,6 @@ if __name__ == '__main__':
         for account in args:
             tb.backup(account)
     except KeyboardInterrupt:
-        log('', "\nUser interrupt\n")
+        sys.exit(3)
 
     sys.exit(0 if tb.total_count else 1)
