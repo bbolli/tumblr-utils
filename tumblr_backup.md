@@ -175,6 +175,9 @@ If an image is already backed up, it is not downloaded again. If an image is
 re-uploaded/edited, the old image is kept in the backup, but no post links to
 it. The format of the image file names can be selected with the `-I` option.
 
+The download of images can be disabled with option `-k`. In this case, the
+image URLs will point to the original location.
+
 With option `-e`, IPTC keyword tags can be added to image files. There are
 three possibilities:
 
