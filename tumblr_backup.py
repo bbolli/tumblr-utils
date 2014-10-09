@@ -219,8 +219,8 @@ blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .post a.llink { display: none; }
 .meta a { text-decoration: none; }
 body > img { float: right; }
-.tags, .tags a { font-size: small; color: #999; text-decoration: none; }
-footer { padding: 1em 0; }
+article footer, article footer a { font-size: small; color: #999; text-decoration: none; }
+body > footer { padding: 1em 0; }
 ''')
 
 
@@ -518,6 +518,9 @@ class TumblrPost:
         self.tm = time.localtime(self.date)
         self.title = ''
         self.tags = post['tags']
+        self.note_count = post['note_count']
+        self.source_title = post.get('source_title', '')
+        self.source_url = post.get('source_url', '')
         if options.tags:
             self.tags_lower = set(t.lower() for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
@@ -680,8 +683,17 @@ class TumblrPost:
         if self.title:
             post += u'<h2>%s</h2>\n' % self.title
         post += self.content
+        foot = []
         if self.tags:
-            post += u'\n<p class=tags>%s</p>' % u''.join(self.tag_link(t) for t in self.tags)
+            foot.append(u''.join(self.tag_link(t) for t in self.tags))
+        if self.note_count:
+            foot.append(u'%d note%s' % (self.note_count, 's'[self.note_count == 1:]))
+        if self.source_title and self.source_url:
+            foot.append(u'<a title=Source href=%s>%s</a>' %
+                (self.source_url, self.source_title)
+            )
+        if foot:
+            post += u'\n<footer>%s</footer>' % ' — '.join(foot)
         post += '\n</article>\n'
         return post
 
