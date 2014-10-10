@@ -693,7 +693,7 @@ class TumblrPost:
                 (self.source_url, self.source_title)
             )
         if foot:
-            post += u'\n<footer>%s</footer>' % ' — '.join(foot)
+            post += u'\n<footer>%s</footer>' % u' — '.join(foot)
         post += '\n</article>\n'
         return post
 
