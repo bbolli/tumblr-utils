@@ -556,12 +556,12 @@ class TumblrPost:
 
         elif self.typ == 'photo':
             url = get_try('link_url')
+            is_photoset = len(post['photos']) > 1
             for offset, p in enumerate(post['photos'], start=1):
                 o = p['original_size']
                 src = o['url']
                 if options.save_images:
-                    ofs = None if len(post['photos']) == 1 else 'o%d' % offset
-                    src = self.get_image_url(src, ofs)
+                    src = self.get_image_url(src, offset if is_photoset else 0)
                 append(escape(src), u'<img alt="" src="%s">')
                 if url:
                     content[-1] = u'<a href="%s">%s</a>' % (escape(url), content[-1])
@@ -621,7 +621,7 @@ class TumblrPost:
                 add_exif(fn, set(self.tags))
 
         # determine the image file name
-        offset = '_' + offset if offset else ''
+        offset = '_o%s' % offset if offset else ''
         if options.image_names == 'i':
             image_filename = self.ident + offset
         elif options.image_names == 'bi':
