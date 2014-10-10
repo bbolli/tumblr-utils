@@ -518,7 +518,7 @@ class TumblrPost:
         self.tm = time.localtime(self.date)
         self.title = ''
         self.tags = post['tags']
-        self.note_count = post['note_count']
+        self.note_count = post.get('note_count', 0)
         self.source_title = post.get('source_title', '')
         self.source_url = post.get('source_url', '')
         if options.tags:
