@@ -556,7 +556,7 @@ class TumblrPost:
 
         elif self.typ == 'photo':
             url = get_try('link_url')
-            for offset, p in enumerate(post['photos']):
+            for offset, p in enumerate(post['photos'], start=1):
                 o = p['original_size']
                 src = o['url']
                 if options.save_images:
