@@ -22,6 +22,7 @@ import threading
 import time
 import urllib
 import urllib2
+import socket
 from xml.sax.saxutils import escape
 
 # extra optional packages
@@ -29,6 +30,10 @@ try:
     import pyexiv2
 except ImportError:
     pyexiv2 = None
+try:
+    import youtube_dl
+except ImportError:
+    youtube_dl = None
 
 # default blog name(s)
 DEFAULT_BLOGS = ['bbolli']
@@ -52,12 +57,14 @@ imghdr.tests.append(test_jpg)
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
 image_folder = ''
+media_folder = ''
 
 # constant names
 root_folder = os.getcwdu()
 post_dir = 'posts'
 json_dir = 'json'
 image_dir = 'images'
+media_dir = 'medias'
 archive_dir = 'archive'
 theme_dir = 'theme'
 save_dir = '../'
@@ -129,6 +136,10 @@ def open_text(*parts):
 
 def open_image(*parts):
     return open_file(lambda f: open(f, 'wb'), parts)
+
+
+def open_media(*parts):
+    return open_file(lambda f: open(f, 'ab'), parts)
 
 
 def strftime(format, t=None):
@@ -386,7 +397,7 @@ class TumblrBackup:
         base = get_api_url(account)
 
         # make sure there are folders to save in
-        global save_folder, image_folder, post_ext, post_dir, save_dir, have_custom_css
+        global save_folder, image_folder, media_folder, post_ext, post_dir, save_dir, have_custom_css
         if options.blosxom:
             save_folder = root_folder
             post_ext = '.txt'
@@ -395,6 +406,7 @@ class TumblrBackup:
         else:
             save_folder = join(root_folder, options.outdir or account)
             image_folder = path_to(image_dir)
+            media_folder = path_to(media_dir)
             if options.dirs:
                 post_ext = ''
                 save_dir = '../../'
@@ -580,11 +592,47 @@ class TumblrPost:
             append_try('source', u'<p>%s</p>')
 
         elif self.typ == 'video':
-            append(post['player'][-1]['embed_code'])
+            src = ''
+            if options.save_images:
+                self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
+                self.media_folder = path_to(self.media_dir)
+                if post['video_type'] == 'tumblr':
+                    src = self.get_media_url(post['video_url'], '.mp4')
+                elif youtube_dl:
+                    if post['html5_capable']:
+                        try:
+                            src = self.get_youtube_url(post['permalink_url'])
+                        except:
+                            sys.stdout.write(u'Unknown video type in post #%s%-50s\n' % (self.ident, ' '))
+                    else:
+                        try:
+                            src = self.get_youtube_url(post['source_url'])
+                        except:
+                            sys.stdout.write(u'Unknown video type in post #%s%-50s\n' % (self.ident, ' '))
+            if src:
+                append(u'<p><video controls><source src="%s" type="video/mp4">Your browser does not support the video element.<br /><a href="%s" >Video file</a></video></p>' % (src, src))
+            else:
+                append(post['player'][-1]['embed_code'])
             append_try('caption')
 
         elif self.typ == 'audio':
-            append(post['player'])
+            src = ''
+            if options.save_images:
+                self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
+                self.media_folder = path_to(self.media_dir)
+                if post['audio_type'] == 'tumblr':
+                    audio_url = post['audio_url']
+                    if audio_url.startswith('http://a.tumblr.com/'):
+                        src = self.get_media_url(audio_url, '.mp3')
+                    elif audio_url.startswith('https://www.tumblr.com/audio_file/'):
+                        audio_url = u'http://a.tumblr.com/%so1.mp3' % audio_url.split('/')[-1]
+                        src = self.get_media_url(audio_url, '.mp3')
+                elif  post['audio_type'] == 'soundcloud':
+                    src = self.get_media_url(post['audio_url'], '.mp3')
+            if src:
+                append(u'<p><audio controls><source src="%s" type="audio/mpeg">Your browser does not support the audio element.<br /><a href="%s" >Audio file</a></audio></p>' % (src, src))
+            else:
+                append(post['player'])
             append_try('caption')
 
         elif self.typ == 'answer':
@@ -611,6 +659,79 @@ class TumblrPost:
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
         self.save_post()
+
+
+    def get_youtube_url(self, youtube_url):
+        # determine the media file name
+        ydl = youtube_dl.YoutubeDL({'outtmpl': join(self.media_folder, u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'), 'quiet': True, 'restrictfilenames': True, 'noplaylist': True})
+        ydl.add_default_info_extractors()
+        try:
+            result = ydl.extract_info(youtube_url, download=False)
+            media_filename = ydl.prepare_filename(result)
+        except:
+            return ''
+
+        # check if a file with this name already exists
+        media_glob = glob(media_filename)
+        if media_glob:
+            return u'%s%s/%s' % (save_dir, self.media_dir, split(media_glob[0])[1])
+
+        try:
+            result = ydl.extract_info(youtube_url, download=True)
+        except:
+            return ''
+        return u'%s%s/%s' % (save_dir, self.media_dir,os.path.split(media_filename)[1])
+
+
+    def get_media_url(self, media_url, extension=''):
+        def _url(fn):
+            return u'%s%s/%s' % (save_dir, self.media_dir, fn)
+
+        # determine the media file name
+        if options.image_names == 'i':
+            media_filename = self.ident
+        elif options.image_names == 'bi':
+            media_filename = account + '_' + self.ident
+        else:
+            media_filename = media_url.split('/')[-1]
+
+        if '.' in media_filename[-4]:
+            media_filename = media_filename[:-4]
+        media_filename += extension
+
+        # check if a file with this name already exists
+        media_glob = glob(join(self.media_folder, media_filename))
+        if media_glob:
+            return _url(split(media_glob[0])[1])
+
+        # download the media data
+        media_part_glob = glob(join(self.media_folder, media_filename + '.part'))
+        if media_part_glob:
+            try:
+                os.remove(media_part_glob[0])
+            except Exception, e:
+                sys.stderr.write('Error deleting the temporary file: %s' % e)
+                return ''
+
+        try:
+            media_response = urllib2.urlopen(media_url)
+            while True:
+                media_data = media_response.read(1024*1024)
+                if not media_data:
+                    break
+                # save the media
+                with open_media(self.media_dir, media_filename + '.part') as media_file:
+                    media_file.write(media_data)
+            try:
+                os.rename(join(self.media_folder, media_filename + '.part'), join(self.media_folder, media_filename))
+            except Exception, e:
+                sys.stderr.write('Error writing the media file: %s' % e)
+                return ''
+            media_response.close()
+        except (urllib2.URLError, urllib2.HTTPError, socket.error):
+            return ''
+        return _url(media_filename)
+
 
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
