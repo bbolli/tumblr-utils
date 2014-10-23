@@ -22,7 +22,6 @@ import threading
 import time
 import urllib
 import urllib2
-import socket
 from xml.sax.saxutils import escape
 
 # extra optional packages
@@ -627,7 +626,7 @@ class TumblrPost:
                     elif audio_url.startswith('https://www.tumblr.com/audio_file/'):
                         audio_url = u'http://a.tumblr.com/%so1.mp3' % audio_url.split('/')[-1]
                         src = self.get_media_url(audio_url, '.mp3')
-                elif  post['audio_type'] == 'soundcloud':
+                elif post['audio_type'] == 'soundcloud':
                     src = self.get_media_url(post['audio_url'], '.mp3')
             if src:
                 append(u'<p><audio controls><source src="%s" type="audio/mpeg">Your browser does not support the audio element.<br /><a href="%s" >Audio file</a></audio></p>' % (src, src))
@@ -660,7 +659,6 @@ class TumblrPost:
 
         self.save_post()
 
-
     def get_youtube_url(self, youtube_url):
         # determine the media file name
         ydl = youtube_dl.YoutubeDL({'outtmpl': join(self.media_folder, u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'), 'quiet': True, 'restrictfilenames': True, 'noplaylist': True})
@@ -680,10 +678,10 @@ class TumblrPost:
             result = ydl.extract_info(youtube_url, download=True)
         except:
             return ''
-        return u'%s%s/%s' % (save_dir, self.media_dir,os.path.split(media_filename)[1])
+        return u'%s%s/%s' % (save_dir, self.media_dir, os.path.split(media_filename)[1])
 
+    def get_media_url(self, media_url, extension):
 
-    def get_media_url(self, media_url, extension=''):
         def _url(fn):
             return u'%s%s/%s' % (save_dir, self.media_dir, fn)
 
@@ -728,10 +726,9 @@ class TumblrPost:
                 sys.stderr.write('Error writing the media file: %s' % e)
                 return ''
             media_response.close()
-        except (urllib2.URLError, urllib2.HTTPError, socket.error):
+        except IOError:
             return ''
         return _url(media_filename)
-
 
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
