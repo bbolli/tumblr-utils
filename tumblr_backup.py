@@ -347,8 +347,7 @@ class TumblrBackup:
 
             archive.append(self.footer(base, pp, np, suffix))
 
-            with arch:
-                arch.write('\n'.join(archive))
+            arch.write('\n'.join(archive))
 
         return first_file
 
