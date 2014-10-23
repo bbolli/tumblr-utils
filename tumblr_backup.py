@@ -560,6 +560,9 @@ class TumblrPost:
         self.image_dir = join(post_dir, self.ident) if options.dirs else image_dir
         self.images_url = save_dir + self.image_dir
         self.image_folder = path_to(self.image_dir)
+        self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
+        self.media_url = save_dir + self.media_dir
+        self.media_folder = path_to(self.media_dir)
 
         if self.typ == 'text':
             self.title = get_try('title')
@@ -593,23 +596,18 @@ class TumblrPost:
         elif self.typ == 'video':
             src = ''
             if options.save_images:
-                self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
-                self.media_folder = path_to(self.media_dir)
                 if post['video_type'] == 'tumblr':
                     src = self.get_media_url(post['video_url'], '.mp4')
                 elif youtube_dl:
-                    if post['html5_capable']:
-                        try:
-                            src = self.get_youtube_url(post['permalink_url'])
-                        except:
-                            sys.stdout.write(u'Unknown video type in post #%s%-50s\n' % (self.ident, ' '))
-                    else:
-                        try:
-                            src = self.get_youtube_url(post['source_url'])
-                        except:
-                            sys.stdout.write(u'Unknown video type in post #%s%-50s\n' % (self.ident, ' '))
+                    url = post['permalink_url'] if post['html5_capable'] else post['source_url']
+                    try:
+                        src = self.get_youtube_url(url)
+                    except:
+                        sys.stdout.write(u'Unknown video type in post #%s%-50s\n' % (self.ident, ' '))
             if src:
-                append(u'<p><video controls><source src="%s" type="video/mp4">Your browser does not support the video element.<br /><a href="%s" >Video file</a></video></p>' % (src, src))
+                append(u'<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
+                    src, "Your browser does not support the video element.", src, "Video file"
+                ))
             else:
                 append(post['player'][-1]['embed_code'])
             append_try('caption')
@@ -617,8 +615,6 @@ class TumblrPost:
         elif self.typ == 'audio':
             src = ''
             if options.save_images:
-                self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
-                self.media_folder = path_to(self.media_dir)
                 if post['audio_type'] == 'tumblr':
                     audio_url = post['audio_url']
                     if audio_url.startswith('http://a.tumblr.com/'):
@@ -629,7 +625,9 @@ class TumblrPost:
                 elif post['audio_type'] == 'soundcloud':
                     src = self.get_media_url(post['audio_url'], '.mp3')
             if src:
-                append(u'<p><audio controls><source src="%s" type="audio/mpeg">Your browser does not support the audio element.<br /><a href="%s" >Audio file</a></audio></p>' % (src, src))
+                append(u'<p><audio controls><source src="%s" type=audio/mpeg>%s<br>\n<a href="%s">%s</a></audio></p>' % (
+                    src, "Your browser does not support the audio element.", src, "Audio file"
+                ))
             else:
                 append(post['player'])
             append_try('caption')
@@ -661,7 +659,10 @@ class TumblrPost:
 
     def get_youtube_url(self, youtube_url):
         # determine the media file name
-        ydl = youtube_dl.YoutubeDL({'outtmpl': join(self.media_folder, u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'), 'quiet': True, 'restrictfilenames': True, 'noplaylist': True})
+        ydl = youtube_dl.YoutubeDL({
+            'outtmpl': join(self.media_folder, u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'),
+            'quiet': True, 'restrictfilenames': True, 'noplaylist': True
+        })
         ydl.add_default_info_extractors()
         try:
             result = ydl.extract_info(youtube_url, download=False)
@@ -670,20 +671,17 @@ class TumblrPost:
             return ''
 
         # check if a file with this name already exists
-        media_glob = glob(media_filename)
-        if media_glob:
-            return u'%s%s/%s' % (save_dir, self.media_dir, split(media_glob[0])[1])
-
-        try:
-            result = ydl.extract_info(youtube_url, download=True)
-        except:
-            return ''
-        return u'%s%s/%s' % (save_dir, self.media_dir, os.path.split(media_filename)[1])
+        if not os.path.isfile(media_filename):
+            try:
+                ydl.extract_info(youtube_url, download=True)
+            except:
+                return ''
+        return u'%s/%s' % (self.media_url, split(media_filename)[1])
 
     def get_media_url(self, media_url, extension):
 
         def _url(fn):
-            return u'%s%s/%s' % (save_dir, self.media_dir, fn)
+            return u'%s/%s' % (self.media_url, fn)
 
         # determine the media file name
         if options.image_names == 'i':
@@ -698,9 +696,8 @@ class TumblrPost:
         media_filename += extension
 
         # check if a file with this name already exists
-        media_glob = glob(join(self.media_folder, media_filename))
-        if media_glob:
-            return _url(split(media_glob[0])[1])
+        if os.path.isfile(join(self.media_folder, media_filename)):
+            return _url(media_filename)
 
         # download the media data
         media_part_glob = glob(join(self.media_folder, media_filename + '.part'))
