@@ -595,7 +595,7 @@ class TumblrPost:
 
         elif self.typ == 'video':
             src = ''
-            if options.save_images:
+            if options.save_video:
                 if post['video_type'] == 'tumblr':
                     src = self.get_media_url(post['video_url'], '.mp4')
                 elif youtube_dl:
@@ -614,7 +614,7 @@ class TumblrPost:
 
         elif self.typ == 'audio':
             src = ''
-            if options.save_images:
+            if options.save_audio:
                 if post['audio_type'] == 'tumblr':
                     audio_url = post['audio_url']
                     if audio_url.startswith('http://a.tumblr.com/'):
@@ -944,6 +944,8 @@ if __name__ == '__main__':
     parser.add_option('-k', '--skip-images', action='store_false', default=True,
         dest='save_images', help="do not save images; link to Tumblr instead"
     )
+    parser.add_option('--save-video', action='store_true', help="save video files")
+    parser.add_option('--save-audio', action='store_true', help="save audio files")
     parser.add_option('-j', '--json', action='store_true',
         help="save the original JSON source"
     )
