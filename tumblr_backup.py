@@ -670,17 +670,8 @@ class TumblrPost:
         return u'%s/%s' % (self.media_url, split(media_filename)[1])
 
     def get_media_url(self, media_url, extension):
-
-        # determine the media file name
-        if options.image_names == 'i':
-            media_filename = self.ident
-        elif options.image_names == 'bi':
-            media_filename = account + '_' + self.ident
-        else:
-            media_filename = media_url.split('/')[-1]
+        media_filename = self.get_filename(media_url)
         media_filename = os.path.splitext(media_filename)[0] + extension
-
-        # download the media data
         saved_name = self.download_media(media_url, media_filename)
         if saved_name is not None:
             media_filename = u'%s/%s' % (self.media_url, saved_name)
@@ -694,15 +685,7 @@ class TumblrPost:
             if options.exif and fn.endswith('.jpg'):
                 add_exif(fn, set(self.tags))
 
-        # determine the image file name
-        offset = '_o%s' % offset if offset else ''
-        if options.image_names == 'i':
-            image_filename = self.ident + offset
-        elif options.image_names == 'bi':
-            image_filename = account + '_' + self.ident + offset
-        else:
-            image_filename = image_url.split('/')[-1]
-
+        image_filename = self.get_filename(image_url, '_o%s' % offset if offset else '')
         saved_name = self.download_media(image_url, image_filename)
         if saved_name is not None:
             _addexif(join(self.media_folder, saved_name))
@@ -722,6 +705,15 @@ class TumblrPost:
         return u'%s%s/%s%s' % (match.group(1), self.media_url,
             saved_name, match.group(3)
         )
+
+    def get_filename(self, url, offset=''):
+        """Determine the image file name depending on options.image_names"""
+        if options.image_names == 'i':
+            return self.ident + offset
+        elif options.image_names == 'bi':
+            return account + '_' + self.ident + offset
+        else:
+            return image_url.split('/')[-1]
 
     def download_media(self, url, filename):
         # check if a file with this name already exists
