@@ -16,16 +16,11 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 ## 1. Installation
 
 1. Download and unzip
-   [xmltramp.zip](https://github.com/bbolli/xmltramp/zipball/master).
-2. Install `xmltramp.py` somewhere on your Python path like
-   `/usr/local/lib/python2.6/dist-packages` or in the same folder as
-   `tumblr_backup.py`.
-3. Download and unzip
    [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
    or clone the Github repo from `git://github.com/bbolli/tumblr-utils.git`.
-4. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
+2. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
    `~/bin` or `/usr/local/bin`.
-5. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
+3. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
    cron job. The recommendation is to do a hourly incremental backup and a
    daily complete one.
 
@@ -44,7 +39,7 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -D, --dirs            save each post in its own folder
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
-    -x, --xml             save the original XML source
+    -j, --json            save the original JSON source
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
     -R, --reverse-index   reverse the index file order
@@ -63,8 +58,12 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
                             YYYY-MM-DD: the given day
     -N COUNT, --posts-per-page=COUNT
                           set the number of posts per monthly page
-    -P PASSWORD, --private=PASSWORD
-                          password to a private tumblr
+    -Q REQUEST, --request=REQUEST
+                          save posts following the pattern TYPE:TAGS. TYPE can
+                          be any, text, quote, link, answer, video, audio,
+                          photo, chat and TAGS can be omitted. (TAGS can be
+                          comma-separated values, pattern semicolon-separated
+                          values) Example: "any:personal;quote;photo:me,self"
     -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values;
                           case-insensitive)
     -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values;
@@ -118,8 +117,8 @@ The generated directory structure looks like this:
             images/
                 <image.ext> - the image files
                 …
-            xml/
-                <id>.xml - the original XML posts
+            json/
+                <id>.json - the original JSON posts
                 …
             theme/
                 avatar.<ext> - the blog’s avatar
@@ -148,8 +147,8 @@ The directories look like this:
                     <image.ext> - the image file(s) for this post
                     …
                 …
-            xml/
-                <id>.xml - the original XML posts
+            json/
+                <id>.json - the original JSON posts
                 …
             theme/
                 avatar.<ext> - the blog’s avatar
@@ -193,8 +192,8 @@ In incremental backup mode, `tumblr_backup` saves only posts that have higher
 ids than the highest id saved locally. Note that posts that are edited after
 being backed up are not backed up again with this option.
 
-In XML backup mode, the original XML source returned by the Tumblr API is saved
-under the `xml/` folder in addition to the HTML format.
+In JSON backup mode, the original JSON source returned by the Tumblr API is saved
+under the `json/` folder in addition to the HTML format.
 
 Automatic archive mode `-a` is designed to be used from an hourly cron script.
 It normally makes an incremental backup except if the current hour is the one
