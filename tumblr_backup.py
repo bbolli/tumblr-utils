@@ -343,8 +343,7 @@ class TumblrBackup:
 
             archive.append(self.footer(base, pp, np, suffix))
 
-            with arch:
-                arch.write('\n'.join(archive))
+            arch.write('\n'.join(archive))
 
         return first_file
 
@@ -640,6 +639,8 @@ class TumblrPost:
         the original one in case of download errors."""
 
         image_url = match.group(2)
+        if image_url.startswith('//'):
+            image_url = 'http:' + image_url
         image_filename = image_url.split('/')[-1]
 
         saved_name = self.download_image(image_url, image_filename)
