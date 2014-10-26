@@ -39,6 +39,10 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -D, --dirs            save each post in its own folder
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
+    -k, --skip-media      do not save any media; link to Tumblr instead
+    -K, --skip-external   do not save external videos; link to Tumblr instead
+    -M, --max-filesize=SIZE   Do not download any external videos larger than SIZE
+                          (e.g. 50k or 44.6m)
     -j, --json            save the original JSON source
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
