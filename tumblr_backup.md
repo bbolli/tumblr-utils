@@ -6,9 +6,9 @@ blog locally.
 The backup includes all images both from inline text as well as photo posts. An index links to
 monthly pages, which contain all the posts from the respective month with links
 to single post pages. Command line options select which posts to backup and set
-the output format.
+the output format. The audio and video files can also be saved.
 
-By default, all posts of a blog are backed up in minimally styled HTML.
+By default, all posts of a blog are backed up in minimally styled HTML5.
 
 You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 
@@ -40,6 +40,9 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
     -j, --json            save the original JSON source
+    -k, --skip-images     do not save images; link to Tumblr instead
+    --save-video          save video files
+    --save-audio          save audio files
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
     -R, --reverse-index   reverse the index file order
@@ -110,8 +113,10 @@ The generated directory structure looks like this:
             posts/
                 <id>.html - the single post pages
                 …
-            images/
-                <image.ext> - the image files
+            media/
+                <image.ext> - image files
+                <audio>.mp3 - audio files
+                <video>.mp4 - video files
                 …
             json/
                 <id>.json - the original JSON posts
@@ -141,6 +146,8 @@ The directories look like this:
                 <id>/
                     index.html - the single post page
                     <image.ext> - the image file(s) for this post
+                    <audio>.mp3 - audio files
+                    <video>.mp4 - video files
                     …
                 …
             json/

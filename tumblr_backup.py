@@ -29,6 +29,10 @@ try:
     import pyexiv2
 except ImportError:
     pyexiv2 = None
+try:
+    import youtube_dl
+except ImportError:
+    youtube_dl = None
 
 # default blog name(s)
 DEFAULT_BLOGS = ['bbolli']
@@ -51,13 +55,13 @@ imghdr.tests.append(test_jpg)
 
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
-image_folder = ''
+media_folder = ''
 
 # constant names
 root_folder = os.getcwdu()
 post_dir = 'posts'
 json_dir = 'json'
-image_dir = 'images'
+media_dir = 'media'
 archive_dir = 'archive'
 theme_dir = 'theme'
 save_dir = '../'
@@ -78,6 +82,7 @@ POST_TYPES_SET = frozenset(POST_TYPES)
 MAX_POSTS = 50
 
 HTTP_TIMEOUT = 30
+HTTP_CHUNK_SIZE = 1024 * 1024
 
 # bb-tumblr-backup API key
 API_KEY = '8YUsKJvcJxo2MDwmWMDiXZGuMuIbeCwuQGP5ZHSEA4jBJPMnJT'
@@ -127,7 +132,7 @@ def open_text(*parts):
     )
 
 
-def open_image(*parts):
+def open_media(*parts):
     return open_file(lambda f: open(f, 'wb'), parts)
 
 
@@ -233,7 +238,7 @@ def get_avatar():
     except:
         return
     avatar_file = avatar_base + '.' + imghdr.what(None, avatar_data[:32])
-    with open_image(theme_dir, avatar_file) as f:
+    with open_media(theme_dir, avatar_file) as f:
         f.write(avatar_data)
 
 
@@ -385,7 +390,7 @@ class TumblrBackup:
         base = get_api_url(account)
 
         # make sure there are folders to save in
-        global save_folder, image_folder, post_ext, post_dir, save_dir, have_custom_css
+        global save_folder, media_folder, post_ext, post_dir, save_dir, have_custom_css
         if options.blosxom:
             save_folder = root_folder
             post_ext = '.txt'
@@ -393,7 +398,7 @@ class TumblrBackup:
             post_class = BlosxomPost
         else:
             save_folder = join(root_folder, options.outdir or account)
-            image_folder = path_to(image_dir)
+            media_folder = path_to(media_dir)
             if options.dirs:
                 post_ext = ''
                 save_dir = '../../'
@@ -545,9 +550,9 @@ class TumblrPost:
                     )
                 append(elt, fmt)
 
-        self.image_dir = join(post_dir, self.ident) if options.dirs else image_dir
-        self.images_url = save_dir + self.image_dir
-        self.image_folder = path_to(self.image_dir)
+        self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
+        self.media_url = save_dir + self.media_dir
+        self.media_folder = path_to(self.media_dir)
 
         if self.typ == 'text':
             self.title = get_try('title')
@@ -579,11 +584,42 @@ class TumblrPost:
             append_try('source', u'<p>%s</p>')
 
         elif self.typ == 'video':
-            append(post['player'][-1]['embed_code'])
+            src = ''
+            if options.save_video:
+                if post['video_type'] == 'tumblr':
+                    src = self.get_media_url(post['video_url'], '.mp4')
+                elif youtube_dl:
+                    url = post['permalink_url'] if post['html5_capable'] else post['source_url']
+                    try:
+                        src = self.get_youtube_url(url)
+                    except:
+                        sys.stdout.write(u'Unknown video type in post #%s%-50s\n' % (self.ident, ' '))
+            if src:
+                append(u'<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
+                    src, "Your browser does not support the video element.", src, "Video file"
+                ))
+            else:
+                append(post['player'][-1]['embed_code'])
             append_try('caption')
 
         elif self.typ == 'audio':
-            append(post['player'])
+            src = ''
+            if options.save_audio:
+                if post['audio_type'] == 'tumblr':
+                    audio_url = post['audio_url']
+                    if audio_url.startswith('http://a.tumblr.com/'):
+                        src = self.get_media_url(audio_url, '.mp3')
+                    elif audio_url.startswith('https://www.tumblr.com/audio_file/'):
+                        audio_url = u'http://a.tumblr.com/%so1.mp3' % audio_url.split('/')[-1]
+                        src = self.get_media_url(audio_url, '.mp3')
+                elif post['audio_type'] == 'soundcloud':
+                    src = self.get_media_url(post['audio_url'], '.mp3')
+            if src:
+                append(u'<p><audio controls><source src="%s" type=audio/mpeg>%s<br>\n<a href="%s">%s</a></audio></p>' % (
+                    src, "Your browser does not support the audio element.", src, "Audio file"
+                ))
+            else:
+                append(post['player'])
             append_try('caption')
 
         elif self.typ == 'answer':
@@ -611,6 +647,35 @@ class TumblrPost:
 
         self.save_post()
 
+    def get_youtube_url(self, youtube_url):
+        # determine the media file name
+        ydl = youtube_dl.YoutubeDL({
+            'outtmpl': join(self.media_folder, u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'),
+            'quiet': True, 'restrictfilenames': True, 'noplaylist': True
+        })
+        ydl.add_default_info_extractors()
+        try:
+            result = ydl.extract_info(youtube_url, download=False)
+            media_filename = ydl.prepare_filename(result)
+        except:
+            return ''
+
+        # check if a file with this name already exists
+        if not os.path.isfile(media_filename):
+            try:
+                ydl.extract_info(youtube_url, download=True)
+            except:
+                return ''
+        return u'%s/%s' % (self.media_url, split(media_filename)[1])
+
+    def get_media_url(self, media_url, extension):
+        media_filename = self.get_filename(media_url)
+        media_filename = os.path.splitext(media_filename)[0] + extension
+        saved_name = self.download_media(media_url, media_filename)
+        if saved_name is not None:
+            media_filename = u'%s/%s' % (self.media_url, saved_name)
+        return media_filename
+
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
         the original URL in case of download errors."""
@@ -619,19 +684,11 @@ class TumblrPost:
             if options.exif and fn.endswith('.jpg'):
                 add_exif(fn, set(self.tags))
 
-        # determine the image file name
-        offset = '_o%s' % offset if offset else ''
-        if options.image_names == 'i':
-            image_filename = self.ident + offset
-        elif options.image_names == 'bi':
-            image_filename = account + '_' + self.ident + offset
-        else:
-            image_filename = image_url.split('/')[-1]
-
-        saved_name = self.download_image(image_url, image_filename)
+        image_filename = self.get_filename(image_url, '_o%s' % offset if offset else '')
+        saved_name = self.download_media(image_url, image_filename)
         if saved_name is not None:
-            _addexif(join(self.image_folder, saved_name))
-            image_url = u'%s/%s' % (self.images_url, saved_name)
+            _addexif(join(self.media_folder, saved_name))
+            image_url = u'%s/%s' % (self.media_url, saved_name)
         return image_url
 
     def get_inline_image(self, match):
@@ -643,37 +700,55 @@ class TumblrPost:
             image_url = 'http:' + image_url
         image_filename = image_url.split('/')[-1]
 
-        saved_name = self.download_image(image_url, image_filename)
+        saved_name = self.download_media(image_url, image_filename)
         if saved_name is None:
             return match.group(0)
-        return u'%s%s/%s%s' % (match.group(1), self.images_url,
+        return u'%s%s/%s%s' % (match.group(1), self.media_url,
             saved_name, match.group(3)
         )
 
-    def download_image(self, image_url, image_filename):
+    def get_filename(self, url, offset=''):
+        """Determine the image file name depending on options.image_names"""
+        if options.image_names == 'i':
+            return self.ident + offset
+        elif options.image_names == 'bi':
+            return account + '_' + self.ident + offset
+        else:
+            return image_url.split('/')[-1]
+
+    def download_media(self, url, filename):
         # check if a file with this name already exists
-        known_extension = '.' in image_filename[-5:]
-        image_glob = glob(join(self.image_folder, image_filename +
-            ('' if known_extension else '.*')
+        known_extension = '.' in filename[-5:]
+        image_glob = glob(path_to(self.media_dir,
+            filename + ('' if known_extension else '.*')
         ))
         if image_glob:
             return split(image_glob[0])[1]
-        # download the image data
+        # download the media data
         try:
-            image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
-            image_data = image_response.read()
-            image_response.close()
-        except IOError:
+            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
+            with open_media(self.media_dir, filename) as dest:
+                data = resp.read(HTTP_CHUNK_SIZE)
+                hdr = data[:32]     # save the first few bytes
+                while data:
+                    dest.write(data)
+                    data = resp.read(HTTP_CHUNK_SIZE)
+        except IOError as e:
+            sys.stderr.write('%s downloading %s\n' % (e, url))
+            try:
+                os.unlink(path_to(self.media_dir, filename))
+            except OSError as e:
+                if e.errno != errno.ENOENT:
+                    raise
             return None
         # determine the file type if it's unknown
         if not known_extension:
-            image_type = imghdr.what(None, image_data[:32])
+            image_type = imghdr.what(None, hdr)
             if image_type:
-                image_filename += '.' + image_type.replace('jpeg', 'jpg')
-        # save the image
-        with open_image(self.image_dir, image_filename) as image_file:
-            image_file.write(image_data)
-        return image_filename
+                oldname = path_to(self.media_dir, filename)
+                filename += '.' + image_type.replace('jpeg', 'jpg')
+                os.rename(oldname, path_to(self.media_dir, filename))
+        return filename
 
     def get_post(self):
         """returns this post in HTML"""
@@ -830,6 +905,8 @@ if __name__ == '__main__':
     parser.add_option('-k', '--skip-images', action='store_false', default=True,
         dest='save_images', help="do not save images; link to Tumblr instead"
     )
+    parser.add_option('--save-video', action='store_true', help="save video files")
+    parser.add_option('--save-audio', action='store_true', help="save audio files")
     parser.add_option('-j', '--json', action='store_true',
         help="save the original JSON source"
     )
