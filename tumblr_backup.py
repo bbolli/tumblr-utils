@@ -74,6 +74,7 @@ POST_TYPES = (
     'text', 'quote', 'link', 'answer', 'video', 'audio', 'photo', 'chat'
 )
 POST_TYPES_SET = frozenset(POST_TYPES)
+POST_TYPES_AND_ANY_SET = frozenset(POST_TYPES +('any',))
 
 MAX_POSTS = 50
 
@@ -451,6 +452,20 @@ class TumblrBackup:
                         continue
                     if post.date < options.p_start:
                         return False
+                if options.request:
+                    if ((post.typ in options.request) or ('any' in options.request)):
+                        if post.typ in options.request:
+                            if ((len(options.request[post.typ])) and (not set(options.request[post.typ]) & post.tags_lower)):
+                                if 'any' in options.request:
+                                    if ((len(options.request['any'])) and (not set(options.request['any']) & post.tags_lower)):
+                                        continue
+                                else:
+                                    continue
+                        else:
+                            if ((len(options.request['any'])) and (not set(options.request['any']) & post.tags_lower)):
+                                continue
+                    else:
+                        continue
                 if options.tags and not options.tags & post.tags_lower:
                     continue
                 if options.type and post.typ not in options.type:
@@ -521,7 +536,7 @@ class TumblrPost:
         self.note_count = post.get('note_count', 0)
         self.source_title = post.get('source_title', '')
         self.source_url = post.get('source_url', '')
-        if options.tags:
+        if options.tags or options.request:
             self.tags_lower = set(t.lower() for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
@@ -810,7 +825,17 @@ if __name__ == '__main__':
         if not types <= POST_TYPES_SET:
             parser.error("--type: invalid post types")
         setattr(parser.values, option.dest, types)
-
+    def request_callback(option, opt, value, parser):
+        raw_request = value.lower().split(';')
+        request = {}
+        for elt in raw_request:
+            if ':' in elt:
+                request.setdefault(elt.split(':')[0], elt.split(':')[1].split(','))
+            else:
+                request.setdefault(elt, '')
+        if not set(request.keys()) <= POST_TYPES_AND_ANY_SET:
+            parser.error("--request: invalid post types")
+        setattr(parser.values, option.dest, request)
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
     )
@@ -856,9 +881,12 @@ if __name__ == '__main__':
     )
     parser.add_option('-N', '--posts-per-page', type='int', default=50,
         metavar='COUNT', help="set the number of posts per monthly page"
-    )
-    parser.add_option('-P', '--private', help="password for a private tumblr",
-        metavar='PASSWORD'
+    )   
+    parser.add_option('-Q', '--request', type='string', action='callback',
+        callback=request_callback, help="save posts following the pattern TYPE:TAGS."
+        " TYPE can be any, %s and TAGS can be omitted."
+        " (TAGS can be comma-separated values, pattern semicolon-separated values)"
+        " Example: \"any:personal;quote;photo:me,self\""  % ', '.join(POST_TYPES)
     )
     parser.add_option('-t', '--tags', type='string', action='callback',
         callback=tags_callback, help="save only posts tagged TAGS (comma-separated values;"
