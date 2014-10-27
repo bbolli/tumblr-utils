@@ -63,6 +63,12 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
                           set the number of posts per monthly page
     -P PASSWORD, --private=PASSWORD
                           password to a private tumblr
+    -Q REQUEST, --request=REQUEST
+                          save posts following the pattern TYPE:TAGS. TYPE can
+                          be any, text, quote, link, answer, video, audio,
+                          photo, chat and TAGS can be omitted. (TAGS can be
+                          comma-separated values, pattern semicolon-separated
+                          values) Example: "any:personal;quote;photo:me,self"
     -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values;
                           case-insensitive)
     -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values;
