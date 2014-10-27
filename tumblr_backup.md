@@ -58,6 +58,8 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
                             YYYY-MM-DD: the given day
     -N COUNT, --posts-per-page=COUNT
                           set the number of posts per monthly page
+    -P PASSWORD, --private=PASSWORD
+                          password to a private tumblr
     -Q REQUEST, --request=REQUEST
                           save posts following the pattern TYPE:TAGS. TYPE can
                           be any, text, quote, link, answer, video, audio,
