@@ -935,9 +935,6 @@ if __name__ == '__main__':
     parser.add_option('-N', '--posts-per-page', type='int', default=50,
         metavar='COUNT', help="set the number of posts per monthly page"
     )
-    parser.add_option('-P', '--private', help="password for a private tumblr",
-        metavar='PASSWORD'
-    )
     parser.add_option('-t', '--tags', type='string', action='callback',
         callback=tags_callback, help="save only posts tagged TAGS (comma-separated values;"
         " case-insensitive)"
