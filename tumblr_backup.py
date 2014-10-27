@@ -74,7 +74,6 @@ POST_TYPES = (
     'text', 'quote', 'link', 'answer', 'video', 'audio', 'photo', 'chat'
 )
 POST_TYPES_SET = frozenset(POST_TYPES)
-POST_TYPES_AND_ANY_SET = frozenset(POST_TYPES +('any',))
 
 MAX_POSTS = 50
 
@@ -453,18 +452,9 @@ class TumblrBackup:
                     if post.date < options.p_start:
                         return False
                 if options.request:
-                    if ((post.typ in options.request) or ('any' in options.request)):
-                        if post.typ in options.request:
-                            if ((len(options.request[post.typ])) and (not set(options.request[post.typ]) & post.tags_lower)):
-                                if 'any' in options.request:
-                                    if ((len(options.request['any'])) and (not set(options.request['any']) & post.tags_lower)):
-                                        continue
-                                else:
-                                    continue
-                        else:
-                            if ((len(options.request['any'])) and (not set(options.request['any']) & post.tags_lower)):
-                                continue
-                    else:
+                    if not post.typ in options.request:
+                        continue
+                    elif options.request[post.typ] and not set(options.request[post.typ]) & post.tags_lower:
                         continue
                 if options.tags and not options.tags & post.tags_lower:
                     continue
@@ -829,11 +819,21 @@ if __name__ == '__main__':
         raw_request = value.lower().split(';')
         request = {}
         for elt in raw_request:
+            key = elt.split(':')[0].lower()
             if ':' in elt:
-                request.setdefault(elt.split(':')[0], elt.split(':')[1].split(','))
+                value = elt.split(':')[1].split(',')
+                request[key] = request.get(key, []) + value
             else:
-                request.setdefault(elt, '')
-        if not set(request.keys()) <= POST_TYPES_AND_ANY_SET:
+                request[elt] = ''
+        if 'any' in request:
+            value = request.get('any')
+            for type in POST_TYPES_SET:
+                if value:
+                    request[type] = request.get(type, []) + value
+                else:
+                    request[type] = ''
+            del request['any']
+        if not set(request.keys()) <= POST_TYPES_SET:
             parser.error("--request: invalid post types")
         setattr(parser.values, option.dest, request)
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
