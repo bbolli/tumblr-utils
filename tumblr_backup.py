@@ -456,10 +456,6 @@ class TumblrBackup:
                         continue
                     elif options.request[post.typ] and not set(options.request[post.typ]) & post.tags_lower:
                         continue
-                if options.tags and not options.tags & post.tags_lower:
-                    continue
-                if options.type and post.typ not in options.type:
-                    continue
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
             return True
@@ -526,7 +522,7 @@ class TumblrPost:
         self.note_count = post.get('note_count', 0)
         self.source_title = post.get('source_title', '')
         self.source_url = post.get('source_url', '')
-        if options.tags or options.request:
+        if options.request:
             self.tags_lower = set(t.lower() for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
@@ -808,34 +804,56 @@ if __name__ == '__main__':
         setattr(parser.values, option.dest, set(value.split(',')))
 
     def tags_callback(option, opt, value, parser):
-        csv_callback(option, opt, value.lower(), parser)
+        tags = value.lower().split(',')
+        request = {}
+        for type in POST_TYPES_SET:
+            request[type] = tags
+        request_append(option, parser, request)
 
     def type_callback(option, opt, value, parser):
         types = set(value.lower().split(','))
         if not types <= POST_TYPES_SET:
             parser.error("--type: invalid post types")
-        setattr(parser.values, option.dest, types)
+        request = {}
+        for type in types:
+            request[type] = []
+        request_append(option, parser, request)
+
     def request_callback(option, opt, value, parser):
         raw_request = value.lower().split(';')
         request = {}
         for elt in raw_request:
-            key = elt.split(':')[0].lower()
+            type = elt.split(':')[0]
             if ':' in elt:
-                value = elt.split(':')[1].split(',')
-                request[key] = request.get(key, []) + value
+                tags = elt.split(':')[1].split(',')
+                request[type] = request.get(type, []) + tags
             else:
-                request[elt] = ''
+                request[type] = []
         if 'any' in request:
-            value = request.get('any')
+            tags = request.get('any')
             for type in POST_TYPES_SET:
-                if value:
-                    request[type] = request.get(type, []) + value
+                if tags and not request.get(type) == []:
+                    request[type] = request.get(type, []) + tags
                 else:
-                    request[type] = ''
+                    request[type] = []
             del request['any']
         if not set(request.keys()) <= POST_TYPES_SET:
             parser.error("--request: invalid post types")
-        setattr(parser.values, option.dest, request)
+        request_append(option, parser, request)
+
+    def request_append(option, parser, request):
+        if parser.values.request:
+            merged_request = {}
+            types = set(parser.values.request).union(request)
+            for type in types:
+                if not parser.values.request.get(type) == [] and not request.get(type) == []:
+                    merged_request[type] = parser.values.request.get(type, []) + request.get(type, [])
+                else:
+                    merged_request[type] = []
+            setattr(parser.values, option.dest, merged_request)
+        else:
+            setattr(parser.values, option.dest, request)
+
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
     )
@@ -885,17 +903,17 @@ if __name__ == '__main__':
     parser.add_option('-P', '--private', help="password for a private tumblr",
         metavar='PASSWORD'
     )   
-    parser.add_option('-Q', '--request', type='string', action='callback',
+    parser.add_option('-Q', '--request', type='string', action='callback', dest='request',
         callback=request_callback, help="save posts following the pattern TYPE:TAGS."
         " TYPE can be any, %s and TAGS can be omitted."
         " (TAGS can be comma-separated values, pattern semicolon-separated values)"
         " Example: \"any:personal;quote;photo:me,self\""  % ', '.join(POST_TYPES)
     )
-    parser.add_option('-t', '--tags', type='string', action='callback',
+    parser.add_option('-t', '--tags', type='string', action='callback', dest='request',
         callback=tags_callback, help="save only posts tagged TAGS (comma-separated values;"
         " case-insensitive)"
     )
-    parser.add_option('-T', '--type', type='string', action='callback',
+    parser.add_option('-T', '--type', type='string', action='callback', dest='request',
         callback=type_callback, help="save only posts of type TYPE"
         " (comma-separated values from %s)" % ', '.join(POST_TYPES)
     )
