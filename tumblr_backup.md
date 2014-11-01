@@ -62,11 +62,11 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -N COUNT, --posts-per-page=COUNT
                           set the number of posts per monthly page
     -Q REQUEST, --request=REQUEST
-                          save posts following the pattern TYPE:TAGS. TYPE can
-                          be any, text, quote, link, answer, video, audio,
-                          photo, chat and TAGS can be omitted. (TAGS can be
-                          comma-separated values, pattern semicolon-separated
-                          values) Example: "any:personal;quote;photo:me,self"
+                          save posts matching the request
+                          TYPE:TAG:TAG:…,TYPE:TAG:…,…. TYPE can be text, quote,
+                          link, answer, video, audio, photo, chat or any; TAGs
+                          can be omitted or a colon-separated list. Example:
+                          -Q any:personal,quote,photo:me:self
     -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values;
                           case-insensitive)
     -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values;
@@ -222,10 +222,16 @@ the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip the
 200 most recent posts and backup the next 100. `-n 1` is the fastest way to
 rebuild the index pages.
 
-The option `-T` limits the backup to posts of the given type.
+The option `-T` limits the backup to posts of the given type. `-t` saves only
+posts with the given tags. `-Q` combines both: it accepts comma-separated
+requests of the form `TYPE:TAG1:TAG2:…`, where the tags for each post type can
+be different. Omitting the TAGs is allowed; this saves posts of this type with
+any or no tags. Example: `-Q any:personal,quote,photo:me:self` saves all posts
+tagged 'personal', all quotes, and photos tagged 'me' or 'self' or 'personal'
+(because of the `any` request).
 
-If you combine `-n`, `-s`, `-i`, `-p`, `-t` and `-T`, only posts matching all
-criteria will be backed up.
+If you combine `-n`, `-s`, `-i`, `-p`, `-t`, `-T` and `-Q`, only posts matching
+all criteria will be backed up.
 
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.

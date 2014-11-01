@@ -883,21 +883,18 @@ if __name__ == '__main__':
         setattr(parser.values, option.dest, set(value.split(',')))
 
     def tags_callback(option, opt, value, parser):
-        request_callback(option, opt, TYPE_ANY + ':' + value, parser)
-
-    def type_callback(option, opt, value, parser):
-        request_callback(option, opt, value.replace(',', ';'), parser)
+        request_callback(option, opt, TYPE_ANY + ':' + value.replace(',', ':'), parser)
 
     def request_callback(option, opt, value, parser):
         request = parser.values.request or {}
-        for req in value.lower().split(';'):
-            parts = req.strip().split(':', 1)
-            typ = parts[0]
+        for req in value.lower().split(','):
+            parts = req.strip().split(':')
+            typ = parts.pop(0)
             if typ != TYPE_ANY and typ not in POST_TYPES:
                 parser.error("%s: invalid post type '%s'" % (opt, typ))
             for typ in POST_TYPES if typ == TYPE_ANY else (typ,):
-                if len(parts) > 1:
-                    request[typ] = request.get(typ, set()) | set(parts[1].split(','))
+                if parts:
+                    request[typ] = request.get(typ, set()).union(parts)
                 else:
                     request[typ] = set([TAG_ANY])
         parser.values.request = request
@@ -951,17 +948,17 @@ if __name__ == '__main__':
         metavar='COUNT', help="set the number of posts per monthly page"
     )
     parser.add_option('-Q', '--request', type='string', action='callback',
-        callback=request_callback, help="save posts following the pattern TYPE:TAGS."
-        " TYPE can be %s or %s; TAGS can be omitted or comma-separated values."
-        " REQUEST can be semicolon-separated patterns."
-        " Example: -Q \"any:personal;quote;photo:me,self\"" % (', '.join(POST_TYPES), TYPE_ANY)
+        callback=request_callback, help="save posts matching the request"
+        u" TYPE:TAG:TAG:…,TYPE:TAG:…,…. TYPE can be %s or %s; TAGs can be"
+        " omitted or a colon-separated list. Example: -Q %s:personal,quote"
+        ",photo:me:self" % (', '.join(POST_TYPES), TYPE_ANY, TYPE_ANY)
     )
     parser.add_option('-t', '--tags', type='string', action='callback',
         callback=tags_callback, help="save only posts tagged TAGS (comma-separated values;"
         " case-insensitive)"
     )
     parser.add_option('-T', '--type', type='string', action='callback',
-        callback=type_callback, help="save only posts of type TYPE"
+        callback=request_callback, help="save only posts of type TYPE"
         " (comma-separated values from %s)" % ', '.join(POST_TYPES)
     )
     parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
