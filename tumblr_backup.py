@@ -718,7 +718,7 @@ class TumblrPost:
         elif options.image_names == 'bi':
             return account + '_' + self.ident + offset
         else:
-            return image_url.split('/')[-1]
+            return url.split('/')[-1]
 
     def download_media(self, url, filename):
         # check if a file with this name already exists
