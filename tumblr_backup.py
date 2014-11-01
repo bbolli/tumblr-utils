@@ -872,8 +872,10 @@ class ThreadPool:
             else:
                 if self.quit.is_set() and self.queue.qsize() % MAX_POSTS == 0:
                     log(account, "%d remaining posts to save\r" % self.queue.qsize())
-                work()
-                self.queue.task_done()
+                try:
+                    work()
+                finally:
+                    self.queue.task_done()
 
 
 if __name__ == '__main__':
