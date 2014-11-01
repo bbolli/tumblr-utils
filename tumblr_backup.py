@@ -78,6 +78,8 @@ POST_TYPES = (
     'text', 'quote', 'link', 'answer', 'video', 'audio', 'photo', 'chat'
 )
 POST_TYPES_SET = frozenset(POST_TYPES)
+TYPE_ANY = 'any'
+TAG_ANY = '__all__'
 
 MAX_POSTS = 50
 
@@ -455,10 +457,12 @@ class TumblrBackup:
                         continue
                     if post.date < options.p_start:
                         return False
-                if options.tags and not options.tags & post.tags_lower:
-                    continue
-                if options.type and post.typ not in options.type:
-                    continue
+                if options.request:
+                    if post.typ not in options.request:
+                        continue
+                    tags = options.request[post.typ]
+                    if not (TAG_ANY in tags or tags & post.tags_lower):
+                        continue
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
             return True
@@ -525,7 +529,7 @@ class TumblrPost:
         self.note_count = post.get('note_count', 0)
         self.source_title = post.get('source_title', '')
         self.source_url = post.get('source_url', '')
-        if options.tags:
+        if options.request:
             self.tags_lower = set(t.lower() for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
@@ -879,13 +883,21 @@ if __name__ == '__main__':
         setattr(parser.values, option.dest, set(value.split(',')))
 
     def tags_callback(option, opt, value, parser):
-        csv_callback(option, opt, value.lower(), parser)
+        request_callback(option, opt, TYPE_ANY + ':' + value.replace(',', ':'), parser)
 
-    def type_callback(option, opt, value, parser):
-        types = set(value.lower().split(','))
-        if not types <= POST_TYPES_SET:
-            parser.error("--type: invalid post types")
-        setattr(parser.values, option.dest, types)
+    def request_callback(option, opt, value, parser):
+        request = parser.values.request or {}
+        for req in value.lower().split(','):
+            parts = req.strip().split(':')
+            typ = parts.pop(0)
+            if typ != TYPE_ANY and typ not in POST_TYPES:
+                parser.error("%s: invalid post type '%s'" % (opt, typ))
+            for typ in POST_TYPES if typ == TYPE_ANY else (typ,):
+                if parts:
+                    request[typ] = request.get(typ, set()).union(parts)
+                else:
+                    request[typ] = set([TAG_ANY])
+        parser.values.request = request
 
     parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
         description="Makes a local backup of Tumblr blogs."
@@ -935,12 +947,18 @@ if __name__ == '__main__':
     parser.add_option('-N', '--posts-per-page', type='int', default=50,
         metavar='COUNT', help="set the number of posts per monthly page"
     )
+    parser.add_option('-Q', '--request', type='string', action='callback',
+        callback=request_callback, help="save posts matching the request"
+        u" TYPE:TAG:TAG:…,TYPE:TAG:…,…. TYPE can be %s or %s; TAGs can be"
+        " omitted or a colon-separated list. Example: -Q %s:personal,quote"
+        ",photo:me:self" % (', '.join(POST_TYPES), TYPE_ANY, TYPE_ANY)
+    )
     parser.add_option('-t', '--tags', type='string', action='callback',
         callback=tags_callback, help="save only posts tagged TAGS (comma-separated values;"
         " case-insensitive)"
     )
     parser.add_option('-T', '--type', type='string', action='callback',
-        callback=type_callback, help="save only posts of type TYPE"
+        callback=request_callback, help="save only posts of type TYPE"
         " (comma-separated values from %s)" % ', '.join(POST_TYPES)
     )
     parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
