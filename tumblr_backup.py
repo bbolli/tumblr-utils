@@ -317,13 +317,14 @@ class TumblrBackup:
                 return 0, 0
             return self.archives[i]
 
+        FILE_FMT = '%d-%02d-p%s'
         pages_month = pages_per_month(year, month)
         for page, start in enumerate(range(0, posts_month, posts_page), start=1):
 
             archive = [self.header(strftime('%B %Y', tm), body_class='archive')]
             archive.extend(p.get_post() for p in posts[start:start + posts_page])
 
-            file_name = '%d-%02d-p%s' % (year, month, page)
+            file_name = FILE_FMT % (year, month, page)
             if options.dirs:
                 base = save_dir + archive_dir + '/'
                 suffix = '/'
@@ -336,17 +337,17 @@ class TumblrBackup:
                 arch = open_text(archive_dir, file_name)
 
             if page > 1:
-                pp = '%d-%02d-p%s' % (year, month, page - 1)
+                pp = FILE_FMT % (year, month, page - 1)
             else:
                 py, pm = next_month(True)
-                pp = '%d-%02d-p%s' % (py, pm, pages_per_month(py, pm)) if py else ''
+                pp = FILE_FMT % (py, pm, pages_per_month(py, pm)) if py else ''
                 first_file = file_name
 
             if page < pages_month:
-                np = '%d-%02d-p%s' % (year, month, page + 1)
+                np = FILE_FMT % (year, month, page + 1)
             else:
                 ny, nm = next_month(False)
-                np = '%d-%02d-p%s' % (ny, nm, 1) if ny else ''
+                np = FILE_FMT % (ny, nm, 1) if ny else ''
 
             archive.append(self.footer(base, pp, np, suffix))
 
@@ -382,7 +383,7 @@ class TumblrBackup:
         if previous_page:
             f += '| <a href=%s%s%s rel=prev>Previous</a>\n' % (base, previous_page, suffix)
         if next_page:
-            f += '| <a href=%s%s%s rel=next>Next</a>\n'% (base, next_page, suffix)
+            f += '| <a href=%s%s%s rel=next>Next</a>\n' % (base, next_page, suffix)
         f += '</footer>\n'
         return f
 
