@@ -127,7 +127,7 @@ The generated directory structure looks like this:
 
 The default `outdir` is the `blog-name`.
 
-If option `-D` is used, the one folder per post is generated, and the post's
+If option `-D` is used, one folder per post is generated, and the post's
 images are saved in the same folder. The monthly archive is also stored in a
 folder per month. This results in the same URL structure as on the Tumblr page.
 
