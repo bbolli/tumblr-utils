@@ -175,7 +175,7 @@ def xmlparse(base, count, start=0):
             resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
             xml = resp.read()
         except IOError as e:
-            sys.stderr.write('%s getting %s\n' % (e, url))
+            sys.stderr.write("%s getting %s\n" % (e, url))
             continue
         if resp.info().gettype() == 'text/xml':
             break
@@ -196,7 +196,7 @@ def add_exif(image_name, tags):
         metadata = pyexiv2.ImageMetadata(image_name)
         metadata.read()
     except:
-        sys.stderr.write('Error reading metadata for image %s\n' % image_name)
+        sys.stderr.write("Error reading metadata for image %s\n" % image_name)
         return
     KW_KEY = 'Iptc.Application2.Keywords'
     if '-' in options.exif:     # remove all tags
@@ -210,7 +210,7 @@ def add_exif(image_name, tags):
     try:
         metadata.write()
     except:
-        sys.stderr.write('Writing metadata failed for tags: %s in: %s\n' % (tags, image_name))
+        sys.stderr.write("Writing metadata failed for tags: %s in: %s\n" % (tags, image_name))
 
 
 def save_style():
@@ -784,7 +784,7 @@ class ThreadPool:
     def cancel(self):
         self.abort.set()
         for i, t in enumerate(self.threads, start=1):
-            log('', '\rStopping threads %s%s\r' %
+            log('', "\rStopping threads %s%s\r" %
                 (' ' * i, '.' * (len(self.threads) - i))
             )
             t.join()
