@@ -678,7 +678,7 @@ class TumblrPost:
             image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
             image_data = image_response.read()
             image_response.close()
-        except IOError:
+        except IOError, OSError, ValueError:
             return None
         # determine the file type if it's unknown
         if not known_extension:
