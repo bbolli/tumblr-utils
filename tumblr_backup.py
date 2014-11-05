@@ -738,7 +738,7 @@ class TumblrPost:
                 while data:
                     dest.write(data)
                     data = resp.read(HTTP_CHUNK_SIZE)
-        except IOError as e:
+        except (IOError, OSError, ValueError) as e:
             sys.stderr.write('%s downloading %s\n' % (e, url))
             try:
                 os.unlink(path_to(self.media_dir, filename))
