@@ -124,7 +124,7 @@ class Tumble:
             resp = json.loads(resp)
         except ValueError, e:
             return 'error', 'json', resp
-        except Exception, e:
+        except EnvironmentError, e:
             return 'error', str(e)
         if resp['meta']['status'] in (200, 201):
             return op, str(resp['response']['id'])
@@ -134,12 +134,12 @@ class Tumble:
 if __name__ == '__main__':
     try:
         t = Tumble(os.path.expanduser(CONFIG))
-    except:
+    except EnvironmentError:
         sys.stderr.write('Config file %s not found or not readable\n' % CONFIG)
         sys.exit(1)
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hb:e:d')
-    except:
+    except getopt.GetoptError:
         print "Usage: %s [-b blog-name] [-e post-id] [-d]" % sys.argv[0].split(os.sep)[-1]
         sys.exit(1)
     for o, v in opts:
