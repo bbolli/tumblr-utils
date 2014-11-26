@@ -174,7 +174,7 @@ def xmlparse(base, count, start=0):
         try:
             resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
             xml = resp.read()
-        except IOError as e:
+        except EnvironmentError as e:
             sys.stderr.write("%s getting %s\n" % (e, url))
             continue
         if resp.info().gettype() == 'text/xml':
@@ -195,7 +195,7 @@ def add_exif(image_name, tags):
     try:
         metadata = pyexiv2.ImageMetadata(image_name)
         metadata.read()
-    except:
+    except EnvironmentError:
         sys.stderr.write("Error reading metadata for image %s\n" % image_name)
         return
     KW_KEY = 'Iptc.Application2.Keywords'
@@ -209,7 +209,7 @@ def add_exif(image_name, tags):
         metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, tags)
     try:
         metadata.write()
-    except:
+    except EnvironmentError:
         sys.stderr.write("Writing metadata failed for tags: %s in: %s\n" % (tags, image_name))
 
 
@@ -234,7 +234,7 @@ def get_avatar():
             timeout=HTTP_TIMEOUT
         )
         avatar_data = resp.read()
-    except:
+    except EnvironmentError:
         return
     avatar_file = avatar_base + '.' + imghdr.what(None, avatar_data[:32])
     with open_image(theme_dir, avatar_file) as f:
@@ -248,7 +248,7 @@ def get_style():
     try:
         resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT)
         page_data = resp.read()
-    except:
+    except EnvironmentError:
         return
     match = re.search(r'(?s)<style type=.text/css.>(.*?)</style>', page_data)
     if match:
@@ -678,7 +678,7 @@ class TumblrPost:
             image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
             image_data = image_response.read()
             image_response.close()
-        except (IOError, OSError, ValueError):
+        except (EnvironmentError, ValueError) as e:
             return None
         # determine the file type if it's unknown
         if not known_extension:
