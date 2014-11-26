@@ -179,6 +179,8 @@ def xmlparse(base, count, start=0):
             continue
         if resp.info().gettype() == 'text/xml':
             break
+        sys.stderr.write("Unexpected Content-Type: '%s'\n" % resp.info().gettype())
+        return None
     else:
         return None
     try:
