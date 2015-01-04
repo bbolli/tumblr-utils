@@ -546,7 +546,7 @@ class TumblrPost:
             content.append(fmt % s)
 
         def get_try(elt):
-            return post.get(elt)
+            return post.get(elt) or ''
 
         def append_try(elt, fmt=u'%s'):
             elt = get_try(elt)
