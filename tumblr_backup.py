@@ -466,6 +466,8 @@ class TumblrBackup:
                     tags = options.request[post.typ]
                     if not (TAG_ANY in tags or tags & post.tags_lower):
                         continue
+                if options.no_reblog and 'reblog' in p:
+                    continue
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
             return True
@@ -966,6 +968,7 @@ if __name__ == '__main__':
         callback=request_callback, help="save only posts of type TYPE"
         " (comma-separated values from %s)" % ', '.join(POST_TYPES)
     )
+    parser.add_option('--no-reblog', action='store_true', help="don't save reblogged posts")
     parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
         default='o', metavar='FMT',
         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)"
