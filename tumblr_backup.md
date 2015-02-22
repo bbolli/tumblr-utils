@@ -72,6 +72,7 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values;
                           from text, quote, link, answer, video, audio, photo,
                           chat)
+    --no-reblog           don't save reblogged posts
     -I FMT, --image-names=FMT
                           image filename format ('o'=original, 'i'=<post-id>,
                           'bi'=<blog-name>_<post-id>)
@@ -230,8 +231,11 @@ any or no tags. Example: `-Q any:personal,quote,photo:me:self` saves all posts
 tagged 'personal', all quotes, and photos tagged 'me' or 'self' or 'personal'
 (because of the `any` request).
 
-If you combine `-n`, `-s`, `-i`, `-p`, `-t`, `-T` and `-Q`, only posts matching
-all criteria will be backed up.
+The option `--no-reblog` suppresses the backup of reposts of other blogs'
+posts.
+
+If you combine `-n`, `-s`, `-i`, `-p`, `-t`, `-T`, `-Q` and `--no-reblog`, only
+posts matching all criteria will be backed up.
 
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
