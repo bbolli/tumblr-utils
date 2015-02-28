@@ -255,14 +255,14 @@ def get_style():
         page_data = resp.read()
     except EnvironmentError:
         return
-    match = re.search(r'(?s)<style type=.text/css.>(.*?)</style>', page_data)
-    if match:
-        css = match.group(1).strip().decode(encoding, 'replace')
-        if not css:
-            return
+    for match in re.findall(r'(?s)<style type=.text/css.>(.*?)</style>', page_data):
+        css = match.strip().decode(encoding, 'replace')
+        if not '\n' in css:
+            continue
         css = css.replace('\r', '').replace('\n    ', '\n')
         with open_text(theme_dir, 'style.css') as f:
             f.write(css + '\n')
+        return
 
 
 class TumblrBackup:
@@ -708,6 +708,8 @@ class TumblrPost:
         if image_url.startswith('//'):
             image_url = 'http:' + image_url
         image_filename = image_url.split('/')[-1]
+        if not image_filename or not image_url.startswith('http'):
+            return match.group(0)
 
         saved_name = self.download_media(image_url, image_filename)
         if saved_name is None:
