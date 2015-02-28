@@ -659,6 +659,8 @@ class TumblrPost:
         if image_url.startswith('//'):
             image_url = 'http:' + image_url
         image_filename = image_url.split('/')[-1]
+        if not image_filename or not image_url.startswith('http'):
+            return match.group(0)
 
         saved_name = self.download_image(image_url, image_filename)
         if saved_name is None:
