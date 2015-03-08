@@ -527,6 +527,7 @@ class TumblrPost:
         self.json_content = json.dumps(post, sort_keys=True, indent=4, separators=(',', ': '))
         self.ident = str(post['id'])
         self.url = post['post_url']
+        self.shorturl = post['short_url']
         self.typ = post['type']
         self.date = post['timestamp']
         self.tm = time.localtime(self.date)
@@ -767,7 +768,7 @@ class TumblrPost:
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (self.typ, self.ident)
         post += u'<p class=meta><span class=date>%s</span>\n' % strftime('%x %X', self.tm)
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
-        post += u'<a href=%s rel=canonical>●</a></p>\n' % self.url
+        post += u'<a href=%s rel=canonical>●</a></p>\n' % self.shorturl
         if self.title:
             post += u'<h2>%s</h2>\n' % self.title
         post += self.content
