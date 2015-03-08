@@ -466,8 +466,9 @@ class TumblrBackup:
                     tags = options.request[post.typ]
                     if not (TAG_ANY in tags or tags & post.tags_lower):
                         continue
-                if options.no_reblog and 'reblog' in p:
-                    continue
+                if options.no_reblog:
+                    if 'reblog' in p and not p['reblog']['comment']:
+                        continue
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
             return True
