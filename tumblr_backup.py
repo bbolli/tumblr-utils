@@ -7,6 +7,7 @@ import codecs
 from collections import defaultdict
 import errno
 from glob import glob
+from httplib import HTTPException
 import imghdr
 try:
     import json
@@ -177,7 +178,7 @@ def apiparse(base, count, start=0):
         try:
             resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
             data = resp.read()
-        except EnvironmentError as e:
+        except (EnvironmentError, HTTPException) as e:
             sys.stderr.write("%s getting %s\n" % (e, url))
             continue
         if resp.info().gettype() == 'application/json':
@@ -239,7 +240,7 @@ def get_avatar():
             timeout=HTTP_TIMEOUT
         )
         avatar_data = resp.read()
-    except EnvironmentError:
+    except (EnvironmentError, HTTPException):
         return
     avatar_file = avatar_base + '.' + imghdr.what(None, avatar_data[:32])
     with open_media(theme_dir, avatar_file) as f:
@@ -253,7 +254,7 @@ def get_style():
     try:
         resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT)
         page_data = resp.read()
-    except EnvironmentError:
+    except (EnvironmentError, HTTPException):
         return
     for match in re.findall(r'(?s)<style type=.text/css.>(.*?)</style>', page_data):
         css = match.strip().decode(encoding, 'replace')
@@ -746,7 +747,7 @@ class TumblrPost:
                 while data:
                     dest.write(data)
                     data = resp.read(HTTP_CHUNK_SIZE)
-        except (EnvironmentError, ValueError) as e:
+        except (EnvironmentError, ValueError, HTTPException) as e:
             sys.stderr.write('%s downloading %s\n' % (e, url))
             try:
                 os.unlink(path_to(self.media_dir, filename))
