@@ -7,6 +7,7 @@ import codecs
 from collections import defaultdict
 import errno
 from glob import glob
+from httplib import HTTPException
 import imghdr
 import locale
 import os
@@ -174,7 +175,7 @@ def xmlparse(base, count, start=0):
         try:
             resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
             xml = resp.read()
-        except EnvironmentError as e:
+        except (EnvironmentError, HTTPException) as e:
             sys.stderr.write("%s getting %s\n" % (e, url))
             continue
         if resp.info().gettype() == 'text/xml':
@@ -236,7 +237,7 @@ def get_avatar():
             timeout=HTTP_TIMEOUT
         )
         avatar_data = resp.read()
-    except EnvironmentError:
+    except (EnvironmentError, HTTPException):
         return
     avatar_file = avatar_base + '.' + imghdr.what(None, avatar_data[:32])
     with open_image(theme_dir, avatar_file) as f:
@@ -250,7 +251,7 @@ def get_style():
     try:
         resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT)
         page_data = resp.read()
-    except EnvironmentError:
+    except (EnvironmentError, HTTPException):
         return
     for match in re.findall(r'(?s)<style type=.text/css.>(.*?)</style>', page_data):
         css = match.strip().decode(encoding, 'replace')
@@ -682,7 +683,7 @@ class TumblrPost:
             image_response = urllib2.urlopen(image_url, timeout=HTTP_TIMEOUT)
             image_data = image_response.read()
             image_response.close()
-        except (EnvironmentError, ValueError) as e:
+        except (EnvironmentError, ValueError, HTTPException) as e:
             return None
         # determine the file type if it's unknown
         if not known_extension:
