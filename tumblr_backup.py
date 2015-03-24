@@ -5,6 +5,7 @@
 from __future__ import with_statement
 import codecs
 from collections import defaultdict
+from datetime import datetime
 import errno
 from glob import glob
 from httplib import HTTPException
@@ -223,14 +224,14 @@ def save_style():
     with open_text(backup_css) as css:
         css.write('''\
 body { width: 720px; margin: 0 auto; }
+body > footer { padding: 1em 0; }
+header > img { float: right; }
 img { max-width: 720px; }
 blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
 .post a.llink { display: none; }
-.meta a { text-decoration: none; }
-body > img { float: right; }
-article footer, article footer a { font-size: small; color: #999; text-decoration: none; }
-body > footer { padding: 1em 0; }
+header a, footer a { text-decoration: none; }
+footer, article footer a { font-size: small; color: #999; }
 ''')
 
 
@@ -291,7 +292,7 @@ class TumblrBackup:
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
-            idx.write(u'<p>Generated on %s.</p>\n' % strftime('%x %X'))
+            idx.write(u'<footer><p>Generated on %s.</p></footer>\n' % strftime('%x %X'))
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
@@ -371,6 +372,7 @@ class TumblrBackup:
 
 <body%s>
 
+<header>
 ''' % (encoding, self.title, css_rel, body_class)
         if avatar:
             h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, avatar)
@@ -378,16 +380,17 @@ class TumblrBackup:
             h += u'<h1>%s</h1>\n' % title
         if subtitle:
             h += u'<p class=subtitle>%s</p>\n' % subtitle
+        h += '</header>\n'
         return h
 
     def footer(self, base, previous_page, next_page, suffix):
-        f = '<footer>'
+        f = '<footer><nav>'
         f += '<a href=%s rel=index>Index</a>\n' % save_dir
         if previous_page:
             f += '| <a href=%s%s%s rel=prev>Previous</a>\n' % (base, previous_page, suffix)
         if next_page:
             f += '| <a href=%s%s%s rel=next>Next</a>\n' % (base, next_page, suffix)
-        f += '</footer>\n'
+        f += '</nav></footer>\n'
         return f
 
     def backup(self, account):
@@ -531,6 +534,7 @@ class TumblrPost:
         self.shorturl = post['short_url']
         self.typ = post['type']
         self.date = post['timestamp']
+        self.isodate = datetime.utcfromtimestamp(self.date).isoformat() + 'Z'
         self.tm = time.localtime(self.date)
         self.title = ''
         self.tags = post['tags']
@@ -653,7 +657,7 @@ class TumblrPost:
 
         self.content = '\n'.join(content)
 
-        # fix wrongly nested HTML tags
+        # fix wrongly nested HTML elements
         for p in ('<p>(<(%s)>)', '(</(%s)>)</p>'):
             self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
 
@@ -767,9 +771,9 @@ class TumblrPost:
     def get_post(self):
         """returns this post in HTML"""
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (self.typ, self.ident)
-        post += u'<p class=meta><span class=date>%s</span>\n' % strftime('%x %X', self.tm)
+        post += u'<header>\n<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
-        post += u'<a href=%s rel=canonical>●</a></p>\n' % self.shorturl
+        post += u'<a href=%s>●</a></header>\n' % self.shorturl
         if self.title:
             post += u'<h2>%s</h2>\n' % self.title
         post += self.content
