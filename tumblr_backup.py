@@ -24,6 +24,7 @@ import threading
 import time
 import urllib
 import urllib2
+import urlparse
 from xml.sax.saxutils import escape
 
 # extra optional packages
@@ -714,7 +715,8 @@ class TumblrPost:
         image_url = match.group(2)
         if image_url.startswith('//'):
             image_url = 'http:' + image_url
-        image_filename = image_url.split('/')[-1]
+        path = urlparse.urlparse(image_url).path
+        image_filename = path.split('/')[-1]
         if not image_filename or not image_url.startswith('http'):
             return match.group(0)
 
