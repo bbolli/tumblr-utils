@@ -6,9 +6,9 @@ blog locally.
 The backup includes all images both from inline text as well as photo posts. An index links to
 monthly pages, which contain all the posts from the respective month with links
 to single post pages. Command line options select which posts to backup and set
-the output format.
+the output format. The audio and video files can also be saved.
 
-By default, all posts of a blog are backed up in minimally styled HTML.
+By default, all posts of a blog are backed up in minimally styled HTML5.
 
 You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 
@@ -16,16 +16,11 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 ## 1. Installation
 
 1. Download and unzip
-   [xmltramp.zip](https://github.com/bbolli/xmltramp/zipball/master).
-2. Install `xmltramp.py` somewhere on your Python path like
-   `/usr/local/lib/python2.6/dist-packages` or in the same folder as
-   `tumblr_backup.py`.
-3. Download and unzip
    [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
    or clone the Github repo from `git://github.com/bbolli/tumblr-utils.git`.
-4. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
+2. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
    `~/bin` or `/usr/local/bin`.
-5. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
+3. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
    cron job. The recommendation is to do a hourly incremental backup and a
    daily complete one.
 
@@ -44,7 +39,10 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
     -D, --dirs            save each post in its own folder
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
-    -x, --xml             save the original XML source
+    -j, --json            save the original JSON source
+    -k, --skip-images     do not save images; link to Tumblr instead
+    --save-video          save video files
+    --save-audio          save audio files
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
     -R, --reverse-index   reverse the index file order
@@ -63,13 +61,18 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
                             YYYY-MM-DD: the given day
     -N COUNT, --posts-per-page=COUNT
                           set the number of posts per monthly page
-    -P PASSWORD, --private=PASSWORD
-                          password to a private tumblr
+    -Q REQUEST, --request=REQUEST
+                          save posts matching the request
+                          TYPE:TAG:TAG:…,TYPE:TAG:…,…. TYPE can be text, quote,
+                          link, answer, video, audio, photo, chat or any; TAGs
+                          can be omitted or a colon-separated list. Example:
+                          -Q any:personal,quote,photo:me:self
     -t TAGS, --tags=TAGS  save only posts tagged TAGS (comma-separated values;
                           case-insensitive)
     -T TYPE, --type=TYPE  save only posts of type TYPE (comma-separated values;
                           from text, quote, link, answer, video, audio, photo,
                           chat)
+    --no-reblog           don't save reblogged posts
     -I FMT, --image-names=FMT
                           image filename format ('o'=original, 'i'=<post-id>,
                           'bi'=<blog-name>_<post-id>)
@@ -115,11 +118,13 @@ The generated directory structure looks like this:
             posts/
                 <id>.html - the single post pages
                 …
-            images/
-                <image.ext> - the image files
+            media/
+                <image.ext> - image files
+                <audio>.mp3 - audio files
+                <video>.mp4 - video files
                 …
-            xml/
-                <id>.xml - the original XML posts
+            json/
+                <id>.json - the original JSON posts
                 …
             theme/
                 avatar.<ext> - the blog’s avatar
@@ -146,10 +151,12 @@ The directories look like this:
                 <id>/
                     index.html - the single post page
                     <image.ext> - the image file(s) for this post
+                    <audio>.mp3 - audio files
+                    <video>.mp4 - video files
                     …
                 …
-            xml/
-                <id>.xml - the original XML posts
+            json/
+                <id>.json - the original JSON posts
                 …
             theme/
                 avatar.<ext> - the blog’s avatar
@@ -193,8 +200,8 @@ In incremental backup mode, `tumblr_backup` saves only posts that have higher
 ids than the highest id saved locally. Note that posts that are edited after
 being backed up are not backed up again with this option.
 
-In XML backup mode, the original XML source returned by the Tumblr API is saved
-under the `xml/` folder in addition to the HTML format.
+In JSON backup mode, the original JSON source returned by the Tumblr API is saved
+under the `json/` folder in addition to the HTML format.
 
 Automatic archive mode `-a` is designed to be used from an hourly cron script.
 It normally makes an incremental backup except if the current hour is the one
@@ -216,10 +223,19 @@ the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip the
 200 most recent posts and backup the next 100. `-n 1` is the fastest way to
 rebuild the index pages.
 
-The option `-T` limits the backup to posts of the given type.
+The option `-T` limits the backup to posts of the given type. `-t` saves only
+posts with the given tags. `-Q` combines both: it accepts comma-separated
+requests of the form `TYPE:TAG1:TAG2:…`, where the tags for each post type can
+be different. Omitting the TAGs is allowed; this saves posts of this type with
+any or no tags. Example: `-Q any:personal,quote,photo:me:self` saves all posts
+tagged 'personal', all quotes, and photos tagged 'me' or 'self' or 'personal'
+(because of the `any` request).
 
-If you combine `-n`, `-s`, `-i`, `-p`, `-t` and `-T`, only posts matching all
-criteria will be backed up.
+The option `--no-reblog` suppresses the backup of reposts of other blogs'
+posts.
+
+If you combine `-n`, `-s`, `-i`, `-p`, `-t`, `-T`, `-Q` and `--no-reblog`, only
+posts matching all criteria will be backed up.
 
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
