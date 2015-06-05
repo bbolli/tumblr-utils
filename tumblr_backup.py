@@ -86,7 +86,7 @@ TAG_ANY = '__all__'
 
 MAX_POSTS = 50
 
-HTTP_TIMEOUT = 30
+HTTP_TIMEOUT = 90
 HTTP_CHUNK_SIZE = 1024 * 1024
 
 # bb-tumblr-backup API key
