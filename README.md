@@ -15,7 +15,9 @@ More documentation can be found in each script's docstring or in
 
 On 2015-06-04, I made the v2 API the default on the master branch. The former
 master branch using the v1 API is still available on Github as `api-v1`, but
-will no longer be updated.
+will no longer be updated. The one feature that's only available with the old
+API is the option to backup password-protected blogs. There's no way to pass
+a password in Tumblr's v2 API.
 
 ### License
 
