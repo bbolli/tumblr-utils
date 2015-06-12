@@ -606,11 +606,11 @@ class TumblrPost:
                 if post['video_type'] == 'tumblr':
                     src = self.get_media_url(post['video_url'], '.mp4')
                 elif youtube_dl:
-                    url = post['permalink_url'] if post['html5_capable'] else post['source_url']
-                    try:
-                        src = self.get_youtube_url(url)
-                    except:
-                        sys.stdout.write(u'Unknown video type in post #%s%-50s\n' % (self.ident, ' '))
+                    src = self.get_youtube_url(self.url)
+                    if not src:
+                        sys.stdout.write(u'Unable to download video in post #%s%-50s\n' %
+                            (self.ident, ' ')
+                        )
             if src:
                 append(u'<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
                     src, "Your browser does not support the video element.", src, "Video file"
