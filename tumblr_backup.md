@@ -24,7 +24,7 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
    cron job. The recommendation is to do a hourly incremental backup and a
    daily complete one.
 
-There are two optional dependencies that enable additional features:
+There are two optional dependencies that enable additional a more complete archive of some media-heavy blogs:
 
 1. To backup audio and video, install [youtube-dl](https://rg3.github.io/youtube-dl/).
 2. To enable EXIF tagging, install [pyexiv2](http://tilloy.net/dev/pyexiv2/).
@@ -33,6 +33,33 @@ The fastest option to install these packages is via the package manager of
 your operating system (apt-get, synaptic, yum, brew, etc). If this is not
 feasible, download and install from the links above.
 
+### Obtaining the newest youtube-dl
+
+Video websites change and sometimes break youtube-dl. This can cause a slowdown or stopage in tumblr_backup.py. Usually, getting the newest version possible of the script fixes this problem for when you need the video and audio as well.
+
+If you manually installed the script from the site (not from your OS repository or pip), then just run:
+
+```sudo youtube-dl -U```
+
+However, if you didn't and assuming you use Ubuntu, first remove the probably stale copy installed from the repository:
+
+```sudo apt-get remove youtube-dl```
+
+Install the 'pip' python package manager:
+
+```sudo apt-get install python-pip```
+
+Then install youtube-dl:
+
+```sudo pip install youtube-dl```
+
+After that updating is as simple as running:
+
+```sudo pip install --upgrade youtube-dl```
+
+If you've already manually installed youtube-dl and want to switch to the pip version, or are having trouble upgrading even though you removed the version you got from your distrobution repository, you can force an install:
+
+```sudo pip install --upgrade --force-reinstall --ignore-installed youtube-dl```
 
 ## 2. Usage
 
