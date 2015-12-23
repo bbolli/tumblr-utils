@@ -13,11 +13,12 @@ The script needs write permissions in /var/local to save the ID of the
 most recently mailed link. This ID is saved independently per user and tag.
 """
 
-import urllib
-import urlparse
+import os
 import re
 import smtplib
 import textwrap
+import urllib
+import urlparse
 from email.mime.text import MIMEText
 try:
     import json
