@@ -13,11 +13,6 @@ The script needs write permissions in /var/local to save the ID of the
 most recently mailed link. This ID is saved independently per user and tag.
 """
 
-# configuration
-SMTP_SERVER = 'localhost'
-SENDER = 'bbolli@ewanet.ch'
-
-
 import urllib
 import urlparse
 import re
@@ -29,6 +24,11 @@ try:
 except ImportError:
     # Python 2.5 and earlier need this package
     import simplejson as json
+
+
+# configuration
+SMTP_SERVER = 'localhost'
+SENDER = 'bbolli@ewanet.ch'
 
 
 class TumblrToMail:
