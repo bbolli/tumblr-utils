@@ -113,7 +113,7 @@ http://%s
         smtp.quit()
 
 
-if __name__ == '__main__':
+def main():
     import optparse
     parser = optparse.OptionParser("Usage: %prog [options] blog-name tag [recipient ...]",
         description="Sends an email generated from tagged link posts.",
@@ -134,3 +134,7 @@ if __name__ == '__main__':
         parser.error("blog-name and tag are required arguments.")
 
     TumblrToMail(user, tag, recipients).run(options)
+
+
+if __name__ == '__main__':
+    main()
