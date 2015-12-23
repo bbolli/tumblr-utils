@@ -40,11 +40,11 @@ class TumblrToMail:
             self.domain += '.tumblr.com'
         self.tag = tag
         self.recipients = recipients
-        self.db_file = '/var/local/tumblr_mail.latest'
+        self.db_file = os.path.expanduser('~/.config/tumblr_mail.latest')
         self.db_key = (user, tag)
         try:
             self.db = eval(open(self.db_file).read(), {}, {})
-        except EnvironmentError:
+        except:
             self.db = {}
         self.latest = self.db.get(self.db_key, 0)
         self.lw = textwrap.TextWrapper(initial_indent='* ', subsequent_indent='  ',
