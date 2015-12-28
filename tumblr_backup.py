@@ -224,6 +224,8 @@ def add_exif(image_name, tags):
 def save_style():
     with open_text(backup_css) as css:
         css.write('''\
+@import url("override.css");
+
 body { width: 720px; margin: 0 auto; }
 body > footer { padding: 1em 0; }
 header > img { float: right; }

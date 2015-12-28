@@ -121,6 +121,7 @@ The generated directory structure looks like this:
             index.html - table of contents with links to the monthly pages
             backup.css - the default backup style sheet
             custom.css - the user's style sheet (optional)
+            override.css - the user's style sheet override (optional)
             archive/
                 <yyyy-mm-pnn>.html - the monthly pages
                 …
@@ -152,6 +153,7 @@ The directories look like this:
             index.html - table of contents with links to the monthly pages
             backup.css - the default backup style sheet
             custom.css - the user's style sheet (optional)
+            override.css - the user's style sheet override (optional)
             archive/
                 <yyyy-mm-pnn>/
                     index.html - the monthly page
@@ -184,6 +186,12 @@ If you want to use a custom CSS file, call it `custom.css`, put it in the
 backup folder and do a complete backup. Without a custom CSS file,
 `tumblr_backup` saves a default style sheet in `backup.css`. The blog's style
 sheet itself is always saved in `theme/style.css`.
+
+It you want to override just a few default styles, create the file
+`override.css` in the backup folder. This file is included automatically by the
+default style sheet. You may have to mark your overriding styles with
+`!important` to make them stick because `override.css` is imported first in the
+style sheet.
 
 Tumblr saves some image files without extension. This probably saves a few
 billion bytes in their database. `tumblr_backup` restores the image extensions.
