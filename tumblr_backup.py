@@ -1012,6 +1012,8 @@ if __name__ == '__main__':
         parser.error("-O can only be used for a single blog-name")
     if options.exif and not pyexiv2:
         parser.error("--exif: module 'pyexif2' is not installed")
+    if (options.save_video or options.save_audio) and not youtube_dl:
+        parser.error("--save-video/-audio: module 'youtube_dl' is not installed")
 
     tb = TumblrBackup()
     try:
