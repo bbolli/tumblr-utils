@@ -226,6 +226,8 @@ def add_exif(image_name, tags):
 def save_style():
     with open_text(backup_css) as css:
         css.write('''\
+@import url("override.css");
+
 body { width: 720px; margin: 0 auto; }
 body > footer { padding: 1em 0; }
 header > img { float: right; }
@@ -295,7 +297,9 @@ class TumblrBackup:
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, year)
-            idx.write(u'<footer><p>Generated on %s.</p></footer>\n' % strftime('%x %X'))
+            idx.write(u'<footer><p>Generated on %s by <a href=https://github.com/'
+                'bbolli/tumblr-utils>tumblr-utils</a>.</p></footer>\n' % strftime('%x %X')
+            )
 
     def save_year(self, idx, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
@@ -1010,6 +1014,8 @@ if __name__ == '__main__':
         parser.error("-O can only be used for a single blog-name")
     if options.exif and not pyexiv2:
         parser.error("--exif: module 'pyexif2' is not installed")
+    if (options.save_video or options.save_audio) and not youtube_dl:
+        parser.error("--save-video/-audio: module 'youtube_dl' is not installed")
 
     tb = TumblrBackup()
     try:

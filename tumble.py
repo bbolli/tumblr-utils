@@ -4,6 +4,7 @@
 
 Options:
     -b sub-blog         Post to a sub-blog of your account.
+    -c cred-file        The name of the credentials file.
     -e post-id          Edit the existing post with the given ID.
                         This only looks at the first entry of the feed.
     -d                  Debug mode: print the raw post data instead
@@ -49,14 +50,18 @@ CONFIG = '~/.config/tumblr'
 
 class Tumble:
 
-    def __init__(self, config_file):
+    def __init__(self):
+        self.blog = self.consumer_token = self.consumer_secret = \
+        self.access_token = self.access_secret = None
+        self.post_id = None
+        self.debug = False
+
+    def set_credentials(self, cred_file):
         (
             self.blog,
             self.consumer_token, self.consumer_secret,
             self.access_token, self.access_secret
-        ) = (s.strip() for s in open(config_file))
-        self.post_id = None
-        self.debug = False
+        ) = (s.strip() for s in open(cred_file))
 
     def tumble(self, feed):
         feed = feedparser.parse(feed)
@@ -132,15 +137,12 @@ class Tumble:
             return 'error', headers, resp
 
 if __name__ == '__main__':
+    t = Tumble()
     try:
-        t = Tumble(os.path.expanduser(CONFIG))
-    except EnvironmentError:
-        sys.stderr.write('Config file %s not found or not readable\n' % CONFIG)
-        sys.exit(1)
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hb:e:d')
+        opts, args = getopt.getopt(sys.argv[1:], 'hb:c:e:d')
     except getopt.GetoptError:
-        print "Usage: %s [-b blog-name] [-e post-id] [-d]" % sys.argv[0].split(os.sep)[-1]
+        print "Usage: %s [-b blog-name] [-c cred-file] [-e post-id] [-d]" % \
+            sys.argv[0].split(os.sep)[-1]
         sys.exit(1)
     for o, v in opts:
         if o == '-h':
@@ -148,10 +150,17 @@ if __name__ == '__main__':
             sys.exit(0)
         if o == '-b':
             t.blog = v
+        elif o == '-c':
+            CONFIG = v
         elif o == '-e':
             t.post_id = v
         elif o == '-d':
             t.debug = True
+    try:
+        t.set_credentials(os.path.expanduser(CONFIG))
+    except EnvironmentError:
+        sys.stderr.write('Credentials file %s not found or not readable\n' % CONFIG)
+        sys.exit(1)
     result = t.tumble(sys.stdin)
     if result:
         import pprint

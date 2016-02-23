@@ -13,22 +13,23 @@ The script needs write permissions in /var/local to save the ID of the
 most recently mailed link. This ID is saved independently per user and tag.
 """
 
-# configuration
-SMTP_SERVER = 'localhost'
-SENDER = 'bbolli@ewanet.ch'
-
-
-import urllib
-import urlparse
+import os
 import re
 import smtplib
 import textwrap
+import urllib
+import urlparse
 from email.mime.text import MIMEText
 try:
     import json
 except ImportError:
     # Python 2.5 and earlier need this package
     import simplejson as json
+
+
+# configuration
+SMTP_SERVER = 'localhost'
+SENDER = 'bbolli@ewanet.ch'
 
 
 class TumblrToMail:
@@ -39,11 +40,11 @@ class TumblrToMail:
             self.domain += '.tumblr.com'
         self.tag = tag
         self.recipients = recipients
-        self.db_file = '/var/local/tumblr_mail.latest'
+        self.db_file = os.path.expanduser('~/.config/tumblr_mail.latest')
         self.db_key = (user, tag)
         try:
             self.db = eval(open(self.db_file).read(), {}, {})
-        except EnvironmentError:
+        except:
             self.db = {}
         self.latest = self.db.get(self.db_key, 0)
         self.lw = textwrap.TextWrapper(initial_indent='* ', subsequent_indent='  ',
@@ -112,7 +113,7 @@ http://%s
         smtp.quit()
 
 
-if __name__ == '__main__':
+def main():
     import optparse
     parser = optparse.OptionParser("Usage: %prog [options] blog-name tag [recipient ...]",
         description="Sends an email generated from tagged link posts.",
@@ -133,3 +134,7 @@ if __name__ == '__main__':
         parser.error("blog-name and tag are required arguments.")
 
     TumblrToMail(user, tag, recipients).run(options)
+
+
+if __name__ == '__main__':
+    main()
