@@ -27,7 +27,10 @@ import urllib2
 import urlparse
 from xml.sax.saxutils import escape
 
-import settings
+try:
+    from settings import DEFAULT_BLOGS
+except:
+    raise ImportError("Create a settings.py file. See settings.py.example")
 
 # extra optional packages
 try:
@@ -38,9 +41,6 @@ try:
     import youtube_dl
 except ImportError:
     youtube_dl = None
-
-# default blog name(s)
-DEFAULT_BLOGS = settings.DEFAULT_BLOGS
 
 # Format of displayed tags
 TAG_FMT = '#%s'
