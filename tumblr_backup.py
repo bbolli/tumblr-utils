@@ -173,7 +173,7 @@ def set_period():
 
 
 def apiparse(base, count, start=0):
-    params = {'api_key': API_KEY, 'limit': count}
+    params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
     if start > 0:
         params['offset'] = start
     url = base + '?' + urllib.urlencode(params)
@@ -477,7 +477,12 @@ class TumblrBackup:
                     if not (TAG_ANY in tags or tags & post.tags_lower):
                         continue
                 if options.no_reblog:
-                    if 'reblog' in p and not p['reblog']['comment']:
+                    if 'reblogged_from_name' in p or 'reblogged_root_name' in p:
+                        if 'trail' in p and not p['trail']:
+                            continue
+                        elif 'trail' in p and 'is_current_item' not in p['trail'][-1]:
+                            continue
+                    elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
                         continue
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
