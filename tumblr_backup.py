@@ -445,7 +445,8 @@ class TumblrBackup:
             return
 
         # collect all the meta information
-        blog = soup['response']['blog']
+        resp = soup['response']
+        blog = resp['blog']
         try:
             self.title = escape(blog['title'])
         except KeyError:
