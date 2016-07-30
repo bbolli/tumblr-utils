@@ -154,7 +154,7 @@ def get_api_url(account):
     blog_name = account
     if '.' not in account:
         blog_name += '.tumblr.com'
-    return 'http://api.tumblr.com/v2/blog/' + blog_name + '/posts'
+    return 'https://api.tumblr.com/v2/blog/' + blog_name + '/posts'
 
 
 def set_period():
