@@ -107,7 +107,8 @@ determine the locale for month names and the date/time format.
 ### Exit code
 
 The exit code is 0 if at least one post has been backed up, 1 if no post has
-been backed up, 2 on invocation errors, or 3 if the backup was interrupted.
+been backed up, 2 on invocation errors, 3 if the backup was interrupted, or 4
+on HTTP errors.
 
 ### Backup via settings.py
 
@@ -230,7 +231,12 @@ It normally makes an incremental backup except if the current hour is the one
 given as argument. In this case, `tumblr_backup` will make a full backup. An
 example invocation is `tumblr_backup.py -qa4` to do a full backup at 4 in the
 morning. This option obviates the need for shell script logic to determine what
-options to pass.
+options to pass. If you don't want cron to send a mail if no new posts have
+been backed up, use this crontab entry:
+
+    0 * * * * tumblr_backup -qa4 <blog-name> || test $? -eq 1
+
+This changes the exit code 1 to 0.
 
 In Blosxom format mode, the posts generated are saved in a format suitable for
 re-publishing in [Blosxom](http://www.blosxom.com) with the [Meta

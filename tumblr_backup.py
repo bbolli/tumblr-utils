@@ -50,6 +50,12 @@ TAG_FMT = '#%s'
 # Named placeholders that will be replaced: domain, tag
 TAGLINK_FMT = 'http://%(domain)s/tagged/%(tag)s'
 
+# exit codes
+EXIT_SUCCESS    = 0
+EXIT_NOPOSTS    = 1
+# EXIT_OPTPARSE = 2 -- returned by module optparse
+EXIT_INTERRUPT  = 3
+EXIT_ERRORS     = 4
 
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
@@ -276,9 +282,17 @@ def get_style():
 class TumblrBackup:
 
     def __init__(self):
+        self.errors = False
         self.total_count = 0
         self.index = defaultdict(lambda: defaultdict(list))
         self.archives = []
+
+    def exit_code(self):
+        if self.errors:
+            return EXIT_ERRORS
+        if self.total_count == 0:
+            return EXIT_NOPOSTS
+        return EXIT_SUCCESS
 
     def build_index(self):
         filter = join('*', dir_index) if options.dirs else '*' + post_ext
@@ -444,6 +458,7 @@ class TumblrBackup:
         # start by calling the API with just a single post
         soup = apiparse(base, 1)
         if not soup:
+            self.errors = True
             return
 
         # collect all the meta information
@@ -506,6 +521,7 @@ class TumblrBackup:
                 soup = apiparse(base, j - i, i)
                 if soup is None:
                     i += last_batch     # try the next batch
+                    self.errors = True
                     continue
 
                 posts = soup['response']['posts']
@@ -1031,6 +1047,6 @@ if __name__ == '__main__':
         for account in args:
             tb.backup(account)
     except KeyboardInterrupt:
-        sys.exit(3)
+        sys.exit(EXIT_INTERRUPT)
 
-    sys.exit(0 if tb.total_count else 1)
+    sys.exit(tb.exit_code())
