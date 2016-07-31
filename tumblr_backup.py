@@ -27,6 +27,11 @@ import urllib2
 import urlparse
 from xml.sax.saxutils import escape
 
+try:
+    from settings import DEFAULT_BLOGS
+except ImportError:
+    DEFAULT_BLOGS = []
+
 # extra optional packages
 try:
     import pyexiv2
@@ -37,9 +42,6 @@ try:
     from youtube_dl.utils import sanitize_filename
 except ImportError:
     youtube_dl = None
-
-# default blog name(s)
-DEFAULT_BLOGS = ['bbolli']
 
 # Format of displayed tags
 TAG_FMT = '#%s'
@@ -1014,8 +1016,9 @@ if __name__ == '__main__':
             if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
+    args = args or DEFAULT_BLOGS
     if not args:
-        args = DEFAULT_BLOGS
+        parser.error("Missing blog-name")
     if options.outdir and len(args) > 1:
         parser.error("-O can only be used for a single blog-name")
     if options.exif and not pyexiv2:

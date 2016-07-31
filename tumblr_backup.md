@@ -109,6 +109,11 @@ determine the locale for month names and the date/time format.
 The exit code is 0 if at least one post has been backed up, 1 if no post has
 been backed up, 2 on invocation errors, or 3 if the backup was interrupted.
 
+### Backup via settings.py
+
+To backup a list of tumblr addresses, copy `settings.py.example` to  
+`settings.py`, and add the addresses to the list in that file.
+
 
 ## 3. Operation
 
