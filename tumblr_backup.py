@@ -738,6 +738,13 @@ class TumblrPost:
             image_url = u'%s/%s' % (self.media_url, saved_name)
         return image_url
 
+    @staticmethod
+    def maxsize_image_url(image_url):
+        if ".tumblr.com/" not in image_url or image_url.endswith('.gif'):
+            return image_url
+        # change the image resolution to 1280
+        return re.sub(r'_\d{2,4}(\.\w+)$', r'_1280\1', image_url)
+
     def get_inline_image(self, match):
         """Saves an inline image if not saved yet. Returns the new <img> tag or
         the original one in case of download errors."""
@@ -745,6 +752,7 @@ class TumblrPost:
         image_url = match.group(2)
         if image_url.startswith('//'):
             image_url = 'http:' + image_url
+        image_url = self.maxsize_image_url(image_url)
         path = urlparse.urlparse(image_url).path
         image_filename = path.split('/')[-1]
         if not image_filename or not image_url.startswith('http'):
