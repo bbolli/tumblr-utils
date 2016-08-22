@@ -111,7 +111,14 @@ encoding = 'utf-8'
 time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
 
-ssl_ctx = ssl.create_default_context()
+have_ssl_ctx = sys.version_info >= (2, 7, 9)
+if have_ssl_ctx:
+    ssl_ctx = ssl.create_default_context()
+    def urlopen(url):
+        return urllib2.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
+else:
+    def urlopen(url):
+        return urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
 
 
 def log(account, s):
@@ -191,7 +198,7 @@ def apiparse(base, count, start=0):
     url = base + '?' + urllib.urlencode(params)
     for _ in range(10):
         try:
-            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
+            resp = urlopen(url)
             data = resp.read()
         except (EnvironmentError, HTTPException) as e:
             sys.stderr.write("%s getting %s\n" % (e, url))
@@ -253,9 +260,7 @@ footer, article footer a { font-size: small; color: #999; }
 
 def get_avatar():
     try:
-        resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name,
-            timeout=HTTP_TIMEOUT, context=ssl_ctx
-        )
+        resp = urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
         avatar_data = resp.read()
     except (EnvironmentError, HTTPException):
         return
@@ -269,7 +274,7 @@ def get_style():
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
     try:
-        resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT, context=ssl_ctx)
+        resp = urlopen('http://%s/' % blog_name)
         page_data = resp.read()
     except (EnvironmentError, HTTPException):
         return
@@ -788,7 +793,7 @@ class TumblrPost:
             return split(image_glob[0])[1]
         # download the media data
         try:
-            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
+            resp = urlopen(url)
             with open_media(self.media_dir, filename) as dest:
                 data = resp.read(HTTP_CHUNK_SIZE)
                 hdr = data[:32]     # save the first few bytes
@@ -1047,8 +1052,10 @@ if __name__ == '__main__':
             if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
-    if options.no_ssl_verify:
+    if have_ssl_ctx and options.no_ssl_verify:
         ssl_ctx = ssl._create_unverified_context()
+        # Otherwise, it's an old Python version without SSL verification,
+        # so this is the default.
 
     args = args or DEFAULT_BLOGS
     if not args:
