@@ -111,7 +111,7 @@ encoding = 'utf-8'
 time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
 
-ssl_ctx = ssl._create_unverified_context()
+ssl_ctx = ssl.create_default_context()
 
 
 def log(account, s):
@@ -1031,6 +1031,9 @@ if __name__ == '__main__':
         help="add EXIF keyword tags to each picture (comma-separated values;"
         " '-' to remove all tags, '' to add no extra tags)"
     )
+    parser.add_option('-S', '--no-ssl-verify', action='store_true',
+        help="ignore SSL verification errors"
+    )
     options, args = parser.parse_args()
 
     if options.auto is not None and options.auto != time.localtime().tm_hour:
@@ -1044,6 +1047,9 @@ if __name__ == '__main__':
             if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
+    if options.no_ssl_verify:
+        ssl_ctx = ssl._create_unverified_context()
+
     args = args or DEFAULT_BLOGS
     if not args:
         parser.error("Missing blog-name")

@@ -88,6 +88,7 @@ feasible, download and install from the links above.
     -e KW, --exif=KW      add EXIF keyword tags to each picture (comma-separated
                           values; '-' to remove all tags, '' to add no extra
                           tags)
+    -S, --no-ssl-verify   ignore SSL verification errors
 
 ### Arguments
 
