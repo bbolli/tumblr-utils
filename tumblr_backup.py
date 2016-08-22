@@ -19,6 +19,7 @@ import os
 from os.path import join, split, splitext
 import Queue
 import re
+import ssl
 import sys
 import threading
 import time
@@ -110,6 +111,9 @@ encoding = 'utf-8'
 time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
 
+ssl_ctx = ssl._create_unverified_context()
+
+
 def log(account, s):
     if not options.quiet:
         if account:
@@ -187,7 +191,7 @@ def apiparse(base, count, start=0):
     url = base + '?' + urllib.urlencode(params)
     for _ in range(10):
         try:
-            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
+            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
             data = resp.read()
         except (EnvironmentError, HTTPException) as e:
             sys.stderr.write("%s getting %s\n" % (e, url))
@@ -250,7 +254,7 @@ footer, article footer a { font-size: small; color: #999; }
 def get_avatar():
     try:
         resp = urllib2.urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name,
-            timeout=HTTP_TIMEOUT
+            timeout=HTTP_TIMEOUT, context=ssl_ctx
         )
         avatar_data = resp.read()
     except (EnvironmentError, HTTPException):
@@ -265,7 +269,7 @@ def get_style():
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
     try:
-        resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT)
+        resp = urllib2.urlopen('http://%s/' % blog_name, timeout=HTTP_TIMEOUT, context=ssl_ctx)
         page_data = resp.read()
     except (EnvironmentError, HTTPException):
         return
@@ -784,7 +788,7 @@ class TumblrPost:
             return split(image_glob[0])[1]
         # download the media data
         try:
-            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
+            resp = urllib2.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
             with open_media(self.media_dir, filename) as dest:
                 data = resp.read(HTTP_CHUNK_SIZE)
                 hdr = data[:32]     # save the first few bytes
