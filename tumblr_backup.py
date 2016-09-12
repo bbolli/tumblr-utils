@@ -293,8 +293,6 @@ class TumblrBackup:
     def __init__(self):
         self.errors = False
         self.total_count = 0
-        self.index = defaultdict(lambda: defaultdict(list))
-        self.archives = []
 
     def exit_code(self):
         if self.errors:
@@ -426,6 +424,9 @@ class TumblrBackup:
 
     def backup(self, account):
         """makes single files and an index for every post on a public Tumblr blog account"""
+
+        self.index = defaultdict(lambda: defaultdict(list))
+        self.archives = []
 
         base = get_api_url(account)
 
