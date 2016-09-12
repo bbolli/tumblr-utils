@@ -1011,7 +1011,8 @@ if __name__ == '__main__':
         " ('y', 'm', 'd' or YYYY[MM[DD]])"
     )
     parser.add_option('-N', '--posts-per-page', type='int', default=50,
-        metavar='COUNT', help="set the number of posts per monthly page"
+        metavar='COUNT', help="set the number of posts per monthly page, "
+        "0 for unlimited"
     )
     parser.add_option('-Q', '--request', type='string', action='callback',
         callback=request_callback, help="save posts matching the request"
