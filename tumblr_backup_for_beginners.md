@@ -67,6 +67,8 @@ __tumblr_backup.py discoinferno__
 
 If you are tumblr user @ discoinferno. 
 
+(You can use this to backup any tumblr, including someone else's, but I think that's a tad shady)
+
 3. Your command prompt will start spitting letters and phrases onto the screen. Leave it to it! You can do other stuff while you wait, just leave the black command prompt box open and running.
 
 ###Step 5. How tumblr_backup works
@@ -75,9 +77,25 @@ tumblr_backup grabs 50 posts at a time and downloads them onto your hard drive. 
 
 Once you're done, you can open the folder and find the document called "index.html". Right click index.html, and choose "Open With Firefox" - or whatever internet browser you use.
 
+###HOW TO USE FLAGS
+
+In Step 3, you use the command line to tell the program to run.
+
+You type in the name of the program, and then your username.
+
+You can also add "flags" which give the program special running instructions.
+
+You put flags **between** the program name and username - for example:
+
+__tumblr_backup.py -t DOGS discoinferno__
+
+Would only backup pages marked "dogs". You can see the whole list of flags in tumblr_backup.md.
+
+They are useful for, example - using "-T text" to only download your text posts, or -p "2016" to only download this year's posts.
+
+
 ######STILL TO ADD
 1. how to restart the process
-2. how to use flags
 3. more detail
 4. probably links and pictures
 
