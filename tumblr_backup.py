@@ -535,7 +535,8 @@ class TumblrBackup:
                     continue
 
                 posts = soup['response']['posts']
-                if not _backup(posts):
+                # posts can be empty if we don't backup reblogged posts
+                if not posts or not _backup(posts):
                     break
 
                 last_batch = len(posts)
