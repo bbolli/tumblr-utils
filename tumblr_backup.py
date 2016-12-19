@@ -840,6 +840,7 @@ class TumblrPost:
         if foot:
             post += u'\n<footer>%s</footer>' % u' — '.join(foot)
         post += '\n</article>\n'
+        post = post.replace('src="//www','src="http://www')
         return post
 
     @staticmethod
