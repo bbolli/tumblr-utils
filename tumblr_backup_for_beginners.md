@@ -1,18 +1,18 @@
-#Tumblr Backup 101
+# Tumblr Backup 101
 
 This guide is for 100% programming/coding newbies to use this Tumblr Backup service.
 
-##Why 101?
+## Why 101?
 Tumblr does not have an export service, and all the easily downloadable/online ones are not very good. I strongly believe that any service you use should make it easy to back up your words and work.
 
 This program backs up your Tumblr onto your computer, and saves it on your hard drive. It ends up looking like [this](http://drbeat.li/tumblr). This program is excellent and easy to use - but also a but intimidating if you have never used command line programmes before.
 
 Don't panic! I'm going to walk you through step by step.
 
-##Getting Started
+## Getting Started
 This guide is for Windows users. 
 
-###Step 1: Install Python
+### Step 1: Install Python
 1. The program we are going to run is called tumblr_backup.py. It is a **python file**. This means it is a file written in the programming language Python.
 
 2. Just like you need a program like Word to view a_document.doc, or Paint to view a_picture.jpeg, you need to download Python to make this program work.
@@ -25,7 +25,7 @@ This guide is for Windows users.
 
 6. You've installed Python! You can now run Python programs, and if you want to learn to code, you can also use this installation to practice your coding.
 
-###Step 2: Download tumblr_backup
+### Step 2: Download tumblr_backup
 
 1. Download and unzip this file: [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
 
@@ -43,7 +43,7 @@ This guide is for Windows users.
 
 (I learnt how to do this from [this page](https://www.java.com/en/download/help/path.xml), which gives lots of options for different windows systems. Check the link if my description isn't working for you.)
 
-###Step 3. Use the Command Line
+### Step 3. Use the Command Line
 
 1. The command line is the bit of the computer which makes you feel like you're in the Matrix. Once you get used to the command line, you will become fucking addicted to it - I promise. This is because the command line is like seeing the puppeteer beind the puppet show. You will feel powerful. You will feel like the computer is yours to control, not this arcane box, but *your* computer which you can use to do pretty much anything.
 
@@ -58,7 +58,7 @@ This guide is for Windows users.
 6. Once you're done pretending to be in the Matrix, navigate to the folder the file tumblr_backup.py is in. For me, this is:
 _"C:\Users\Unmutual\Downloads\bbolli-tumblr-utils-3a37fe6\bbolli-tumblr-utils-3a37fe6"_
 
-###Step 4. Run!
+### Step 4. Run!
 
 1. Plug in your laptop charger, and make sure you have a stable internet connection, and that the laptop won't auto shutdown, sleep or screensaver. This program will run for a while and it's a faff to restart.
 
@@ -71,13 +71,13 @@ If you are tumblr user @ discoinferno.
 
 3. Your command prompt will start spitting letters and phrases onto the screen. Leave it to it! You can do other stuff while you wait, just leave the black command prompt box open and running.
 
-###Step 5. How tumblr_backup works
+### Step 5. How tumblr_backup works
 
 tumblr_backup grabs 50 posts at a time and downloads them onto your hard drive. In the same folder as the program tumblr_backup.py, it will create a folder with the name of your blog. it downloads everything into the folder. 
 
 Once you're done, you can open the folder and find the document called "index.html". Right click index.html, and choose "Open With Firefox" - or whatever internet browser you use.
 
-###HOW TO USE FLAGS
+### HOW TO USE FLAGS
 
 In Step 3, you use the command line to tell the program to run.
 
@@ -94,10 +94,11 @@ Would only backup pages marked "dogs". You can see the whole list of flags in tu
 They are useful for, example - using "-T text" to only download your text posts, or -p "2016" to only download this year's posts.
 
 
-######STILL TO ADD
+###### TODO
+
 1. how to restart the process
-3. more detail
-4. probably links and pictures
+2. more detail
+3. probably links and pictures
 
 
 
