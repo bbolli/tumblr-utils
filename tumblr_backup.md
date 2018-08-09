@@ -48,6 +48,7 @@ feasible, download and install from the links above.
     -D, --dirs            save each post in its own folder
     -q, --quiet           suppress progress messages
     -i, --incremental     incremental backup mode
+    -l, --likes           save a blog's likes, not its posts
     -j, --json            save the original JSON source
     -k, --skip-images     do not save images; link to Tumblr instead
     --save-video          save video files

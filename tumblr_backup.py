@@ -173,7 +173,9 @@ def get_api_url(account):
     blog_name = account
     if '.' not in account:
         blog_name += '.tumblr.com'
-    return 'https://api.tumblr.com/v2/blog/' + blog_name + '/posts'
+    return 'https://api.tumblr.com/v2/blog/%s/%s' % (
+        blog_name, 'likes' if options.likes else 'posts'
+    )
 
 
 def set_period():
@@ -252,6 +254,7 @@ header > img { float: right; }
 img { max-width: 720px; }
 blockquote { margin-left: 0; border-left: 8px #999 solid; padding: 0 24px; }
 .archive h1, .subtitle, article { padding-bottom: 0.75em; border-bottom: 1px #ccc dotted; }
+article[class^="liked-"] { background-color: #f0f0f8; }
 .post a.llink { display: none; }
 header a, footer a { text-decoration: none; }
 footer, article footer a { font-size: small; color: #999; }
@@ -473,18 +476,21 @@ class TumblrBackup:
 
         # collect all the meta information
         resp = soup['response']
-        blog = resp['blog']
-        try:
-            self.title = escape(blog['title'])
-        except KeyError:
-            self.title = account
-        self.subtitle = blog['description']
+        if options.likes:
+            _get_content = lambda soup: soup['response']['liked_posts']
+            blog = {}
+            last_post = resp['liked_count']
+        else:
+            _get_content = lambda soup: soup['response']['posts']
+            blog = resp['blog']
+            last_post = blog['posts']
+        self.title = escape(blog.get('title', account))
+        self.subtitle = blog.get('description', '')
 
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
 
         # find the post number limit to back up
-        last_post = blog['posts']
         if options.count:
             last_post = min(last_post, options.count + options.skip)
 
@@ -534,7 +540,7 @@ class TumblrBackup:
                     self.errors = True
                     continue
 
-                posts = soup['response']['posts']
+                posts = _get_content(soup)
                 # posts can be empty if we don't backup reblogged posts
                 if not posts or not _backup(posts):
                     break
@@ -828,7 +834,8 @@ class TumblrPost:
 
     def get_post(self):
         """returns this post in HTML"""
-        post = self.post_header + u'<article class=%s id=p-%s>\n' % (self.typ, self.ident)
+        typ = ('liked-' if options.likes else '') + self.typ
+        post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
         post += u'<header>\n<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
         post += u'<a href=%s>●</a></header>\n' % self.shorturl
@@ -987,6 +994,9 @@ if __name__ == '__main__':
     )
     parser.add_option('-i', '--incremental', action='store_true',
         help="incremental backup mode"
+    )
+    parser.add_option('-l', '--likes', action='store_true',
+        dest='likes', help="save a blog's likes, not its posts"
     )
     parser.add_option('-k', '--skip-images', action='store_false', default=True,
         dest='save_images', help="do not save images; link to Tumblr instead"
