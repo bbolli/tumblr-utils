@@ -98,7 +98,8 @@ If your blog is under `.tumblr.com`, you can give just the first domain name
 part; if your blog is under your own domain, give the whole domain name. You
 can give more than one _blog-name_ to backup multiple blogs in one go.
 
-The default blog name can be changed in the script.
+The default blog name(s) can be changed by copying `settings.py.example` to
+`settings.py` and adding the name(s) to the `DEFAULT_BLOGS` list.
 
 ### Environment variables
 
@@ -110,11 +111,6 @@ determine the locale for month names and the date/time format.
 The exit code is 0 if at least one post has been backed up, 1 if no post has
 been backed up, 2 on invocation errors, 3 if the backup was interrupted, or 4
 on HTTP errors.
-
-### Backup via settings.py
-
-To backup a list of tumblr addresses, copy `settings.py.example` to  
-`settings.py`, and add the addresses to the list in that file.
 
 
 ## 3. Operation
