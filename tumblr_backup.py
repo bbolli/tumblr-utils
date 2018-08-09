@@ -414,7 +414,7 @@ class TumblrBackup:
 
     def footer(self, base, previous_page, next_page, suffix):
         f = '<footer><nav>'
-        f += '<a href=%s rel=index>Index</a>\n' % save_dir
+        f += '<a href=%s%s rel=index>Index</a>\n' % (save_dir, dir_index)
         if previous_page:
             f += '| <a href=%s%s%s rel=prev>Previous</a>\n' % (base, previous_page, suffix)
         if next_page:
