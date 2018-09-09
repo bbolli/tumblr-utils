@@ -19,7 +19,9 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
    [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
    or clone the Github repo from `git://github.com/bbolli/tumblr-utils.git`.
 2. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
-   `~/bin` or `/usr/local/bin`.
+   `~/bin` or `/usr/local/bin`. (Or, if you're on Windows, you can just `cd`
+   to the directory with `tumblr_backup.py` in it, since Windows checks the 
+   current working directory before checking `%PATH%`)
 3. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
    cron job. The recommendation is to do a hourly incremental backup and a
    daily complete one.
