@@ -31,7 +31,7 @@ This guide is for Windows users.
 
 2. Unzip the file somewhere easy to find, say in your Downloads folder. 
 
-3. We are now going to add this file to your $PATH. What is $PATH? It essentially tells the computer how to find certain things when it needs to use them. 
+3. We are now going to add this file to your $PATH. What is $PATH? It essentially tells the computer how to find certain things when it needs to use them. NOTE: If you are using a Windows operating system, then you probably don't need to edit your $PATH, since we'll be changing the working directory and Windows always checks the current working directory for executables and scripts before it checks $PATH, so you can probabably go ahead straight to Step 3. If something goes wrong, come back to this step. 
 
 4. First, you need to find the path of the folder your download is in. A path is like a url. Mine looks like:
  _"C:\Users\Unmutual\Downloads\bbolli-tumblr-utils-3a37fe6\bbolli-tumblr-utils-3a37fe6"_
@@ -70,6 +70,8 @@ If you are tumblr user @ discoinferno.
 (You can use this to backup any tumblr, including someone else's, but I think that's a tad shady)
 
 3. Your command prompt will start spitting letters and phrases onto the screen. Leave it to it! You can do other stuff while you wait, just leave the black command prompt box open and running.
+
+4. When you're done using this tool, go ahead and edit your $PATH back to how it was before, because having folders listed there that don't need to be (especially the Downloads folder or the Desktop) can present an unnecessary security risk. If you want more information about how $PATH works, here's the Wikipedia article: https://en.wikipedia.org/wiki/PATH_(variable)
 
 ### Step 5. How tumblr_backup works
 
