@@ -1,7 +1,13 @@
+from __future__ import print_function
 import sys
 import urlparse
 import oauth2 as oauth
 import urllib
+
+try:
+    raw_input          # Python 2
+except NameError:
+    raw_input = input  # Python 3
 
 consumer_key = sys.argv[1]
 consumer_secret = sys.argv[2]
@@ -25,19 +31,19 @@ if resp['status'] != '200':
 
 request_token = dict(urlparse.parse_qsl(content))
 
-print "Request Token:"
-print "    - oauth_token        = %s" % request_token['oauth_token']
-print "    - oauth_token_secret = %s\n" % request_token['oauth_token_secret']
+print("Request Token:")
+print("    - oauth_token        = %s" % request_token['oauth_token'])
+print("    - oauth_token_secret = %s\n" % request_token['oauth_token_secret'])
 
 # Step 2: Redirect to the provider. Since this is a CLI script we do not
 # redirect. In a web application you would redirect the user to the URL
 # below.
 
-print "Go to the following link in your browser:"
-print "%s?%s\n" % (authorize_url, urllib.urlencode({
+print("Go to the following link in your browser:")
+print("%s?%s\n" % (authorize_url, urllib.urlencode({
     "oauth_token": request_token['oauth_token'],
     "oauth_callback": 'http://localhost/doctorstrange'
-}))
+})))
 
 # After the user has granted access to you, the consumer, the provider will
 # redirect you to whatever URL you have told them to redirect to. You can
@@ -61,8 +67,8 @@ client = oauth.Client(consumer, token)
 resp, content = client.request(access_token_url, "POST")
 access_token = dict(urlparse.parse_qsl(content))
 
-print "Access Token:"
-print "    - oauth_token        = %s" % access_token['oauth_token']
-print "    - oauth_token_secret = %s" % access_token['oauth_token_secret']
-print
-print "You may now access protected resources using the access tokens above.\n"
+print("Access Token:")
+print("    - oauth_token        = %s" % access_token['oauth_token'])
+print("    - oauth_token_secret = %s" % access_token['oauth_token_secret'])
+print()
+print("You may now access protected resources using the access tokens above.\n")

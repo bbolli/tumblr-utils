@@ -12,6 +12,7 @@ my geek-buddies mailing list.
 The script needs write permissions in /var/local to save the ID of the
 most recently mailed link. This ID is saved independently per user and tag.
 """
+from __future__ import print_function
 
 import os
 import re
@@ -64,7 +65,7 @@ class TumblrToMail:
         try:
             posts = json.loads(posts)
         except ValueError:
-            print posts
+            print(posts)
             return []
         return [
             p for p in posts['posts']
@@ -94,7 +95,7 @@ http://%s
         self.latest = max(int(l['id']) for l in links) if not options.dry_run else None
 
         if not self.recipients and not options.full:
-            print body
+            print(body)
             return
 
         msg = MIMEText(body.encode('utf-8'))
@@ -105,7 +106,7 @@ http://%s
             msg['To'] = ', '.join(self.recipients)
 
         if options.full:
-            print msg.as_string()
+            print(msg.as_string())
             return
 
         smtp = smtplib.SMTP(SMTP_SERVER)

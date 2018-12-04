@@ -44,6 +44,11 @@ try:
 except ImportError:
     youtube_dl = None
 
+try:
+    long        # Python 2
+except NameError:
+    long = int  # Python 3
+
 # Format of displayed tags
 TAG_FMT = '#%s'
 

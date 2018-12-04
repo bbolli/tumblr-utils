@@ -29,6 +29,7 @@ Non-standard Python dependencies:
     - oauth2 (http://pypi.python.org/pypi/oauth2/)
     - httplib2 (http://pypi.python.org/pypi/httplib2/)
 """
+from __future__ import print_function
 
 import sys
 import os
@@ -43,6 +44,11 @@ except ImportError:
 
 import oauth2 as oauth
 import feedparser
+
+try:
+    unicode        # Python 2
+except NameError:
+    unicode = str  # Python 3
 
 URL_FMT = 'http://api.tumblr.com/v2/blog/%s/post'
 CONFIG = '~/.config/tumblr'
@@ -117,7 +123,7 @@ class Tumble:
             return dict(url=url, entry=entry, data=data)
 
         for k in data:
-            if type(data[k]) is unicode:
+            if isinstance(data[k], unicode):
                 data[k] = data[k].encode('utf-8')
 
         # do the OAuth thing
@@ -127,9 +133,9 @@ class Tumble:
         try:
             headers, resp = client.request(url, method='POST', body=urllib.urlencode(data))
             resp = json.loads(resp)
-        except ValueError, e:
+        except ValueError as e:
             return 'error', 'json', resp
-        except EnvironmentError, e:
+        except EnvironmentError as e:
             return 'error', str(e)
         if resp['meta']['status'] in (200, 201):
             return op, str(resp['response']['id'])
@@ -141,12 +147,12 @@ if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hb:c:e:d')
     except getopt.GetoptError:
-        print "Usage: %s [-b blog-name] [-c cred-file] [-e post-id] [-d]" % \
-            sys.argv[0].split(os.sep)[-1]
+        print("Usage: %s [-b blog-name] [-c cred-file] [-e post-id] [-d]" % \
+            sys.argv[0].split(os.sep)[-1])
         sys.exit(1)
     for o, v in opts:
         if o == '-h':
-            print __doc__.strip()
+            print(__doc__.strip())
             sys.exit(0)
         if o == '-b':
             t.blog = v
