@@ -109,10 +109,10 @@ This guide is for Mac users.
 
 4. On the left hand side of the screen is part of a Path. For me, it reads Katelyns-iMac:~ katelynpetrin$, and then there is a blinky cursor. 
 
-5. Type "cd Downloads" and then press enter. Your screen now reads Katelyns-iMac:~ katelynpetrin$ (with your name, in place of the word "Unmutual"). "cd" stands for "change directory". You have gone one directory down! This is equivalent to just double clicking on the downloads folder. If you go wrong, typing "cd .." will go up one directory again (back to Katelyns-iMac:~ katelynpetrin$). Have a play around and do some cackling. If you simply type "dir" it will give you a list of all the files in that directory.
+5. Type "cd Downloads" and then press enter. Your screen now reads Kaes-iMac:~ unmutual$ (with your name, in place of the word "Unmutual"). "cd" stands for "change directory". You have gone one directory down! This is equivalent to just double clicking on the downloads folder. If you go wrong, typing "cd .." will go up one directory again (back to Kaes-iMac:~ unmutual$). Have a play around and do some cackling. If you simply type "dir" it will give you a list of all the files in that directory.
 
 6. Once you're done pretending to be in the Matrix, navigate to the folder the file tumblr_backup.py is in. For me, this is:
-_"/Users/katelynpetrin/Downloads/bbolli-tumblr-utils/tumblr_backup.py"_
+_"/Users/unmutual/Downloads/bbolli-tumblr-utils/tumblr_backup.py"_
 
 ### Step 4. Run!
 
