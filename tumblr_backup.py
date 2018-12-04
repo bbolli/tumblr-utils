@@ -291,53 +291,46 @@ def get_style():
         return
 
 
-class TumblrBackup:
+class Index:
 
-    def __init__(self):
-        self.errors = False
-        self.total_count = 0
-
-    def exit_code(self):
-        if self.errors:
-            return EXIT_ERRORS
-        if self.total_count == 0:
-            return EXIT_NOPOSTS
-        return EXIT_SUCCESS
+    def __init__(self, blog):
+        self.blog = blog
+        self.index = defaultdict(lambda: defaultdict(list))
 
     def build_index(self):
         filter = join('*', dir_index) if options.dirs else '*' + post_ext
         for f in glob(path_to(post_dir, filter)):
             post = LocalPost(f)
             self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+
+    def save_index(self, index_dir='.'):
         self.archives = sorted(((y, m) for y in self.index for m in self.index[y]),
             reverse=options.reverse_month
         )
-
-    def save_index(self):
         f = glob(path_to(theme_dir, avatar_base + '.*'))
         avatar = split(f[0])[1] if f else None
-        with open_text(dir_index) as idx:
-            idx.write(self.header(self.title, body_class='index',
-                subtitle=self.subtitle, avatar=avatar
+        with open_text(index_dir, dir_index) as idx:
+            idx.write(self.blog.header(self.blog.title, body_class='index',
+                subtitle=self.blog.subtitle, avatar=avatar
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
-                self.save_year(idx, year)
+                self.save_year(idx, index_dir, year)
             idx.write(u'<footer><p>Generated on %s by <a href=https://github.com/'
                 'bbolli/tumblr-utils>tumblr-utils</a>.</p></footer>\n' % strftime('%x %X')
             )
 
-    def save_year(self, idx, year):
+    def save_year(self, idx, index_dir, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
         for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
-            month_name = self.save_month(year, month, tm)
+            month_name = self.save_month(index_dir, year, month, tm)
             idx.write(u'    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
                 archive_dir, month_name, len(self.index[year][month]),
                 strftime('%B', tm)
             ))
         idx.write('</ul>\n\n')
 
-    def save_month(self, year, month, tm):
+    def save_month(self, index_dir, year, month, tm):
         posts = sorted(self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month)
         posts_month = len(posts)
         posts_page = options.posts_per_page if options.posts_per_page >= 1 else posts_month
@@ -357,20 +350,20 @@ class TumblrBackup:
         pages_month = pages_per_month(year, month)
         for page, start in enumerate(range(0, posts_month, posts_page), start=1):
 
-            archive = [self.header(strftime('%B %Y', tm), body_class='archive')]
+            archive = [self.blog.header(strftime('%B %Y', tm), body_class='archive')]
             archive.extend(p.get_post() for p in posts[start:start + posts_page])
 
             file_name = FILE_FMT % (year, month, page)
             if options.dirs:
                 base = save_dir + archive_dir + '/'
                 suffix = '/'
-                arch = open_text(archive_dir, file_name, dir_index)
+                arch = open_text(index_dir, archive_dir, file_name, dir_index)
                 file_name += suffix
             else:
                 base = ''
                 suffix = post_ext
                 file_name += suffix
-                arch = open_text(archive_dir, file_name)
+                arch = open_text(index_dir, archive_dir, file_name)
 
             if page > 1:
                 pp = FILE_FMT % (year, month, page - 1)
@@ -385,11 +378,25 @@ class TumblrBackup:
                 ny, nm = next_month(+1)
                 np = FILE_FMT % (ny, nm, 1) if ny else ''
 
-            archive.append(self.footer(base, pp, np, suffix))
+            archive.append(self.blog.footer(base, pp, np, suffix))
 
             arch.write('\n'.join(archive))
 
         return first_file
+
+
+class TumblrBackup:
+
+    def __init__(self):
+        self.errors = False
+        self.total_count = 0
+
+    def exit_code(self):
+        if self.errors:
+            return EXIT_ERRORS
+        if self.total_count == 0:
+            return EXIT_NOPOSTS
+        return EXIT_SUCCESS
 
     def header(self, title='', body_class='', subtitle='', avatar=''):
         root_rel = '' if body_class == 'index' else save_dir
@@ -561,8 +568,9 @@ class TumblrBackup:
             get_style()
             if not have_custom_css:
                 save_style()
-            self.build_index()
-            self.save_index()
+            ix = Index(self)
+            ix.build_index()
+            ix.save_index()
 
         log(account, "%d posts backed up\n" % self.post_count)
         self.total_count += self.post_count
