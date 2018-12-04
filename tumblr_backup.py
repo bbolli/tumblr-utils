@@ -193,6 +193,33 @@ def set_period():
     tm[i] += 1
     options.p_stop = time.mktime(tm)
 
+def apiparse_likes(base, count, before=0):
+    params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
+    if before > 0:
+        params['before'] = before
+    url = base + '?' + urllib.urlencode(params)
+    for _ in range(10):
+        try:
+            resp = urlopen(url)
+            data = resp.read()
+        except (EnvironmentError, HTTPException) as e:
+            sys.stderr.write("%s getting %s\n" % (e, url))
+            continue
+        if resp.info().gettype() == 'application/json':
+            break
+        sys.stderr.write("Unexpected Content-Type: '%s'\n" % resp.info().gettype())
+        return None
+    else:
+        return None
+    try:
+        doc = json.loads(data)
+    except ValueError as e:
+        sys.stderr.write('%s: %s\n%d %s %s\n%r\n' % (
+            e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), data
+        ))
+        return None
+    return doc if doc.get('meta', {}).get('status', 0) == 200 else None
+
 
 def apiparse(base, count, start=0):
     params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
@@ -581,28 +608,69 @@ class TumblrBackup:
         # start the thread pool
         backup_pool = ThreadPool()
         try:
-            # Get the JSON entries from the API, which we can only do for max 50 posts at once.
-            # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
-            last_batch = MAX_POSTS
-            i = options.skip
-            while i < last_post:
-                # find the upper bound
-                j = min(i + MAX_POSTS, last_post)
-                log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
+            if not options.likes:
+                # Get the JSON entries from the API, which we can only do for max 50 posts at once.
+                # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
+                last_batch = MAX_POSTS
+                i = options.skip
+                while i < last_post:
+                    # find the upper bound
+                    j = min(i + MAX_POSTS, last_post)
+                    log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
 
-                soup = apiparse(base, j - i, i)
-                if soup is None:
-                    i += last_batch     # try the next batch
-                    self.errors = True
-                    continue
+                    soup = apiparse(base, j - i, i)
+                    if soup is None:
+                        i += last_batch     # try the next batch
+                        self.errors = True
+                        continue
 
-                posts = _get_content(soup)
-                # posts can be empty if we don't backup reblogged posts
-                if not posts or not _backup(posts):
-                    break
+                    posts = _get_content(soup)
+                    # posts can be empty if we don't backup reblogged posts
+                    if not posts or not _backup(posts):
+                        break
 
-                last_batch = len(posts)
-                i += last_batch
+                    last_batch = len(posts)
+                    i += last_batch
+            else:
+                # Get the JSON entries from the API, which we can only do for max 20 likes at once.
+                # Likes "arrive" in reverse chronological order. Post #0 is the most recent one.
+                i = options.skip
+                finished_with_likes = False
+                before_timestamp = 0
+                #before_timestamp = 1485673434
+                #before_timestamp = 1488326400
+                #before_timestamp = 1326153600
+                while not finished_with_likes:
+                    # find the upper bound
+                    j = min(i + MAX_LIKES, last_post)
+                    log(account, "Getting likes %d to %d of %d\r" % (i, j - 1, last_post))
+
+                    soup = apiparse_likes(base, MAX_LIKES, before_timestamp)
+                    if soup is None:
+                        i += MAX_LIKES # try the next batch
+                        self.errors = True
+                        break
+                    else:
+                        try:
+                            before_timestamp = soup['response']['_links']['next']['query_params']['before']
+                        except KeyError:
+                            if soup['meta']['status'] == 200 and not soup['response']['liked_posts']:
+                                finished_with_likes = True
+                                continue
+                            else:
+                                raise
+
+                    posts = _get_content(soup)
+                    # posts can be empty if we don't backup reblogged posts
+                    if not posts or not _backup(posts):
+                        finished_with_likes = True
+
+                    # Don't want to blow through hourly or daily quota.
+                    time.sleep(10)
+
+                    i += MAX_LIKES
+
+ 
         except:
             # ensure proper thread pool termination
             backup_pool.cancel()
