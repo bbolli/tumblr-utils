@@ -119,7 +119,7 @@ _"/Users/katelynpetrin/Downloads/bbolli-tumblr-utils/tumblr_backup.py"_
 1. Plug in your laptop charger, and make sure you have a stable internet connection, and that the laptop won't auto shutdown, sleep or screensaver. This program will run for a while and it's a faff to restart.
 
 2. Where the blinky cursor is, type **"python tumblr_backup.py yourtumblrname"**. The first bit tells the program to run. The second bit - yourtumblrname - tells it which tumblr to download. For example, you may type:
-__tumblr_backup.py discoinferno__
+__python tumblr_backup.py discoinferno__
 
 If you are tumblr user @ discoinferno. 
 
