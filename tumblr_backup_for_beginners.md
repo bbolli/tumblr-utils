@@ -34,7 +34,7 @@ This guide is for Windows users.
 3. We are now going to add this file to your $PATH. What is $PATH? It essentially tells the computer how to find certain things when it needs to use them. 
 
 4. First, you need to find the path of the folder your download is in. A path is like a url. Mine looks like:
- _"C:\Users\Unmutual\Downloads\bbolli-tumblr-utils-3a37fe6\bbolli-tumblr-utils-3a37fe6"_
+`C:\Users\Unmutual\Downloads\bbolli-tumblr-utils-3a37fe6\bbolli-tumblr-utils-3a37fe6`
 (Yours will be different. The word Unmutual is my username; and you may have saved your file in a different place)
 
 5. Open up Control Panel. Search for Advanced System Settings. Click the link reading Environment Variables. 
@@ -51,19 +51,20 @@ This guide is for Windows users.
 
 3. Your next step is to navigate the prompt to the file tumblr_backup.py. There are better guides out there than this for using the command prompt. I am going to explain, but feel free to google for one with pictures.
 
-4. On the left hand side of the screen is part of a Path. For me, it reads C:\Users\Unmutual>, and then there is a blinky cursor. 
+4. On the left hand side of the screen is part of a Path. For me, it reads `C:\Users\Unmutual>`, and then there is a blinky cursor. 
 
-5. Type "cd Downloads" and then press enter. Your screen now reads C:\Users\Unmutual\Downloads> (with your name, in place of the word "Unmutual"). "cd" stands for "change directory". You have gone one directory down! This is equivalent to just double clicking on the downloads folder. If you go wrong, typing "cd .." will go up one directory again (back to C:\Users\Unmutual>). Have a play around and do some cackling. If you simply type "dir" it will give you a list of all the files in that directory.
+5. Type `cd Downloads` and then press enter. Your screen now reads `C:\Users\Unmutual\Downloads>` (with your name, in place of the word "Unmutual"). "cd" stands for "change directory". You have gone one directory down! This is equivalent to just double clicking on the downloads folder. If you go wrong, typing `cd ..` will go up one directory again (back to C:\Users\Unmutual>). Have a play around and do some cackling. If you simply type "dir" it will give you a list of all the files in that directory.
 
 6. Once you're done pretending to be in the Matrix, navigate to the folder the file tumblr_backup.py is in. For me, this is:
-_"C:\Users\Unmutual\Downloads\bbolli-tumblr-utils-3a37fe6\bbolli-tumblr-utils-3a37fe6"_
+`cd C:\Users\Unmutual\Downloads\bbolli-tumblr-utils-3a37fe6`, or, from the Downloads folder, just `cd bbolli-tumblr-utils-3a37fe6`.
 
 ### Step 4. Run!
 
 1. Plug in your laptop charger, and make sure you have a stable internet connection, and that the laptop won't auto shutdown, sleep or screensaver. This program will run for a while and it's a faff to restart.
 
-2. Where the blinky cursor is, type **"tumblr_backup.py yourtumblrname"**. The first bit tells the program to run. The second bit - yourtumblrname - tells it which tumblr to download. For example, you may type:
-__tumblr_backup.py discoinferno__
+2. Where the blinky cursor is, type `python tumblr_backup.py yourtumblrname`. The first bit tells the Windows to run Python, the second bit tells Python to run the backup script, and the third bit - yourtumblrname - tells the backup script which tumblr to download. For example, you may type
+
+    python tumblr_backup.py discoinferno
 
 If you are tumblr user @ discoinferno. 
 
@@ -87,11 +88,11 @@ You can also add "flags" which give the program special running instructions.
 
 You put flags **between** the program name and username - for example:
 
-__tumblr_backup.py -t DOGS discoinferno__
+    tumblr_backup.py -t DOGS discoinferno
 
 Would only backup pages marked "dogs". You can see the whole list of flags in tumblr_backup.md.
 
-They are useful for, example - using "-T text" to only download your text posts, or -p "2016" to only download this year's posts.
+They are useful for, example - using `-T text` to only download your text posts, or `-p 2018` to only download this year's posts.
 
 
 ###### TODO
