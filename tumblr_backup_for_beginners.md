@@ -10,7 +10,7 @@ This program backs up your Tumblr onto your computer, and saves it on your hard 
 Don't panic! I'm going to walk you through step by step.
 
 ## Getting Started
-This guide is for Windows users. 
+This guide is for Windows users. See further down for Mac users.
 
 ### Step 1: Install Python
 1. The program we are going to run is called tumblr_backup.py. It is a **python file**. This means it is a file written in the programming language Python.
@@ -77,6 +77,62 @@ tumblr_backup grabs 50 posts at a time and downloads them onto your hard drive. 
 
 Once you're done, you can open the folder and find the document called "index.html". Right click index.html, and choose "Open With Firefox" - or whatever internet browser you use.
 
+## Getting Started
+This guide is for Mac users. 
+
+### Step 1: Install Python
+1. The program we are going to run is called tumblr_backup.py. It is a **python file**. This means it is a file written in the programming language Python.
+
+2. Just like you need a program like Word to view a_document.doc, or Paint to view a_picture.jpeg, you need to use Python to make this program work.
+
+3. Macintosh computers come with the correct version of Python already installed. If you have trouble getting it to work, you may need to install a different version of Python.  Go to the [Python website](https://www.python.org/downloads/release/python-2712/). We are downloading v.2 of Python because this program is designed to work with v2
+
+4. Download the file called **Mac OS X 32-bit i386/PPC installer** for Mac OS X 10.5 and later or **Mac OS X 64-bit/32-bit installer** for Mac OS X 10.6 and later. If you do not know what version of Mac you're running, click the "apple" on your toolbar and look under the "Overview" tab.
+
+5. Install the downloaded file by double clicking.
+
+6. You've installed Python! You can now run Python programs, and if you want to learn to code, you can also use this installation to practice your coding.
+
+### Step 2: Download tumblr_backup
+
+1. Download and unzip this file: [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
+
+2. Unzip the file somewhere easy to find, say in your Downloads folder. 
+
+### Step 3. Use the Command Line
+
+1. The command line is the bit of the computer which makes you feel like you're in the Matrix. Once you get used to the command line, you will become fucking addicted to it - I promise. This is because the command line is like seeing the puppeteer beind the puppet show. You will feel powerful. You will feel like the computer is yours to control, not this arcane box, but *your* computer which you can use to do pretty much anything.
+
+2. To find the command line, go to your system search and type in "Terminal". Click it.
+
+3. Your next step is to navigate the prompt to the file tumblr_backup.py. There are better guides out there than this for using the command prompt. I am going to explain, but feel free to google for one with pictures.
+
+4. On the left hand side of the screen is part of a Path. For me, it reads Katelyns-iMac:~ katelynpetrin$, and then there is a blinky cursor. 
+
+5. Type "cd Downloads" and then press enter. Your screen now reads Katelyns-iMac:~ katelynpetrin$ (with your name, in place of the word "Unmutual"). "cd" stands for "change directory". You have gone one directory down! This is equivalent to just double clicking on the downloads folder. If you go wrong, typing "cd .." will go up one directory again (back to Katelyns-iMac:~ katelynpetrin$). Have a play around and do some cackling. If you simply type "dir" it will give you a list of all the files in that directory.
+
+6. Once you're done pretending to be in the Matrix, navigate to the folder the file tumblr_backup.py is in. For me, this is:
+_"/Users/katelynpetrin/Downloads/bbolli-tumblr-utils/tumblr_backup.py"_
+
+### Step 4. Run!
+
+1. Plug in your laptop charger, and make sure you have a stable internet connection, and that the laptop won't auto shutdown, sleep or screensaver. This program will run for a while and it's a faff to restart.
+
+2. Where the blinky cursor is, type **"python tumblr_backup.py yourtumblrname"**. The first bit tells the program to run. The second bit - yourtumblrname - tells it which tumblr to download. For example, you may type:
+__tumblr_backup.py discoinferno__
+
+If you are tumblr user @ discoinferno. 
+
+(You can use this to backup any tumblr, including someone else's, but I think that's a tad shady)
+
+3. Your command prompt will start spitting letters and phrases onto the screen. Leave it to it! You can do other stuff while you wait, just leave the black command prompt box open and running.
+
+### Step 5. How tumblr_backup works
+
+tumblr_backup grabs 50 posts at a time and downloads them onto your hard drive. In the same folder as the program tumblr_backup.py, it will create a folder with the name of your blog. it downloads everything into the folder. 
+
+Once you're done, you can open the folder and find the document called "index.html". Right click index.html, and choose "Open With Firefox" - or whatever internet browser you use.
+
 ### HOW TO USE FLAGS
 
 In Step 3, you use the command line to tell the program to run.
@@ -87,7 +143,7 @@ You can also add "flags" which give the program special running instructions.
 
 You put flags **between** the program name and username - for example:
 
-__tumblr_backup.py -t DOGS discoinferno__
+__python tumblr_backup.py -t DOGS discoinferno__
 
 Would only backup pages marked "dogs". You can see the whole list of flags in tumblr_backup.md.
 
