@@ -904,12 +904,13 @@ class LocalPost:
 
     def __init__(self, post_file):
         with codecs.open(post_file, 'r', encoding) as f:
-            self.lines = f.readlines()
+            lines = f.readlines()
         # remove header and footer
-        while self.lines and '<article ' not in self.lines[0]:
-            del self.lines[0]
-        while self.lines and '</article>' not in self.lines[-1]:
-            del self.lines[-1]
+        while lines and '<article ' not in lines[0]:
+            del lines[0]
+        while lines and '</article>' not in lines[-1]:
+            del lines[-1]
+        self.post = ''.join(lines)
         parts = post_file.split(os.sep)
         if parts[-1] == dir_index:  # .../<post_id>/index.html
             self.file_name = os.sep.join(parts[-2:])
@@ -921,7 +922,7 @@ class LocalPost:
         self.tm = time.localtime(self.date)
 
     def get_post(self):
-        return u''.join(self.lines)
+        return self.post
 
 
 class ThreadPool:
