@@ -670,10 +670,10 @@ class TumblrPost:
             if options.save_audio:
                 if post['audio_type'] == 'tumblr':
                     audio_url = post['audio_url']
-                    if audio_url.startswith('http://a.tumblr.com/'):
+                    if audio_url.startswith('https://a.tumblr.com/'):
                         src = self.get_media_url(audio_url, '.mp3')
                     elif audio_url.startswith('https://www.tumblr.com/audio_file/'):
-                        audio_url = u'http://a.tumblr.com/%so1.mp3' % audio_url.split('/')[-1]
+                        audio_url = u'https://a.tumblr.com/%so1.mp3' % audio_url.split('/')[-1]
                         src = self.get_media_url(audio_url, '.mp3')
                 elif post['audio_type'] == 'soundcloud':
                     src = self.get_media_url(post['audio_url'], '.mp3')
