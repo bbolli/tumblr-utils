@@ -82,6 +82,7 @@ backup_css = 'backup.css'
 custom_css = 'custom.css'
 avatar_base = 'avatar'
 dir_index = 'index.html'
+tag_index_dir = 'tags'
 
 blog_name = ''
 post_ext = '.html'
@@ -291,53 +292,47 @@ def get_style():
         return
 
 
-class TumblrBackup:
+class Index:
 
-    def __init__(self):
-        self.errors = False
-        self.total_count = 0
+    def __init__(self, blog, body_class='index'):
+        self.blog = blog
+        self.body_class = body_class
+        self.index = defaultdict(lambda: defaultdict(list))
 
-    def exit_code(self):
-        if self.errors:
-            return EXIT_ERRORS
-        if self.total_count == 0:
-            return EXIT_NOPOSTS
-        return EXIT_SUCCESS
+    def add_post(self, post):
+        self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+        return self
 
-    def build_index(self):
-        filter = join('*', dir_index) if options.dirs else '*' + post_ext
-        for f in glob(path_to(post_dir, filter)):
-            post = LocalPost(f)
-            self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+    def save_index(self, index_dir='.', title=None):
         self.archives = sorted(((y, m) for y in self.index for m in self.index[y]),
             reverse=options.reverse_month
         )
-
-    def save_index(self):
-        f = glob(path_to(theme_dir, avatar_base + '.*'))
-        avatar = split(f[0])[1] if f else None
-        with open_text(dir_index) as idx:
-            idx.write(self.header(self.title, body_class='index',
-                subtitle=self.subtitle, avatar=avatar
-            ))
+        subtitle = self.blog.title if title else self.blog.subtitle
+        title = title or self.blog.title
+        with open_text(index_dir, dir_index) as idx:
+            idx.write(self.blog.header(title, self.body_class, subtitle, True))
+            if options.tag_index and self.body_class == 'index':
+                idx.write('<p><a href=%s/%s>Tag index</a></p>\n' % (
+                    tag_index_dir, dir_index
+                ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
-                self.save_year(idx, year)
+                self.save_year(idx, index_dir, year)
             idx.write(u'<footer><p>Generated on %s by <a href=https://github.com/'
                 'bbolli/tumblr-utils>tumblr-utils</a>.</p></footer>\n' % strftime('%x %X')
             )
 
-    def save_year(self, idx, year):
+    def save_year(self, idx, index_dir, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
         for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
             tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
-            month_name = self.save_month(year, month, tm)
+            month_name = self.save_month(index_dir, year, month, tm)
             idx.write(u'    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
                 archive_dir, month_name, len(self.index[year][month]),
                 strftime('%B', tm)
             ))
         idx.write('</ul>\n\n')
 
-    def save_month(self, year, month, tm):
+    def save_month(self, index_dir, year, month, tm):
         posts = sorted(self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month)
         posts_month = len(posts)
         posts_page = options.posts_per_page if options.posts_per_page >= 1 else posts_month
@@ -357,20 +352,20 @@ class TumblrBackup:
         pages_month = pages_per_month(year, month)
         for page, start in enumerate(range(0, posts_month, posts_page), start=1):
 
-            archive = [self.header(strftime('%B %Y', tm), body_class='archive')]
+            archive = [self.blog.header(strftime('%B %Y', tm), body_class='archive')]
             archive.extend(p.get_post() for p in posts[start:start + posts_page])
 
             file_name = FILE_FMT % (year, month, page)
             if options.dirs:
                 base = save_dir + archive_dir + '/'
                 suffix = '/'
-                arch = open_text(archive_dir, file_name, dir_index)
+                arch = open_text(index_dir, archive_dir, file_name, dir_index)
                 file_name += suffix
             else:
                 base = ''
                 suffix = post_ext
                 file_name += suffix
-                arch = open_text(archive_dir, file_name)
+                arch = open_text(index_dir, archive_dir, file_name)
 
             if page > 1:
                 pp = FILE_FMT % (year, month, page - 1)
@@ -385,14 +380,76 @@ class TumblrBackup:
                 ny, nm = next_month(+1)
                 np = FILE_FMT % (ny, nm, 1) if ny else ''
 
-            archive.append(self.footer(base, pp, np, suffix))
+            archive.append(self.blog.footer(base, pp, np, suffix))
 
             arch.write('\n'.join(archive))
 
         return first_file
 
-    def header(self, title='', body_class='', subtitle='', avatar=''):
-        root_rel = '' if body_class == 'index' else save_dir
+
+class Indices:
+
+    def __init__(self, blog):
+        self.blog = blog
+        self.main_index = Index(blog)
+        self.tags = defaultdict(lambda: Index(blog, 'tag-archive'))
+
+    def build_index(self):
+        filter = join('*', dir_index) if options.dirs else '*' + post_ext
+        self.all_posts = map(LocalPost, glob(path_to(post_dir, filter)))
+        for post in self.all_posts:
+            self.main_index.add_post(post)
+            if options.tag_index:
+                for tag, name in post.tags:
+                    self.tags[tag].add_post(post).name = name
+
+    def save_index(self):
+        self.main_index.save_index()
+        if options.tag_index:
+            self.save_tag_index()
+
+    def save_tag_index(self):
+        global save_dir
+        save_dir = '../../../'
+        mkdir(path_to(tag_index_dir))
+        self.fixup_media_links()
+        tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
+        for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
+            index.save_index(tag_index_dir + os.sep + tag,
+                u"Tag ‛%s’" % index.name
+            )
+            tag_index.append(u'    <li><a href=%s/%s>%s</a></li>' % (
+                tag, dir_index, escape(index.name)
+            ))
+        tag_index.extend(['</ul>', ''])
+        with open_text(tag_index_dir, dir_index) as f:
+            f.write(u'\n'.join(tag_index))
+
+    def fixup_media_links(self):
+        """Fixup all media links which now have to be two folders lower."""
+        shallow_media = '../' + media_dir
+        deep_media = save_dir + media_dir
+        for p in self.all_posts:
+            p.post = p.post.replace(shallow_media, deep_media)
+
+
+class TumblrBackup:
+
+    def __init__(self):
+        self.errors = False
+        self.total_count = 0
+
+    def exit_code(self):
+        if self.errors:
+            return EXIT_ERRORS
+        if self.total_count == 0:
+            return EXIT_NOPOSTS
+        return EXIT_SUCCESS
+
+    def header(self, title='', body_class='', subtitle='', avatar=False):
+        root_rel = {
+            'index': '', 'tag-index': '../', 'tag-archive': '../../'
+        }.get(body_class, save_dir)
         css_rel = root_rel + (custom_css if have_custom_css else backup_css)
         if body_class:
             body_class = ' class=' + body_class
@@ -407,7 +464,9 @@ class TumblrBackup:
 <header>
 ''' % (encoding, self.title, css_rel, body_class)
         if avatar:
-            h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, avatar)
+            f = glob(path_to(theme_dir, avatar_base + '.*'))
+            if f:
+                h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, split(f[0])[1])
         if title:
             h += u'<h1>%s</h1>\n' % title
         if subtitle:
@@ -427,9 +486,6 @@ class TumblrBackup:
 
     def backup(self, account):
         """makes single files and an index for every post on a public Tumblr blog account"""
-
-        self.index = defaultdict(lambda: defaultdict(list))
-        self.archives = []
 
         base = get_api_url(account)
 
@@ -561,8 +617,9 @@ class TumblrBackup:
             get_style()
             if not have_custom_css:
                 save_style()
-            self.build_index()
-            self.save_index()
+            ix = Indices(self)
+            ix.build_index()
+            ix.save_index()
 
         log(account, "%d posts backed up\n" % self.post_count)
         self.total_count += self.post_count
@@ -896,12 +953,19 @@ class LocalPost:
 
     def __init__(self, post_file):
         with codecs.open(post_file, 'r', encoding) as f:
-            self.lines = f.readlines()
+            post = f.read()
+        # extract all URL-encoded tags
+        self.tags = []
+        footer_pos = post.find('<footer>')
+        if footer_pos > 0:
+            self.tags = re.findall(r'(?m)<a.+?/tagged/(.+?)>#(.+?)</a>', post[footer_pos:])
         # remove header and footer
-        while self.lines and '<article ' not in self.lines[0]:
-            del self.lines[0]
-        while self.lines and '</article>' not in self.lines[-1]:
-            del self.lines[-1]
+        lines = post.split('\n')
+        while lines and '<article ' not in lines[0]:
+            del lines[0]
+        while lines and '</article>' not in lines[-1]:
+            del lines[-1]
+        self.post = '\n'.join(lines)
         parts = post_file.split(os.sep)
         if parts[-1] == dir_index:  # .../<post_id>/index.html
             self.file_name = os.sep.join(parts[-2:])
@@ -913,7 +977,7 @@ class LocalPost:
         self.tm = time.localtime(self.date)
 
     def get_post(self):
-        return u''.join(self.lines)
+        return self.post
 
 
 class ThreadPool:
@@ -1015,6 +1079,9 @@ if __name__ == '__main__':
     parser.add_option('-R', '--reverse-index', action='store_false', default=True,
         help="reverse the index file order"
     )
+    parser.add_option('--tag-index', action='store_true',
+        help="also create an archive per tag"
+    )
     parser.add_option('-a', '--auto', type='int', metavar="HOUR",
         help="do a full backup at HOUR hours, otherwise do an incremental backup"
         " (useful for cron jobs)"
@@ -1082,6 +1149,8 @@ if __name__ == '__main__':
         parser.error("Missing blog-name")
     if options.outdir and len(args) > 1:
         parser.error("-O can only be used for a single blog-name")
+    if options.dirs and options.tag_index:
+        parser.error("-D cannot be used with --tag-index")
     if options.exif and not pyexiv2:
         parser.error("--exif: module 'pyexif2' is not installed")
     if (options.save_video or options.save_audio) and not youtube_dl:

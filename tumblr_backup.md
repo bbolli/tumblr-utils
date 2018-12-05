@@ -56,6 +56,7 @@ feasible, download and install from the links above.
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
     -R, --reverse-index   reverse the index file order
+    --tag-index           also create an archive per tag
     -a HOUR, --auto=HOUR  do a full backup at HOUR hours, otherwise do an
                           incremental backup (useful for cron jobs)
     -n COUNT, --count=COUNT
@@ -140,6 +141,11 @@ The generated directory structure looks like this:
             json/
                 <id>.json - the original JSON posts
                 …
+            tags/
+                index.html - the index of all tag indices
+                <tag>/index.html - the index for <tag>
+                    archive/
+                        <yyyy-mm-pnn>.html - the monthly pages for <tag>
             theme/
                 avatar.<ext> - the blog’s avatar
                 style.css - the blog’s style sheet
@@ -185,6 +191,9 @@ The index pages are recreated from scratch after every backup, based on the
 existing single post pages. Normally, the index and monthly pages are in
 reverse chronological order, i.e. more recent entries on top. The options `-R`
 and `-r` can be used to reverse the order.
+
+Option `--tag-index` creates a tag index for each tag used in the posts.
+It can be reached through the "Tag index" link in the main index.
 
 If you want to use a custom CSS file, call it `custom.css`, put it in the
 backup folder and do a complete backup. Without a custom CSS file,
