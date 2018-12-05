@@ -31,15 +31,15 @@ This guide is for Windows users.
 
 2. Unzip the file somewhere easy to find, say in your Downloads folder. 
 
-3. We are now going to add this file to your $PATH. What is $PATH? It essentially tells the computer how to find certain things when it needs to use them. 
+3. We are now going to add PYTHON to your $PATH. What is $PATH? It essentially tells the computer how to find certain things when it needs to use them. 
 
-4. First, you need to find the path of the folder your download is in. A path is like a url. Mine looks like:
-`C:\Users\Unmutual\Downloads\bbolli-tumblr-utils-3a37fe6\bbolli-tumblr-utils-3a37fe6`
-(Yours will be different. The word Unmutual is my username; and you may have saved your file in a different place)
+4. First, you need to find the path of your PYTHON Install in. A path is like a url. Mine looks like:
+`C:\Python27`
+(Yours may be different, you may have saved your file in a different place)
 
 5. Open up Control Panel. Search for Advanced System Settings. Click the link reading Environment Variables. 
 
-6. Scroll down the variables until you find one reading "Path". Click it. Click edit. If there is nothing in the box, simply paste in the url. If there is something in the box add a semi-colon to the end of the line. Then, paste in the url. (the semi-colon tells the computer to treat the two things as different, not interpret it as one big thing)
+6. Scroll down the variables until you find one reading "Path". Click it. Click edit. If there is nothing in the box, simply paste in the path. If there is something in the box add a semi-colon to the end of the line. Then, paste in the url. (the semi-colon tells the computer to treat the two things as different, not interpret it as one big thing)
 
 (I learnt how to do this from [this page](https://www.java.com/en/download/help/path.xml), which gives lots of options for different windows systems. Check the link if my description isn't working for you.)
 
