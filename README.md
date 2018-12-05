@@ -11,7 +11,7 @@ These scripts are or have been useful to me over the years.
 More documentation can be found in each script's docstring or in
 [tumblr_backup.md](https://github.com/bbolli/tumblr-utils/blob/master/tumblr_backup.md).
 
-The utilities run under Python 2.6 and 2.7.
+The utilities run under Python 2.7.
 
 ### Notice
 
