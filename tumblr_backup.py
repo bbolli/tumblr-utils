@@ -307,11 +307,9 @@ class Index:
         self.archives = sorted(((y, m) for y in self.index for m in self.index[y]),
             reverse=options.reverse_month
         )
-        f = glob(path_to(theme_dir, avatar_base + '.*'))
-        avatar = split(f[0])[1] if f else None
         with open_text(index_dir, dir_index) as idx:
             idx.write(self.blog.header(self.blog.title, body_class='index',
-                subtitle=self.blog.subtitle, avatar=avatar
+                subtitle=self.blog.subtitle, avatar=True
             ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, index_dir, year)
@@ -398,7 +396,7 @@ class TumblrBackup:
             return EXIT_NOPOSTS
         return EXIT_SUCCESS
 
-    def header(self, title='', body_class='', subtitle='', avatar=''):
+    def header(self, title='', body_class='', subtitle='', avatar=False):
         root_rel = '' if body_class == 'index' else save_dir
         css_rel = root_rel + (custom_css if have_custom_css else backup_css)
         if body_class:
@@ -414,7 +412,9 @@ class TumblrBackup:
 <header>
 ''' % (encoding, self.title, css_rel, body_class)
         if avatar:
-            h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, avatar)
+            f = glob(path_to(theme_dir, avatar_base + '.*'))
+            if f:
+                h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, split(f[0])[1])
         if title:
             h += u'<h1>%s</h1>\n' % title
         if subtitle:
