@@ -429,7 +429,7 @@ class Indices:
         mkdir(path_to(tag_index_dir))
         self.fixup_media_links()
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
-        for _, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
+        for index in sorted(self.tags.values(), key=lambda kv: kv[1].name):
             tag = slugify(index.name)
             index.save_index(tag_index_dir + os.sep + tag,
                 u"Tag ‛%s’" % index.name
