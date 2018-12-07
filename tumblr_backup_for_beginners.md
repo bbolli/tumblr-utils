@@ -2,6 +2,8 @@
 
 This guide is for 100% programming/coding newbies to use this Tumblr Backup service.
 
+If you prefer watching a video instead of reading, see [this video tutorial](https://www.youtube.com/watch?v=mwG9bzL0E_4) by [@Sheepykin](https://github.com/Sheepykin). Thanks a lot!
+
 ## Why 101?
 Tumblr does not have an export service, and all the easily downloadable/online ones are not very good. I strongly believe that any service you use should make it easy to back up your words and work.
 
