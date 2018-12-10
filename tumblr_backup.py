@@ -1078,7 +1078,8 @@ if __name__ == '__main__':
     parser.add_option('-k', '--skip-images', action='store_false', default=True,
         dest='save_images', help="do not save images; link to Tumblr instead"
     )
-    parser.add_option('--save-video', action='store_true', help="save video files")
+    parser.add_option('--save-video', action='store_true', help="save all video files")
+    parser.add_option('--save-video-tumblr', action='store_true', help="save only Tumblr video files")
     parser.add_option('--save-audio', action='store_true', help="save audio files")
     parser.add_option('-j', '--json', action='store_true',
         help="save the original JSON source"
@@ -1168,6 +1169,7 @@ if __name__ == '__main__':
         parser.error("--exif: module 'pyexif2' is not installed")
     if (options.save_video or options.save_audio) and not youtube_dl:
         parser.error("--save-video/-audio: module 'youtube_dl' is not installed")
+    options.save_video = options.save_video or options.save_video_tumblr
 
     tb = TumblrBackup()
     try:

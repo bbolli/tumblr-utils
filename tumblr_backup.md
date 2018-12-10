@@ -51,7 +51,8 @@ feasible, download and install from the links above.
     -l, --likes           save a blog's likes, not its posts
     -j, --json            save the original JSON source
     -k, --skip-images     do not save images; link to Tumblr instead
-    --save-video          save video files
+    --save-video          save all video files
+    --save-video-tumblr   save only Tumblr video files
     --save-audio          save audio files
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
