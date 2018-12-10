@@ -735,15 +735,15 @@ class TumblrPost:
         elif self.typ == 'audio':
             src = ''
             if options.save_audio:
+                audio_url = get_try('audio_url') or get_try('audio_source_url')
                 if post['audio_type'] == 'tumblr':
-                    audio_url = post['audio_url']
                     if audio_url.startswith('https://a.tumblr.com/'):
                         src = self.get_media_url(audio_url, '.mp3')
                     elif audio_url.startswith('https://www.tumblr.com/audio_file/'):
                         audio_url = u'https://a.tumblr.com/%so1.mp3' % audio_url.split('/')[-1]
                         src = self.get_media_url(audio_url, '.mp3')
                 elif post['audio_type'] == 'soundcloud':
-                    src = self.get_media_url(post['audio_url'], '.mp3')
+                    src = self.get_media_url(audio_url, '.mp3')
             if src:
                 append(u'<p><audio controls><source src="%s" type=audio/mpeg>%s<br>\n<a href="%s">%s</a></audio></p>' % (
                     src, "Your browser does not support the audio element.", src, "Audio file"
@@ -807,6 +807,8 @@ class TumblrPost:
         return u'%s/%s' % (self.media_url, split(media_filename)[1])
 
     def get_media_url(self, media_url, extension):
+        if not media_url:
+            return ''
         media_filename = self.get_filename(media_url)
         media_filename = os.path.splitext(media_filename)[0] + extension
         saved_name = self.download_media(media_url, media_filename)
