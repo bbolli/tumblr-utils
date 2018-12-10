@@ -643,6 +643,8 @@ class TumblrPost:
         self.title = ''
         self.tags = post['tags']
         self.note_count = post.get('note_count', 0)
+        self.reblogged_from = post.get('reblogged_from_url')
+        self.reblogged_root = post.get('reblogged_root_url')
         self.source_title = post.get('source_title', '')
         self.source_url = post.get('source_url', '')
         if options.request:
@@ -908,7 +910,12 @@ class TumblrPost:
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
         post += u'<header>\n<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
-        post += u'<a href=%s>●</a></header>\n' % self.shorturl
+        post += u'<a href=%s>●</a>\n' % self.shorturl
+        if self.reblogged_from and self.reblogged_from != self.reblogged_root:
+            post += u'<a href=%s>⬀</a>\n' % self.reblogged_from
+        if self.reblogged_root:
+            post += u'<a href=%s>⬈</a>\n' % self.reblogged_root
+        post += '</header>\n'
         if self.title:
             post += u'<h2>%s</h2>\n' % self.title
         post += self.content
