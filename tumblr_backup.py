@@ -674,6 +674,16 @@ class TumblrPost:
         self.media_url = save_dir + self.media_dir
         self.media_folder = path_to(self.media_dir)
 
+        if get_try('is_blocks_post_format') is True:
+            body = post['body']
+            m = re.search("data-npf='({.*?})'", body)
+            if m:
+                post = json.loads(m.group(1))
+                self.typ = post['type']
+                if self.typ == 'video':
+                    post['video_type'] = post['provider']
+                    post['video_url'] = post['url']
+
         if self.typ == 'text':
             self.title = get_try('title')
             append_try('body')
