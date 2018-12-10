@@ -1167,8 +1167,8 @@ if __name__ == '__main__':
         parser.error("-D cannot be used with --tag-index")
     if options.exif and not pyexiv2:
         parser.error("--exif: module 'pyexif2' is not installed")
-    if (options.save_video or options.save_audio) and not youtube_dl:
-        parser.error("--save-video/-audio: module 'youtube_dl' is not installed")
+    if options.save_video and not youtube_dl:
+        parser.error("--save-video: module 'youtube_dl' is not installed")
     options.save_video = options.save_video or options.save_video_tumblr
 
     tb = TumblrBackup()
