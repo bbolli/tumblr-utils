@@ -677,14 +677,14 @@ class TumblrPost:
         self.media_folder = path_to(self.media_dir)
 
         if get_try('is_blocks_post_format') is True:
-            body = post['body']
+            body = get_try('body')
             m = re.search("data-npf='({.*?})'", body)
             if m:
                 post = json.loads(m.group(1))
-                self.typ = post['type']
+                self.typ = post.get('type')
                 if self.typ == 'video':
-                    post['video_type'] = post['provider']
-                    post['video_url'] = post['url']
+                    post['video_type'] = post.get('provider')
+                    post['video_url'] = post.get('url')
 
         if self.typ == 'text':
             self.title = get_try('title')
