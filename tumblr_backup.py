@@ -23,6 +23,7 @@ import ssl
 import sys
 import threading
 import time
+import hashlib
 import urllib
 import urllib2
 import urlparse
@@ -121,7 +122,6 @@ if have_ssl_ctx:
 else:
     def urlopen(url):
         return urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
-
 
 def log(account, s):
     if not options.quiet:
@@ -442,7 +442,8 @@ class Indices:
         mkdir(path_to(tag_index_dir))
         self.fixup_media_links()
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
-        for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
+        for index in sorted(self.tags.values(), key=lambda v: v.name):
+            tag = hashlib.sha256(index.name.encode('utf-8')).hexdigest()
             index.save_index(tag_index_dir + os.sep + tag,
                 u"Tag ‛%s’" % index.name
             )
@@ -542,10 +543,38 @@ class TumblrBackup:
         ident_max = None
         if options.incremental:
             try:
-                ident_max = max(
-                    long(splitext(split(f)[1])[0])
-                    for f in glob(path_to(post_dir, '*' + post_ext))
-                )
+                if not options.likes:
+                    ident_max = max(
+                        long(splitext(split(f)[1])[0])
+                        for f in glob(path_to(post_dir, '*' + post_ext))
+                    )
+                else:
+                    # Need to read every file to find the latest timestamp we've liked;
+                    # Can't just lean on post ident since likes API endpoint
+                    # expects before/after on liked_timestamp
+                    #
+                    # This code operates on the assumption that, for a like backup,
+                    # the stored date in the post html looks like this:
+                    #
+                    # <p><time datetime=2018-12-03T03:49:35Z>12/02/2018 09:49:35 PM</time>
+                    #
+                    # And the actual datetime is the time the user *liked* the
+                    # post. Assuming the post html was generated on a "likes" run,
+                    # then the datetime should be the *liked* time.
+                    #log(account, "Finding latest like (may take a while)")
+                    ident_max = 0
+                    expr = re.compile("(-?(?:[1-9][0-9]*)?[0-9]{4})-(1[0-2]|0[1-9])-(3[01]|0[1-9]|[12][0-9])T(2[0-3]|[01][0-9]):([0-5][0-9]):([0-5][0-9])(\\.[0-9]+)?(Z)?")
+                    for f in glob(path_to(post_dir, '*' + post_ext)):
+                        fh = open(f,'r')
+                        for line in fh:
+                            res = expr.findall(line)
+                            if res:
+                                dt = datetime(int(res[0][0]),int(res[0][1]),int(res[0][2]),int(res[0][3]),int(res[0][4]),int(res[0][5]))
+                                tstamp = long((dt - datetime(1970,1,1)).total_seconds())
+                                if tstamp > ident_max:
+                                    ident_max = tstamp
+                                    # no need to keep evaluating the file; there should only ever be one <time/> element
+                                    break
                 log(account, "Backing up posts after %d\r" % ident_max)
             except ValueError:  # max() arg is an empty sequence
                 pass
@@ -564,11 +593,12 @@ class TumblrBackup:
             _get_content = lambda soup: soup['response']['liked_posts']
             blog = {}
             last_post = resp['liked_count']
+            self.title = escape(blog.get('title', account)) + " likes"
         else:
             _get_content = lambda soup: soup['response']['posts']
             blog = resp['blog']
             last_post = blog['posts']
-        self.title = escape(blog.get('title', account))
+            self.title = escape(blog.get('title', account))
         self.subtitle = blog.get('description', '')
 
         # use the meta information to create a HTML header
@@ -579,10 +609,15 @@ class TumblrBackup:
             last_post = min(last_post, options.count + options.skip)
 
         def _backup(posts):
-            for p in sorted(posts, key=lambda x: x['id'], reverse=True):
+            for p in sorted(posts, key=lambda x: x['id'] if not options.likes else x['liked_timestamp'], reverse=True):
                 post = post_class(p)
-                if ident_max and long(post.ident) <= ident_max:
-                    return False
+                if ident_max:
+                    if not options.likes:
+                        if long(post.ident) <= ident_max:
+                            return False
+                    else:
+                        if long(post.date) <= ident_max:
+                            return False
                 if options.period:
                     if post.date >= options.p_stop:
                         continue
@@ -707,7 +742,11 @@ class TumblrPost:
         self.url = post['post_url']
         self.shorturl = post['short_url']
         self.typ = post['type']
-        self.date = post['timestamp']
+        if options.likes:
+            self.creator = post['blog_name']
+            self.date = post['liked_timestamp']
+        else:
+            self.date = post['timestamp']
         self.isodate = datetime.utcfromtimestamp(self.date).isoformat() + 'Z'
         self.tm = time.localtime(self.date)
         self.title = ''
@@ -978,10 +1017,11 @@ class TumblrPost:
         """returns this post in HTML"""
         typ = ('liked-' if options.likes else '') + self.typ
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
-        post += u'<header>\n'
         if options.likes:
-            post += u'<p><a href=\"http://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
-        post += u'<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
+            post += u'<header><p><a href=\"https://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
+            post += u'<p><time datetime=%s class=\"tumblr_time_of_like\">%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
+        else:
+            post += u'<header>\n<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
         post += u'<a href=%s>●</a>\n' % self.shorturl
         if self.reblogged_from and self.reblogged_from != self.reblogged_root:
