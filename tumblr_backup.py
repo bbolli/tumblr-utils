@@ -717,15 +717,15 @@ class TumblrPost:
 
         elif self.typ == 'video':
             src = ''
-            if options.save_video:
-                if post['video_type'] == 'tumblr':
-                    src = self.get_media_url(post['video_url'], '.mp4')
-                elif youtube_dl:
-                    src = self.get_youtube_url(self.url)
-                    if not src:
-                        sys.stdout.write(u'Unable to download video in post #%s%-50s\n' %
-                            (self.ident, ' ')
-                        )
+            if (options.save_video or options.save_video_tumblr) \
+            and post['video_type'] == 'tumblr':
+                src = self.get_media_url(post['video_url'], '.mp4')
+            elif options.save_video:
+                src = self.get_youtube_url(self.url)
+                if not src:
+                    sys.stdout.write(u'Unable to download video in post #%s%-50s\n' %
+                        (self.ident, ' ')
+                    )
             if src:
                 append(u'<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
                     src, "Your browser does not support the video element.", src, "Video file"
@@ -1176,7 +1176,6 @@ if __name__ == '__main__':
         parser.error("--exif: module 'pyexif2' is not installed")
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
-    options.save_video = options.save_video or options.save_video_tumblr
 
     tb = TumblrBackup()
     try:
