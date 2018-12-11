@@ -633,6 +633,7 @@ class TumblrPost:
         self.content = ''
         self.post = post
         self.json_content = json.dumps(post, sort_keys=True, indent=4, separators=(',', ': '))
+        self.creator = post['blog_name']
         self.ident = str(post['id'])
         self.url = post['post_url']
         self.shorturl = post['short_url']
@@ -908,7 +909,10 @@ class TumblrPost:
         """returns this post in HTML"""
         typ = ('liked-' if options.likes else '') + self.typ
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
-        post += u'<header>\n<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
+        post += u'<header>\n'
+        if options.likes:
+            post += u'<p><a href=\"http://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
+        post += u'<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
         post += u'<a href=%s>●</a>\n' % self.shorturl
         if self.reblogged_from and self.reblogged_from != self.reblogged_root:
