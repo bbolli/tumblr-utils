@@ -677,12 +677,16 @@ class TumblrPost:
         self.media_url = save_dir + self.media_dir
         self.media_folder = path_to(self.media_dir)
 
-        if get_try('is_blocks_post_format') is True:
+        if get_try('is_blocks_post_format') is True and 'body' in post:
             body = get_try('body')
             m = re.search("data-npf='({.*?})'", body)
             if m:
                 post = json.loads(m.group(1))
                 self.typ = post.get('type')
+                if not self.typ:
+                    if 'subtype' in post:
+                        self.typ = 'text'
+                        post['body'] = body
                 if self.typ == 'video':
                     post['video_type'] = post.get('provider')
                     post['video_url'] = post.get('url')
@@ -770,6 +774,8 @@ class TumblrPost:
             sys.stderr.write(
                 u"Unknown post type '%s' in post #%s%-50s\n" % (self.typ, self.ident, ' ')
             )
+            if self.typ is None or self.typ == '':
+                self.typ = 'none'
             append(escape(self.json_content), u'<pre>%s</pre>')
 
         self.content = '\n'.join(content)
