@@ -756,13 +756,21 @@ class TumblrPost(object):
                     src, "Your browser does not support the video element.", src, "Video file"
                 ))
             else:
-                append(post['player'][-1]['embed_code'])
+                player = get_try('player')
+                if player:
+                    append(player[-1]['embed_code'])
+                else:
+                    append_try('video_url')
             append_try('caption')
 
         elif self.typ == 'audio':
-            src = ''
+            def make_player(src_):
+                append(u'<p><audio controls><source src="%s" type=audio/mpeg>%s<br>\n<a href="%s">%s</a></audio></p>'
+                       % (src_, "Your browser does not support the audio element.", src_, "Audio file"))
+
+            src = None
+            audio_url = get_try('audio_url') or get_try('audio_source_url')
             if options.save_audio:
-                audio_url = get_try('audio_url') or get_try('audio_source_url')
                 if post['audio_type'] == 'tumblr':
                     if audio_url.startswith('https://a.tumblr.com/'):
                         src = self.get_media_url(audio_url, '.mp3')
@@ -771,12 +779,13 @@ class TumblrPost(object):
                         src = self.get_media_url(audio_url, '.mp3')
                 elif post['audio_type'] == 'soundcloud':
                     src = self.get_media_url(audio_url, '.mp3')
+            player = get_try('player')
             if src:
-                append(u'<p><audio controls><source src="%s" type=audio/mpeg>%s<br>\n<a href="%s">%s</a></audio></p>' % (
-                    src, "Your browser does not support the audio element.", src, "Audio file"
-                ))
-            else:
-                append(post['player'])
+                make_player(src)
+            elif player:
+                append(player)
+            elif audio_url:
+                make_player(audio_url)
             append_try('caption')
 
         elif self.typ == 'answer':
