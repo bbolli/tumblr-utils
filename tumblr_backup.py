@@ -637,7 +637,7 @@ class TumblrPost:
         self.ident = str(post['id'])
         self.url = post['post_url']
         self.shorturl = post['short_url']
-        self.typ = post['type']
+        self.typ = str(post['type'])
         self.date = post['timestamp']
         self.isodate = datetime.utcfromtimestamp(self.date).isoformat() + 'Z'
         self.tm = time.localtime(self.date)
