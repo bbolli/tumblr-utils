@@ -1,4 +1,4 @@
-## 0. Description
+## 1. Description
 
 `tumblr_backup.py` is a script that backs up your [Tumblr](http://tumblr.com)
 blog locally.
@@ -12,8 +12,12 @@ By default, all posts of a blog are backed up in minimally styled HTML5.
 
 You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 
+### Important Notes:
+- Dashboard-only (hidden) blogs are not currently supported
+- On OS X, you may get SSL errors.  `-S` can be used to ignore them.
 
-## 1. Installation
+
+## 2. Installation
 
 1. Download and unzip
    [tumblr-utils.zip](https://github.com/bbolli/tumblr-utils/zipball/master)
@@ -26,10 +30,11 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 
 There are two optional dependencies that enable additional features:
 
-1. To backup audio and video, install [youtube-dl](https://rg3.github.io/youtube-dl/).
-   If you need HTTP cookies to download, use an appropriate browser plugin to
-   extract the cookie(s) into a file and use option `--cookiefile=file`. See
-   [issue 132](https://github.com/bbolli/tumblr-utils/issues/132).
+1. [youtube-dl](https://rg3.github.io/youtube-dl/) is used to backup external video.
+    - Install the Python 2 _module_, not the main youtube-dl program.
+    - If you need HTTP cookies to download, use an appropriate browser plugin to
+      extract the cookie(s) into a file and use option `--cookiefile=file`. See
+      [issue 132](https://github.com/bbolli/tumblr-utils/issues/132).
 2. To enable EXIF tagging, install [pyexiv2](https://github.com/escaped/pyexiv2).
 
 The fastest option to install these packages is via the package manager of
@@ -37,7 +42,7 @@ your operating system (apt-get, synaptic, yum, brew, etc). If this is not
 feasible, download, build and install from the links above.
 
 
-## 2. Usage
+## 3. Usage
 
 ### Synopsis
 
@@ -120,7 +125,7 @@ been backed up, 2 on invocation errors, 3 if the backup was interrupted, or 4
 on HTTP errors.
 
 
-## 3. Operation
+## 4. Operation
 
 By default, `tumblr_backup` backs up all posts in HTML format.
 
@@ -280,15 +285,7 @@ posts matching all criteria will be backed up.
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
 
-`tumblr_backup` is developed and tested on Linux and OS X. If you want to run
-it under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)
-environment.
-
-
-## 4. Changelog
-
-See [here](https://github.com/bbolli/tumblr-utils/commits/master/tumblr_backup.py).
-There are no formal releases so check back often!
+`tumblr_backup` is developed and tested on Linux and OS X.
 
 
 ## 5. Acknowledgments
