@@ -561,7 +561,7 @@ class TumblrBackup:
                     # And the actual datetime is the time the user *liked* the
                     # post. Assuming the post html was generated on a "likes" run,
                     # then the datetime should be the *liked* time.
-                    #log(account, "Finding latest like (may take a while)")
+                    log(account, "Finding latest like (may take a while)")
                     ident_max = 0
                     expr = re.compile("(-?(?:[1-9][0-9]*)?[0-9]{4})-(1[0-2]|0[1-9])-(3[01]|0[1-9]|[12][0-9])T(2[0-3]|[01][0-9]):([0-5][0-9]):([0-5][0-9])(\\.[0-9]+)?(Z)?")
                     globslug = join('*', dir_index) if options.dirs else '*' + post_ext
