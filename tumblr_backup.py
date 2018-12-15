@@ -777,16 +777,16 @@ class TumblrPost:
             elt = get_try(elt)
             if elt:
                 if options.save_images:
-                    elt = re.sub(r'''(?i)(<img (?:[^>]* )?src\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<img\b[^>]*\ssrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_image, elt
                     )
                 if options.save_video or options.save_video_tumblr:
                     # Handle video element poster attribute
-                    elt = re.sub(r'''(?i)(<video (?:[^>]* )?poster\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<video\b[^>]*\sposter\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_video_poster, elt
                     )
                     # Handle video element's source sub-element's src attribute
-                    elt = re.sub(r'''(?i)(<source (?:[^>]* )?src\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<source\b[^>]*\ssrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_video, elt
                     )
                 append(elt, fmt)
@@ -985,10 +985,9 @@ class TumblrPost:
             return match.group(0)
         # get rid of autoplay and muted attributes to align with normal video
         # download behaviour
-        ret = u'%s%s/%s%s' % (match.group(1), self.media_url,
+        return (u'%s%s/%s%s' % (match.group(1), self.media_url,
             saved_name, match.group(3)
-        )
-        return ret.replace('autoplay="autoplay"', '').replace('muted="muted"', '')
+        )).replace('autoplay="autoplay"', '').replace('muted="muted"', '')
 
     def get_inline_video(self, match):
         """Saves an inline video if not saved yet. Returns the new <video> tag
