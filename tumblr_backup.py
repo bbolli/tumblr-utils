@@ -5,6 +5,7 @@
 from __future__ import with_statement
 import codecs
 from collections import defaultdict
+import cookielib
 from datetime import datetime
 import errno
 from glob import glob
@@ -23,6 +24,7 @@ import ssl
 import sys
 import threading
 import time
+import traceback
 import urllib
 import urllib2
 import urlparse
@@ -43,6 +45,22 @@ try:
     from youtube_dl.utils import sanitize_filename
 except ImportError:
     youtube_dl = None
+try:
+    import selenium
+    from selenium import webdriver
+    from selenium.webdriver.firefox.options import Options
+except ImportError:
+    selenium = None
+try:
+    import bs4
+    from bs4 import BeautifulSoup
+except ImportError:
+    bs4 = None
+
+try:
+    from web_crawler import WebCrawler
+except ImportError:
+    pass
 
 # Format of displayed tags
 TAG_FMT = '#%s'
@@ -69,6 +87,9 @@ imghdr.tests.append(test_jpg)
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
 media_folder = ''
+
+# web crawler
+crawler = None
 
 # constant names
 root_folder = os.getcwdu()
@@ -782,17 +803,22 @@ class TumblrPost:
     def get_youtube_url(self, youtube_url):
         # determine the media file name
         filetmpl = u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'
-        ydl = youtube_dl.YoutubeDL({
+        yt_options = {
             'outtmpl': join(self.media_folder, filetmpl),
-            'quiet': True, 
-            'restrictfilenames': True, 
+            'quiet': True,
+            'restrictfilenames': True,
             'noplaylist': True,
             'continuedl': True,
             'nooverwrites': True,
-            'retries': 3000,		
+            'retries': 3000,
             'fragment_retries': 3000,
             'ignoreerrors': True
-        })
+        }
+
+        if options.cookies:
+            options['cookiefile'] = options.cookies
+
+        ydl = youtube_dl.YoutubeDL(yt_options)
         ydl.add_default_info_extractors()
         try:
             result = ydl.extract_info(youtube_url, download=False)
@@ -961,14 +987,27 @@ class TumblrPost:
         foot = []
         if self.tags:
             foot.append(u''.join(self.tag_link(t) for t in self.tags))
-        if self.note_count:
-            foot.append(u'%d note%s' % (self.note_count, 's'[self.note_count == 1:]))
         if self.source_title and self.source_url:
             foot.append(u'<a title=Source href=%s>%s</a>' %
                 (self.source_url, self.source_title)
             )
+
+        notes_str = u'%d note%s' % (self.note_count, 's'[self.note_count == 1:])
+
+        if options.save_notes:
+            foot.append(u'<details><summary>%s</summary>\n' % notes_str)
+            foot.append(u'<ol class="notes">')
+            try:
+                foot.append(crawler.get_notes(self.url))
+            except:
+                print 'Error getting notes for post %s:' % self.ident
+                traceback.print_exc()
+            foot.append(u'</ol></details>')
+        else:
+            foot.append(notes_str)
+
         if foot:
-            post += u'\n<footer>%s</footer>' % u' — '.join(foot)
+            post += u'\n<footer>%s</footer>' % u'\n'.join(foot)
         post += '\n</article>\n'
         return post
 
@@ -1127,6 +1166,7 @@ if __name__ == '__main__':
     parser.add_option('--save-video', action='store_true', help="save all video files")
     parser.add_option('--save-video-tumblr', action='store_true', help="save only Tumblr video files")
     parser.add_option('--save-audio', action='store_true', help="save audio files")
+    parser.add_option('--save-notes', action='store_true', help="save a list of notes for each post")
     parser.add_option('-j', '--json', action='store_true',
         help="save the original JSON source"
     )
@@ -1186,6 +1226,9 @@ if __name__ == '__main__':
     parser.add_option('-S', '--no-ssl-verify', action='store_true',
         help="ignore SSL verification errors"
     )
+    parser.add_option('--cookies', type='string',
+        help="Netscape cookie file (needed for youtube-dl and notes on blogs marked explicit)"
+    )
     options, args = parser.parse_args()
 
     if options.auto is not None and options.auto != time.localtime().tm_hour:
@@ -1215,6 +1258,19 @@ if __name__ == '__main__':
         parser.error("--exif: module 'pyexif2' is not installed")
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
+    if options.save_notes:
+        crawler = WebCrawler()
+        if not bs4:
+            parser.error("--save-notes: module 'bs4' is not installed")
+        if not selenium:
+            parser.error("--save-notes: module 'selenium' is not installed")
+        if not crawler.find_gecko_driver():
+            parser.error("--save-notes: executable 'geckodriver' is not installed or not on PATH")
+    if options.cookies and not os.access(options.cookies, os.R_OK):
+        parser.error("--cookies: file cannot be read")
+
+    if options.save_notes:
+        crawler.load(options.cookies)
 
     tb = TumblrBackup()
     try:
@@ -1222,5 +1278,8 @@ if __name__ == '__main__':
             tb.backup(account)
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
+
+    if options.save_notes:
+        crawler.quit()
 
     sys.exit(tb.exit_code())
