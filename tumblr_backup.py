@@ -27,6 +27,7 @@ import time
 import traceback
 import urllib
 import urllib2
+import urllib3.exceptions
 import urlparse
 from xml.sax.saxutils import escape
 
@@ -986,6 +987,9 @@ class TumblrPost:
             foot.append(u'<ol class="notes">')
             try:
                 foot.append(crawler.get_notes(self.url))
+            except urllib3.exceptions.ProtocolError as pe:
+                if pe.args[0] != 'Connection aborted.':
+                    raise
             except:
                 print 'Error getting notes for post %s:' % self.ident
                 traceback.print_exc()
