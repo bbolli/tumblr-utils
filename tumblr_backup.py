@@ -668,16 +668,16 @@ class TumblrPost:
             elt = get_try(elt)
             if elt:
                 if options.save_images:
-                    elt = re.sub(r'''(?i)(<img [^>]* src\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<img\b[^>]*\ssrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_image, elt
                     )
                 if options.save_video or options.save_video_tumblr:
                     # Handle video element poster attribute
-                    elt = re.sub(r'''(?i)(<video[^>]* \bposter\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<video\b[^>]*\sposter\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_video_poster, elt
                     )
                     # Handle video element's source sub-element's src attribute
-                    elt = re.sub(r'''(?i)(<source[^>]* \bsrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<source\b[^>]*\ssrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_video, elt
                     )
                 append(elt, fmt)
