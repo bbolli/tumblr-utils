@@ -7,10 +7,19 @@ import re
 import urllib2
 import urlparse
 
-import selenium
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from bs4 import BeautifulSoup
+# These are optional for tumblr_backup
+try:
+    import selenium
+    from selenium import webdriver
+    from selenium.webdriver.firefox.options import Options
+except ImportError:
+    selenium = None
+
+try:
+    import bs4
+    from bs4 import BeautifulSoup
+except ImportError:
+    bs4 = None
 
 class WebCrawler:
 

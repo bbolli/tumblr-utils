@@ -45,22 +45,9 @@ try:
     from youtube_dl.utils import sanitize_filename
 except ImportError:
     youtube_dl = None
-try:
-    import selenium
-    from selenium import webdriver
-    from selenium.webdriver.firefox.options import Options
-except ImportError:
-    selenium = None
-try:
-    import bs4
-    from bs4 import BeautifulSoup
-except ImportError:
-    bs4 = None
 
-try:
-    from web_crawler import WebCrawler
-except ImportError:
-    pass
+import web_crawler
+from web_crawler import WebCrawler
 
 # Format of displayed tags
 TAG_FMT = '#%s'
@@ -1260,9 +1247,9 @@ if __name__ == '__main__':
         parser.error("--save-video: module 'youtube_dl' is not installed")
     if options.save_notes:
         crawler = WebCrawler()
-        if not bs4:
+        if not web_crawler.bs4:
             parser.error("--save-notes: module 'bs4' is not installed")
-        if not selenium:
+        if not web_crawler.selenium:
             parser.error("--save-notes: module 'selenium' is not installed")
         if not crawler.find_gecko_driver():
             parser.error("--save-notes: executable 'geckodriver' is not installed or not on PATH")
