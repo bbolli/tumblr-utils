@@ -985,9 +985,10 @@ class TumblrPost:
             return match.group(0)
         # get rid of autoplay and muted attributes to align with normal video
         # download behaviour
-        return u'%s%s/%s%s' % (match.group(1), self.media_url,
+        ret = u'%s%s/%s%s' % (match.group(1), self.media_url,
             saved_name, match.group(3)
-        ).replace('autoplay="autoplay"', '').replace('muted="muted"', '')
+        )
+        return ret.replace('autoplay="autoplay"', '').replace('muted="muted"', '')
 
     def get_inline_video(self, match):
         """Saves an inline video if not saved yet. Returns the new <video> tag
