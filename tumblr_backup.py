@@ -777,7 +777,7 @@ class TumblrPost:
             elt = get_try(elt)
             if elt:
                 if options.save_images:
-                    elt = re.sub(r'''(?i)(<img [^>]* src\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<img[^>]* src\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_image, elt
                     )
                 if options.save_video or options.save_video_tumblr:
