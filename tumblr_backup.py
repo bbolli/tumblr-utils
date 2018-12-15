@@ -742,7 +742,7 @@ class TumblrPost:
         self.ident = str(post['id'])
         self.url = post['post_url']
         self.shorturl = post['short_url']
-        self.typ = post['type']
+        self.typ = str(post['type'])
         if options.likes:
             self.creator = post['blog_name']
             self.date = post['liked_timestamp']
@@ -777,16 +777,16 @@ class TumblrPost:
             elt = get_try(elt)
             if elt:
                 if options.save_images:
-                    elt = re.sub(r'''(?i)(<img[^>]*\ \bsrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<img [^>]* src\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_image, elt
                     )
                 if options.save_video or options.save_video_tumblr:
                     # Handle video element poster attribute
-                    elt = re.sub(r'''(?i)(<video[^>]*\ \bposter\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<video[^>]* \bposter\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_video_poster, elt
                     )
                     # Handle video element's source sub-element's src attribute
-                    elt = re.sub(r'''(?i)(<source[^>]*\ \bsrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
+                    elt = re.sub(r'''(?i)(<source[^>]* \bsrc\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_video, elt
                     )
                 append(elt, fmt)
@@ -795,20 +795,6 @@ class TumblrPost:
         self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
         self.media_url = save_dir + self.media_dir
         self.media_folder = path_to(self.media_dir)
-
-        # Ignore NPF specifics until we have a better handle on its format.
-        # For now, we get images and video inline.
-        '''
-        if get_try('is_blocks_post_format') is True:
-            body = get_try('body')
-            m = re.search("data-npf='({.*?})'", body)
-            if m:
-                post = json.loads(m.group(1))
-                self.typ = post.get('type')
-                if self.typ == 'video':
-                    post['video_type'] = post.get('provider')
-                    post['video_url'] = post.get('url')
-        '''
 
         if self.typ == 'text':
             self.title = get_try('title')
@@ -969,7 +955,6 @@ class TumblrPost:
     def get_inline_image(self, match):
         """Saves an inline image if not saved yet. Returns the new <img> tag or
         the original one in case of download errors."""
-
         image_url = match.group(2)
         if image_url.startswith('//'):
             image_url = 'http:' + image_url
@@ -978,7 +963,6 @@ class TumblrPost:
         image_filename = path.split('/')[-1]
         if not image_filename or not image_url.startswith('http'):
             return match.group(0)
-
         saved_name = self.download_media(image_url, image_filename)
         if saved_name is None:
             return match.group(0)
@@ -989,7 +973,6 @@ class TumblrPost:
     def get_inline_video_poster(self, match):
         """Saves an inline video poster if not saved yet. Returns the new
         <video> tag or the original one in case of download errors."""
-
         poster_url = match.group(2)
         if poster_url.startswith('//'):
             poster_url = 'http:' + poster_url
@@ -997,23 +980,18 @@ class TumblrPost:
         poster_filename = path.split('/')[-1]
         if not poster_filename or not poster_url.startswith('http'):
             return match.group(0)
-
         saved_name = self.download_media(poster_url, poster_filename)
         if saved_name is None:
             return match.group(0)
-        final = u'%s%s/%s%s' % (match.group(1), self.media_url,
-            saved_name, match.group(3)
-        )
         # get rid of autoplay and muted attributes to align with normal video
         # download behaviour
-        final = final.replace('''autoplay="autoplay"''',"")
-        final = final.replace('''muted="muted"''',"")
-        return final
+        return u'%s%s/%s%s' % (match.group(1), self.media_url,
+            saved_name, match.group(3)
+        ).replace('autoplay="autoplay"', '').replace('muted="muted"', '')
 
     def get_inline_video(self, match):
         """Saves an inline video if not saved yet. Returns the new <video> tag
         or the original one in case of download errors."""
-
         video_url = match.group(2)
         if video_url.startswith('//'):
             video_url = 'http:' + video_url
@@ -1021,41 +999,14 @@ class TumblrPost:
         video_filename = path.split('/')[-1]
         if not video_filename or not video_url.startswith('http'):
             return match.group(0)
-
-        if options.save_video:
-            saved_name = None
-            if ".tumblr.com" in video_url:
-                saved_name = self.get_media_url(video_url, '.mp4')
-            else:
-                saved_name = self.get_youtube_url(video_url)
-
-            if saved_name:
-                final = u'%s%s%s' % (match.group(1),
-                    saved_name, match.group(3)
-                )
-                return final
-
-            else:
-                return match.group(0)
-
-        # save_video_tumblr implies just get tumblr.
-        if options.save_video_tumblr:
-            saved_name = None
-            if ".tumblr.com" in video_url:
-                saved_name = self.get_media_url(video_url, '.mp4')
-
-
-            if saved_name:
-                final = u'%s%s%s' % (match.group(1),
-                    saved_name, match.group(3)
-                )
-                return final
-            else:
-                return match.group(0)
-
-
-        return match.group(0)
-
+        saved_name = None
+        if '.tumblr.com' in video_url:
+            saved_name = self.get_media_url(video_url, '.mp4')
+        elif options.save_video:
+            saved_name = self.get_youtube_url(video_url)
+        if saved_name is None:
+            return match.group(0)
+        return u'%s%s%s' % (match.group(1), saved_name, match.group(3))
 
     def get_filename(self, url, offset=''):
         """Determine the image file name depending on options.image_names"""
