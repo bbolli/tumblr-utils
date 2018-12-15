@@ -5,11 +5,13 @@ from __future__ import absolute_import, division, print_function, with_statement
 
 # standard Python library imports
 import errno
+import fcntl
 import hashlib
 import imghdr
 import io
 import locale
 import os
+import py_compile
 import re
 import ssl
 import sys
@@ -21,7 +23,7 @@ from glob import glob
 from os.path import join, split, splitext
 from xml.sax.saxutils import escape
 
-from util import to_bytes, to_unicode
+from util import HAVE_SSL_CTX, HTTP_TIMEOUT, LockedQueue, PY3, to_bytes, to_unicode
 
 try:
     from typing import TYPE_CHECKING
@@ -49,6 +51,14 @@ try:
 except ImportError:
     import Queue as queue  # type: ignore[no-redef]
 
+if PY3:
+    import subprocess
+else:
+    try:
+        import subprocess32 as subprocess  # pytype: disable=import-error
+    except ImportError:
+        subprocess = None
+
 try:
     from urllib.parse import quote, urlencode, urlparse
     from urllib.request import urlopen
@@ -75,6 +85,11 @@ try:
     from youtube_dl.utils import sanitize_filename
 except ImportError:
     youtube_dl = None
+
+try:
+    import bs4
+except ImportError:
+    bs4 = None
 
 # These builtins have new names in Python 3
 try:
@@ -105,6 +120,8 @@ def test_jpg(h, f):
 
 imghdr.tests.append(test_jpg)
 
+script_dir = os.path.dirname(os.path.realpath(__file__))
+
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
 media_folder = ''
@@ -133,7 +150,6 @@ TAG_ANY = '__all__'
 
 MAX_POSTS = 50
 
-HTTP_TIMEOUT = 90
 HTTP_CHUNK_SIZE = 1024 * 1024
 
 # get your own API key at https://www.tumblr.com/oauth/apps
@@ -148,8 +164,7 @@ FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
 
-have_ssl_ctx = sys.version_info >= (2, 7, 9)
-if have_ssl_ctx:
+if HAVE_SSL_CTX:
     ssl_ctx = ssl.create_default_context()
     def tb_urlopen(url):
         return urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
@@ -157,24 +172,48 @@ else:
     def tb_urlopen(url):
         return urlopen(url, timeout=HTTP_TIMEOUT)
 
+# Guards open fds without O_CLOEXEC to avoid leaking them
+cloexec_lock = threading.Lock()
+disable_note_scraper = set()  # type: Set[str]
+disablens_lock = threading.Lock()
 
-def log(msg, account=None):
-    if options.quiet:
-        return
 
-    # Separate terminator
-    it = (i for i, c in enumerate(reversed(msg)) if c not in '\r\n')
-    try:
-        idx = len(msg) - next(it)
-    except StopIteration:
-        idx = 0
-    msg, term = msg[:idx], msg[idx:]
+class Logger(object):
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.backup_account = None  # type: Optional[str]
+        self.status_msg = None  # type: Optional[str]
 
-    if account is not None:  # Optional account prefix
-        msg = '{}: {}'.format(account, msg)
-    msg += ''.join([' ' for _ in range(80 - len(msg))])  # Pad to 80 chars
-    print(msg + term, end='')
-    sys.stdout.flush()
+    def __call__(self, msg, account=False):
+        with self.lock:
+            for line in msg.splitlines(True):
+                self._print(line, account)
+            self._print(self.status_msg, account=True)
+            sys.stdout.flush()
+
+    def status(self, msg):
+        self.status_msg = msg
+        self('')
+
+    def _print(self, msg, account=False):
+        if options.quiet:
+            return
+        if account:  # Optional account prefix
+            msg = '{}: {}'.format(self.backup_account, msg)
+
+        # Separate terminator
+        it = (i for i, c in enumerate(reversed(msg)) if c not in '\r\n')
+        try:
+            idx = len(msg) - next(it)
+        except StopIteration:
+            idx = 0
+        msg, term = msg[:idx], msg[idx:]
+
+        pad = ' ' * (80 - len(msg))  # Pad to 80 chars
+        print(msg + pad + term, end='')
+
+
+log = Logger()
 
 
 def mkdir(dir, recursive=False):
@@ -583,11 +622,11 @@ class TumblrBackup(object):
                     long(splitext(split(f)[1])[0])
                     for f in glob(path_to(post_dir, '*' + post_ext))
                 )
-                log('Backing up posts after {}\r'.format(ident_max), account)
+                log.status('Backing up posts after {}\r'.format(ident_max))
             except ValueError:  # max() arg is an empty sequence
                 pass
         else:
-            log('Getting basic information\r', account)
+            log.status('Getting basic information\r')
 
         # start by calling the API with just a single post
         resp = apiparse(base, 1)
@@ -612,7 +651,7 @@ class TumblrBackup(object):
         TumblrPost.post_header = self.header(body_class='post')
 
         # start the thread pool
-        backup_pool = ThreadPool(account)
+        backup_pool = ThreadPool()
 
         # returns whether any posts from this batch were saved
         def _backup(posts):
@@ -641,6 +680,7 @@ class TumblrBackup(object):
                             continue
                     elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
                         continue
+
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
             return True
@@ -651,7 +691,9 @@ class TumblrBackup(object):
             i = options.skip
             while True:
                 # find the upper bound
-                log('Getting posts {} to {} (of {} expected)\r'.format(i, i + MAX_POSTS - 1, count_estimate), account)
+                log.status('Getting {}posts {} to {} (of {} expected)\r'.format(
+                    'liked ' if options.likes else '', i, i + MAX_POSTS - 1, count_estimate,
+                ))
 
                 resp = apiparse(base, MAX_POSTS, i)
                 if resp is None:
@@ -662,7 +704,7 @@ class TumblrBackup(object):
                 posts = resp[posts_key]
                 # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
                 if not posts or not _backup(posts):
-                    log('Backup complete: Found empty set of posts\n', account)
+                    log('Backup complete: Found empty set of posts\n', account=True)
                     break
 
                 i += MAX_POSTS
@@ -676,17 +718,17 @@ class TumblrBackup(object):
 
         # postprocessing
         if not options.blosxom and (self.post_count or options.count == 0):
-            log('Getting avatar and style\r', account)
+            log.status('Getting avatar and style\r')
             get_avatar()
             get_style()
             if not have_custom_css:
                 save_style()
-            log('Building index\r', account)
+            log.status('Building index\r')
             ix = Indices(self)
             ix.build_index()
             ix.save_index()
 
-        log('{} posts backed up\n'.format(self.post_count), account)
+        log('{} {}posts backed up\n'.format(self.post_count, 'liked ' if options.likes else ''), account=True)
         self.total_count += self.post_count
 
 
@@ -698,7 +740,7 @@ class TumblrPost(object):
         self.content = ''
         self.post = post
         self.backup_account = backup_account
-        self.json_content = json.dumps(post, sort_keys=True, indent=4, separators=(',', ': '))
+        self.json_content = to_unicode(json.dumps(post, sort_keys=True, indent=4, separators=(',', ': ')))
         self.creator = post['blog_name']
         self.ident = str(post['id'])
         self.url = post['post_url']
@@ -804,8 +846,9 @@ class TumblrPost(object):
 
         elif self.typ == 'audio':
             def make_player(src_):
-                append(u'<p><audio controls><source src="%s" type=audio/mpeg>%s<br>\n<a href="%s">%s</a></audio></p>'
-                       % (src_, "Your browser does not support the audio element.", src_, "Audio file"))
+                append(u'<p><audio controls><source src="{src}" type=audio/mpeg>{}<br>\n<a href="{src}">{}'
+                       u'</a></audio></p>'
+                       .format('Your browser does not support the audio element.', 'Audio file', src=src_))
 
             src = None
             audio_url = get_try('audio_url') or get_try('audio_source_url')
@@ -1019,14 +1062,69 @@ class TumblrPost(object):
         foot = []
         if self.tags:
             foot.append(u''.join(self.tag_link(t) for t in self.tags))
-        if self.note_count:
-            foot.append(u'%d note%s' % (self.note_count, 's'[self.note_count == 1:]))
         if self.source_title and self.source_url:
             foot.append(u'<a title=Source href=%s>%s</a>' %
                 (self.source_url, self.source_title)
             )
+
+        notes_html = u''
+        if options.save_notes and self.backup_account not in disable_note_scraper:
+            with cloexec_lock:
+                msg_fd_rd, msg_fd_wr = os.pipe()
+                try:
+                    if sys.version_info[:2] >= (3, 4):
+                        # O_CLOEXEC is default in Python 3.4 and newer, unset it for the child side
+                        os.set_inheritable(msg_fd_wr, True)
+                    else:
+                        # O_CLOEXEC must be set manually in older Python, set it for the parent side
+                        fcntl.fcntl(msg_fd_rd, fcntl.F_SETFD, fcntl.FD_CLOEXEC)
+
+                    args = [sys.executable, '-m', 'note_scraper', self.url, self.ident,
+                            str(int(options.no_ssl_verify)), str(options.notes_limit or 0),
+                            options.cookiefile or '', str(msg_fd_wr)]
+                    env = os.environ.copy()
+                    env['PYTHONPATH'] = script_dir
+                    # stdout is captured, stderr goes to our stderr, msg_fd handles informational messages
+                    process = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=False, env=env)
+                except:
+                    os.close(msg_fd_rd)
+                    raise
+                finally:
+                    os.close(msg_fd_wr)
+
+            try:
+                with io.open(msg_fd_rd) as msg_file:
+                    for line in msg_file:
+                        log(line)
+
+                notes_html = process.communicate()[0].decode('utf-8')
+            except:
+                process.terminate()
+                process.wait()
+                raise
+
+            if process.returncode == 2:  # EXIT_SAFE_MODE
+                # Safe mode is blocking us, disable note scraping for this blog
+                notes_html = u''
+                with disablens_lock:
+                    # Check if another thread already set this
+                    if self.backup_account not in disable_note_scraper:
+                        disable_note_scraper.add(self.backup_account)
+                        log('[Note Scraper] Blocked by safe mode - scraping disabled for {}\n'.format(
+                            self.backup_account
+                        ))
+
+        notes_str = u'{} note{}'.format(self.note_count, 's'[self.note_count == 1:])
+        if notes_html.strip():
+            foot.append(u'<details><summary>{}</summary>\n'.format(notes_str))
+            foot.append(u'<ol class="notes">')
+            foot.append(notes_html)
+            foot.append(u'</ol></details>')
+        else:
+            foot.append(notes_str)
+
         if foot:
-            post += u'\n<footer>%s</footer>' % u' — '.join(foot)
+            post += u'\n<footer>{}</footer>'.format(u'\n'.join(foot))
         post += u'\n</article>\n'
         return post
 
@@ -1116,17 +1214,16 @@ class LocalPost(object):
 
 
 class ThreadPool(object):
-    def __init__(self, account, thread_count=20, max_queue=1000):
-        self.account = account
-        self.queue = queue.Queue(max_queue)  # type: Queue[Callable[[], None]]
+    def __init__(self, thread_count=20, max_queue=1000):
+        self.queue = LockedQueue(threading.RLock(), max_queue)  # type: LockedQueue[Callable[[], None]]
         self.quit = threading.Event()
         self.abort = threading.Event()
         self.threads = [threading.Thread(target=self.handler) for _ in range(thread_count)]
         for t in self.threads:
             t.start()
 
-    def add_work(self, work):
-        self.queue.put(work)
+    def add_work(self, *args, **kwargs):
+        self.queue.put(*args, **kwargs)
 
     def wait(self):
         self.quit.set()
@@ -1135,21 +1232,26 @@ class ThreadPool(object):
     def cancel(self):
         self.abort.set()
         for i, t in enumerate(self.threads, start=1):
-            log('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
+            log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
             t.join()
+
+        with self.queue.mutex:
+            self.queue.queue.clear()
+            self.queue.all_tasks_done.notify_all()
 
     def handler(self):
         while not self.abort.is_set():
-            try:
-                work = self.queue.get(timeout=0.1)
-            except queue.Empty:
-                if self.quit.is_set():
-                    break
-                continue
+            with self.queue.mutex:
+                try:
+                    work = self.queue.get(block=not self.quit.is_set(), timeout=0.1)
+                except queue.Empty:
+                    if self.quit.is_set():
+                        break
+                    continue
+                qsize = self.queue.qsize()
 
-            qsize = self.queue.qsize()
             if self.quit.is_set() and qsize % MAX_POSTS == 0:
-                log('{} remaining posts to save\r'.format(qsize), self.account)
+                log.status('{} remaining posts to save\r'.format(qsize))
 
             try:
                 work()
@@ -1197,7 +1299,9 @@ if __name__ == '__main__':
     parser.add_argument('--save-video', action='store_true', help='save all video files')
     parser.add_argument('--save-video-tumblr', action='store_true', help='save only Tumblr video files')
     parser.add_argument('--save-audio', action='store_true', help='save audio files')
-    parser.add_argument('--cookiefile', help='cookie file for youtube-dl')
+    parser.add_argument('--save-notes', action='store_true', help='save a list of notes for each post')
+    parser.add_argument('--notes-limit', type=int, metavar='COUNT', help='limit requested notes to COUNT, per-post')
+    parser.add_argument('--cookiefile', help='cookie file for youtube-dl and --save-notes')
     parser.add_argument('-j', '--json', action='store_true', help='save the original JSON source')
     parser.add_argument('-b', '--blosxom', action='store_true', help='save the posts in blosxom format')
     parser.add_argument('-r', '--reverse-month', action='store_false',
@@ -1243,7 +1347,7 @@ if __name__ == '__main__':
             if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
-    if have_ssl_ctx and options.no_ssl_verify:
+    if HAVE_SSL_CTX and options.no_ssl_verify:
         ssl_ctx = ssl._create_unverified_context()
         # Otherwise, it's an old Python version without SSL verification,
         # so this is the default.
@@ -1272,6 +1376,17 @@ if __name__ == '__main__':
         parser.error("--save-video: module 'youtube_dl' is not installed")
     if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
         parser.error('--cookiefile: file cannot be read')
+    if options.save_notes:
+        if not subprocess:
+            parser.error("--save-notes: Python is older than 3.2 and module 'subprocess32' is not installed")
+        if not bs4:
+            parser.error("--save-notes: module 'bs4' is not installed")
+        py_compile.compile(join(script_dir, 'note_scraper.py'))
+    if options.notes_limit is not None:
+        if not options.save_notes:
+            parser.error('--notes-limit requires --save-notes')
+        if options.notes_limit < 1:
+            parser.error('--notes-limit: Value must be at least 1')
 
     if not API_KEY:
         sys.stderr.write('''\
@@ -1282,6 +1397,7 @@ https://www.tumblr.com/oauth/apps\n''')
     tb = TumblrBackup()
     try:
         for account in blogs:
+            log.backup_account = account
             tb.backup(account)
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
