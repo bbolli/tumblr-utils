@@ -990,6 +990,13 @@ class TumblrPost:
             except urllib3.exceptions.ProtocolError as pe:
                 if pe.args[0] != 'Connection aborted.':
                     raise
+            except urllib3.exceptions.MaxRetryError as e:
+                # Typically happens due to an interrrupt
+                # This seems to happen on all threads at once, so silence it
+                sys.exit(EXIT_INTERRUPT)
+            except urllib2.HTTPError as e:
+                print 'HTTP Error %d getting notes for post %s:' % (e.code, self.ident)
+                print 'URL was: %s' % crawler.lasturl
             except:
                 print 'Error getting notes for post %s:' % self.ident
                 traceback.print_exc()

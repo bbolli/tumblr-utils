@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
+import contextlib
 import cookielib
 import os
 import re
@@ -24,6 +25,7 @@ except ImportError:
 class WebCrawler:
 
     def __init__(self):
+        self.lasturl = None
         self.gecko_driver = None
 
     def find_gecko_driver(self):
@@ -88,12 +90,14 @@ class WebCrawler:
 
     # Selenium
     def driver_get(self, url):
+        self.lasturl = url
         self.driver.get(url)
         self.load_cookies()
         self.driver.get(url)
 
     # urllib2
     def urlopen(self, url):
+        self.lasturl = url
         return self.opener.open(url)
 
     def get_html(self):
@@ -105,7 +109,10 @@ class WebCrawler:
         if not element:
             return None
         onclick = element.get_attribute_list('onclick')[0]
-        return base + re.search(r";tumblrReq\.open\('GET','([^']+)'", onclick).group(1)
+        path = re.search(r";tumblrReq\.open\('GET','([^']+)'", onclick).group(1)
+        if not path.startswith('/'):
+            path = '/' + path
+        return base + path
 
     @staticmethod
     def append_notes(soup, list):
@@ -118,21 +125,21 @@ class WebCrawler:
 
     def get_notes(self, url):
         parsed_uri = urlparse.urlparse(url)
-        base = '{uri.scheme}://{uri.netloc}/'.format(uri=parsed_uri)
+        base = '{uri.scheme}://{uri.netloc}'.format(uri=parsed_uri)
 
         self.driver_get(url)
-        html = self.get_html()
-        soup = BeautifulSoup(html, 'lxml')
+        soup = BeautifulSoup(self.get_html(), 'lxml')
 
         notes_list = []
         self.append_notes(soup, notes_list)
 
+        old_more_link = None
         while True:
             more_link = self.get_more_link(soup, base)
-            if not more_link:
+            if (not more_link) or more_link == old_more_link:
                 break
-            with self.urlopen(more_link) as response:
-                soup = BeautifulSoup(response, 'lxml')
+            with contextlib.closing(self.urlopen(more_link)) as response:
+                soup = BeautifulSoup(response.read().decode('utf-8', 'ignore'), 'lxml')
             self.append_notes(soup, notes_list)
 
         return u''.join(notes_list)
