@@ -787,7 +787,7 @@ class TumblrPost:
     def get_youtube_url(self, youtube_url):
         # determine the media file name
         filetmpl = u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'
-        yt_options = {
+        ydl_options = {
             'outtmpl': join(self.media_folder, filetmpl),
             'quiet': True,
             'restrictfilenames': True,
@@ -800,9 +800,9 @@ class TumblrPost:
         }
 
         if options.cookies:
-            options['cookiefile'] = options.cookies
+            ydl_options['cookiefile'] = options.cookies
 
-        ydl = youtube_dl.YoutubeDL(yt_options)
+        ydl = youtube_dl.YoutubeDL(ydl_options)
         ydl.add_default_info_extractors()
         try:
             result = ydl.extract_info(youtube_url, download=False)
