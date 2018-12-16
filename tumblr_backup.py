@@ -76,9 +76,6 @@ imghdr.tests.append(test_jpg)
 save_folder = ''
 media_folder = ''
 
-# web crawler
-crawler = None
-
 # constant names
 root_folder = os.getcwdu()
 post_dir = 'posts'
@@ -985,6 +982,10 @@ class TumblrPost:
         if options.save_notes:
             foot.append(u'<details><summary>%s</summary>\n' % notes_str)
             foot.append(u'<ol class="notes">')
+
+            crawler = WebCrawler()
+            crawler.load(options.cookies)
+
             delay = 1
             while True:
                 try:
@@ -1009,6 +1010,9 @@ class TumblrPost:
                     traceback.print_exc()
 
                 break
+
+            crawler.quit()
+
             foot.append(u'</ol></details>')
         else:
             foot.append(notes_str)
@@ -1266,18 +1270,14 @@ if __name__ == '__main__':
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
     if options.save_notes:
-        crawler = WebCrawler()
         if not web_crawler.bs4:
             parser.error("--save-notes: module 'bs4' is not installed")
         if not web_crawler.selenium:
             parser.error("--save-notes: module 'selenium' is not installed")
-        if not crawler.find_gecko_driver():
+        if not WebCrawler.find_gecko_driver():
             parser.error("--save-notes: executable 'geckodriver' is not installed or not on PATH")
     if options.cookies and not os.access(options.cookies, os.R_OK):
         parser.error("--cookies: file cannot be read")
-
-    if options.save_notes:
-        crawler.load(options.cookies)
 
     tb = TumblrBackup()
     try:
@@ -1285,8 +1285,5 @@ if __name__ == '__main__':
             tb.backup(account)
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
-
-    if options.save_notes:
-        crawler.quit()
 
     sys.exit(tb.exit_code())

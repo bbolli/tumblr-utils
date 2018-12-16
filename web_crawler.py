@@ -24,22 +24,24 @@ except ImportError:
 
 class WebCrawler:
 
+    gecko_driver = None
+
     def __init__(self):
         self.lasturl = None
-        self.gecko_driver = None
 
-    def find_gecko_driver(self):
+    @staticmethod
+    def find_gecko_driver():
         for path in os.environ["PATH"].split(os.pathsep):
             try_loc = os.path.join(path, 'geckodriver')
             if os.access(try_loc, os.X_OK):
-                self.gecko_driver = try_loc
+                WebCrawler.gecko_driver = try_loc
             if os.name != 'nt':
                 continue
             try_loc += '.exe'
             if os.access(try_loc, os.X_OK):
-                self.gecko_driver = try_loc
+                WebCrawler.gecko_driver = try_loc
 
-        return self.gecko_driver
+        return WebCrawler.gecko_driver
 
     def load(self, cookiefile):
         self.driver = None
