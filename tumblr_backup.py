@@ -985,21 +985,30 @@ class TumblrPost:
         if options.save_notes:
             foot.append(u'<details><summary>%s</summary>\n' % notes_str)
             foot.append(u'<ol class="notes">')
-            try:
-                foot.append(crawler.get_notes(self.url))
-            except urllib3.exceptions.ProtocolError as pe:
-                if pe.args[0] != 'Connection aborted.':
-                    raise
-            except urllib3.exceptions.MaxRetryError as e:
-                # Typically happens due to an interrrupt
-                # This seems to happen on all threads at once, so silence it
-                sys.exit(EXIT_INTERRUPT)
-            except urllib2.HTTPError as e:
-                print 'HTTP Error %d getting notes for post %s:' % (e.code, self.ident)
-                print 'URL was: %s' % crawler.lasturl
-            except:
-                print 'Error getting notes for post %s:' % self.ident
-                traceback.print_exc()
+            delay = 1
+            while True:
+                try:
+                    foot.append(crawler.get_notes(self.url))
+                except urllib3.exceptions.ProtocolError as pe:
+                    if pe.args[0] != 'Connection aborted.':
+                        raise
+                except urllib3.exceptions.MaxRetryError as e:
+                    # Typically happens due to an interrrupt
+                    # This seems to happen on all threads at once, so silence it
+                    sys.exit(EXIT_INTERRUPT)
+                except urllib2.HTTPError as e:
+                    print 'HTTP Error %d getting notes for post %s.' % (e.code, self.ident)
+                    print 'URL was: %s' % crawler.lasturl
+                    if e.code == 429:
+                        print 'Retrying... (delay = %d)' % delay
+                        time.sleep(delay)
+                        delay *= 2
+                        continue
+                except:
+                    print 'Error getting notes for post %s:' % self.ident
+                    traceback.print_exc()
+
+                break
             foot.append(u'</ol></details>')
         else:
             foot.append(notes_str)
