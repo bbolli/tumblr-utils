@@ -5,7 +5,6 @@
 from __future__ import with_statement
 import codecs
 from collections import defaultdict
-import cookielib
 from datetime import datetime
 import errno
 from glob import glob
@@ -983,8 +982,7 @@ class TumblrPost:
             foot.append(u'<details><summary>%s</summary>\n' % notes_str)
             foot.append(u'<ol class="notes">')
 
-            crawler = WebCrawler()
-            crawler.load(options.cookies)
+            crawler = WebCrawler(options.cookies)
 
             delay = 1
             while True:
@@ -1010,8 +1008,6 @@ class TumblrPost:
                     traceback.print_exc()
 
                 break
-
-            crawler.quit()
 
             foot.append(u'</ol></details>')
         else:
@@ -1272,10 +1268,6 @@ if __name__ == '__main__':
     if options.save_notes:
         if not web_crawler.bs4:
             parser.error("--save-notes: module 'bs4' is not installed")
-        if not web_crawler.selenium:
-            parser.error("--save-notes: module 'selenium' is not installed")
-        if not WebCrawler.find_gecko_driver():
-            parser.error("--save-notes: executable 'geckodriver' is not installed or not on PATH")
     if options.cookies and not os.access(options.cookies, os.R_OK):
         parser.error("--cookies: file cannot be read")
 
