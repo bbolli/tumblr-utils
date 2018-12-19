@@ -416,10 +416,10 @@ class Indices:
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
         for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
             index.save_index(tag_index_dir + os.sep + tag,
-                u"Tag ‛%s’" % index.name
+                u"Tag ‛%s’" % urllib.unquote_plus(index.name) if options.escape_tags else index.name
             )
             tag_index.append(u'    <li><a href=%s/%s>%s</a></li>' % (
-                tag, dir_index, escape(index.name)
+                urllib.quote_plus(tag) if options.fix_for_disk else tag, dir_index, urllib.unquote_plus(index.name) if options.escape_tags else index.name
             ))
         tag_index.extend(['</ul>', ''])
         with open_text(tag_index_dir, dir_index) as f:
@@ -650,6 +650,10 @@ class TumblrPost:
         self.source_url = post.get('source_url', '')
         if options.request:
             self.tags_lower = set(t.lower() for t in self.tags)
+        if options.normalize_tags:
+            self.tags = set(t.lower() for t in self.tags)
+        if options.escape_tags:
+            self.tags = set(urllib.quote_plus(t.lower()) for t in self.tags)
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
 
@@ -978,7 +982,7 @@ class TumblrPost:
         if not TAGLINK_FMT:
             return tag_disp + ' '
         url = TAGLINK_FMT % {'domain': blog_name, 'tag': urllib.quote(tag.encode('utf-8'))}
-        return u'<a href=%s>%s</a>\n' % (url, tag_disp)
+        return u'<a href=%s>%s</a>\n' % (url, urllib.unquote_plus(tag_disp) if options.escape_tags else tag_disp)
 
     def save_post(self):
         """saves this post locally"""
@@ -1003,7 +1007,7 @@ class BlosxomPost(TumblrPost):
         """returns this post as a Blosxom post"""
         post = self.title + '\nmeta-id: p-' + self.ident + '\nmeta-url: ' + self.url
         if self.tags:
-            post += '\nmeta-tags: ' + ' '.join(t.replace(' ', '+') for t in self.tags)
+            post += '\nmeta-tags: ' + ' '.join(t if options.escape_tags else t.replace(' ', '+') for t in self.tags)
         post += '\n\n' + self.content
         return post
 
@@ -1142,6 +1146,15 @@ if __name__ == '__main__':
     parser.add_option('--tag-index', action='store_true',
         help="also create an archive per tag"
     )
+    parser.add_option('--normalize-tags', action='store_true',
+        help="normalizes tags to lower case"
+    )
+    parser.add_option('--escape-tags', action='store_true',
+        help="escapes special characters in tags"
+    )
+    parser.add_option('--fix-for-disk', action='store_true',
+        help="escapes special characters a second time in tag index to optimize for disk viewing"
+    )
     parser.add_option('-a', '--auto', type='int', metavar="HOUR",
         help="do a full backup at HOUR hours, otherwise do an incremental backup"
         " (useful for cron jobs)"
@@ -1215,6 +1228,14 @@ if __name__ == '__main__':
         parser.error("--exif: module 'pyexif2' is not installed")
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
+    if options.normalize_tags and not options.tag_index:
+        parser.error("--normalize-tags should only be used with --tag-index")
+    if options.escape_tags and not options.tag_index:
+        parser.error("--escape-tags should only be used with --tag-index")
+    if options.fix_for_disk and not options.tag_index:
+        parser.error("--fix-for-disk should only be used with --tag-index")
+    if options.fix_for_disk and not options.escape_tags:
+        parser.error("--fix-for-disk should only be used with --escape-tags")
 
     tb = TumblrBackup()
     try:
