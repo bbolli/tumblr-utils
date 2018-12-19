@@ -58,6 +58,13 @@ feasible, download and install from the links above.
     -r, --reverse-month   reverse the post order in the monthly archives
     -R, --reverse-index   reverse the index file order
     --tag-index           also create an archive per tag
+    --normalize-tags      sets the tag to lower case and creates a unique 
+                          set to remove duplicates
+    --encode-tags         uses urllib.quote_plus to escape special characters
+                          in the tags
+    --fix-for-disk        adds an extra urllib.quote_plus when the urls are 
+                          being built to account for browsing from disk 
+                          weirdness in windows
     -a HOUR, --auto=HOUR  do a full backup at HOUR hours, otherwise do an
                           incremental backup (useful for cron jobs)
     -n COUNT, --count=COUNT
