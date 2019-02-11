@@ -1271,7 +1271,7 @@ if __name__ == '__main__':
         parser.error("-D cannot be used with --tag-index")
     if options.likes and options.drafts:
         parser.error("--likes cannot be used with --drafts")
-    if options.likes and options.drafts:
+    if options.incremental and options.drafts:
         parser.error("--incremental cannot be used with --drafts")
     if options.exif and not pyexiv2:
         parser.error("--exif: module 'pyexif2' is not installed")
