@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime
 import errno
 from glob import glob
+import hashlib
 from httplib import HTTPException
 import imghdr
 try:
@@ -415,11 +416,12 @@ class Indices:
         self.fixup_media_links()
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
         for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
-            index.save_index(tag_index_dir + os.sep + tag,
+            digest = hashlib.md5(tag).hexdigest()
+            index.save_index(tag_index_dir + os.sep + digest,
                 u"Tag ‛%s’" % index.name
             )
             tag_index.append(u'    <li><a href=%s/%s>%s</a></li>' % (
-                tag, dir_index, escape(index.name)
+                digest, dir_index, escape(index.name)
             ))
         tag_index.extend(['</ul>', ''])
         with open_text(tag_index_dir, dir_index) as f:
