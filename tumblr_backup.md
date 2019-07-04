@@ -27,6 +27,9 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
 There are two optional dependencies that enable additional features:
 
 1. To backup audio and video, install [youtube-dl](https://rg3.github.io/youtube-dl/).
+   If you need HTTP cookies to download, use an appropriate browser plugin to
+   extract the cookie(s) into a file and use option `--cookiefile=file`. See
+   [issue 132](https://github.com/bbolli/tumblr-utils/issues/132).
 2. To enable EXIF tagging, install [pyexiv2](https://github.com/escaped/pyexiv2).
 
 The fastest option to install these packages is via the package manager of
@@ -54,6 +57,7 @@ feasible, download, build and install from the links above.
     --save-video          save all video files
     --save-video-tumblr   save only Tumblr video files
     --save-audio          save audio files
+    --cookiefile=FILE     cookie file for youtube-dl
     -b, --blosxom         save the posts in blosxom format
     -r, --reverse-month   reverse the post order in the monthly archives
     -R, --reverse-index   reverse the index file order

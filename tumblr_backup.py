@@ -784,7 +784,7 @@ class TumblrPost:
     def get_youtube_url(self, youtube_url):
         # determine the media file name
         filetmpl = u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'
-        ydl = youtube_dl.YoutubeDL({
+        ydl_options = {
             'outtmpl': join(self.media_folder, filetmpl),
             'quiet': True, 
             'restrictfilenames': True, 
@@ -794,7 +794,10 @@ class TumblrPost:
             'retries': 3000,		
             'fragment_retries': 3000,
             'ignoreerrors': True
-        })
+        }
+        if options.cookiefile:
+            ydl_options['cookiefile'] = options.cookiefile
+        ydl = youtube_dl.YoutubeDL(ydl_options)
         ydl.add_default_info_extractors()
         try:
             result = ydl.extract_info(youtube_url, download=False)
@@ -1129,6 +1132,7 @@ if __name__ == '__main__':
     parser.add_option('--save-video', action='store_true', help="save all video files")
     parser.add_option('--save-video-tumblr', action='store_true', help="save only Tumblr video files")
     parser.add_option('--save-audio', action='store_true', help="save audio files")
+    parser.add_option('--cookiefile', help="cookie file for youtube-dl")
     parser.add_option('-j', '--json', action='store_true',
         help="save the original JSON source"
     )
