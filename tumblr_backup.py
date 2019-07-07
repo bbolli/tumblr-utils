@@ -16,6 +16,7 @@ try:
 except ImportError:
     import simplejson as json
 import locale
+import oauth2 as oauth
 import os
 from os.path import join, split, splitext
 import Queue
@@ -101,6 +102,8 @@ MAX_POSTS = 50
 HTTP_TIMEOUT = 90
 HTTP_CHUNK_SIZE = 1024 * 1024
 
+CONFIG = '~/.config/tumblr'
+
 # bb-tumblr-backup API key
 API_KEY = '8YUsKJvcJxo2MDwmWMDiXZGuMuIbeCwuQGP5ZHSEA4jBJPMnJT'
 
@@ -175,8 +178,8 @@ def get_api_url(account):
     blog_name = account
     if '.' not in account:
         blog_name += '.tumblr.com'
-    return 'https://api.tumblr.com/v2/blog/%s/%s' % (
-        blog_name, 'likes' if options.likes else 'posts'
+    return 'https://api.tumblr.com/v2/blog/%s' % (
+        blog_name
     )
 
 
@@ -195,21 +198,38 @@ def set_period():
     options.p_stop = time.mktime(tm)
 
 
-def apiparse(base, count, start=0):
-    params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
-    if start > 0:
-        params['offset'] = start
+def apiparse(base, count=None, start=0):
+    is_info = base.endswith('/info')
+    assert (count is None) == (options.drafts or is_info)
+
+    if is_info:
+        params = {'api_key': API_KEY}
+    elif options.drafts:
+        params = {}
+        if start > 0:
+            params['before_id'] = start
+    else:
+        params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
+        if start > 0:
+            params['offset'] = start
+
     url = base + '?' + urllib.urlencode(params)
     for _ in range(10):
         try:
-            resp = urlopen(url)
-            data = resp.read()
+            if is_info or not options.drafts:
+                resp = urlopen(url)
+                data = resp.read()
+            else:
+                headers, data = client.request(url, method='GET')
         except (EnvironmentError, HTTPException) as e:
             sys.stderr.write("%s getting %s\n" % (e, url))
             continue
-        if resp.info().gettype() == 'application/json':
+
+        content_type = resp.info().gettype() if is_info or not options.drafts \
+        else headers['content-type']
+        if content_type.startswith('application/json'):
             break
-        sys.stderr.write("Unexpected Content-Type: '%s'\n" % resp.info().gettype())
+        sys.stderr.write("Unexpected Content-Type: '%s'\n" % content_type)
         return None
     else:
         return None
@@ -220,7 +240,12 @@ def apiparse(base, count, start=0):
             e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), data
         ))
         return None
-    return doc if doc.get('meta', {}).get('status', 0) == 200 else None
+    meta = doc.get('meta', {})
+    status = meta.get('status')
+    if status != 200:
+        sys.stderr.write("\nAPI Error %s: %s\n" % (status, meta.get('msg')))
+        return None
+    return doc
 
 
 def add_exif(image_name, tags):
@@ -440,6 +465,14 @@ class TumblrBackup:
     def __init__(self):
         self.errors = False
         self.total_count = 0
+        self.consumer_token = self.consumer_secret = \
+        self.access_token = self.access_secret = None
+
+    def set_credentials(self, cred_file):
+        (
+            self.consumer_token, self.consumer_secret,
+            self.access_token, self.access_secret
+        ) = (s.strip() for s in open(cred_file))
 
     def exit_code(self):
         if self.errors:
@@ -526,8 +559,8 @@ class TumblrBackup:
         else:
             log(account, "Getting basic information\r")
 
-        # start by calling the API with just a single post
-        soup = apiparse(base, 1)
+        # start by calling the API to get blog info
+        soup = apiparse(base + '/info')
         if not soup:
             self.errors = True
             return
@@ -537,7 +570,7 @@ class TumblrBackup:
         if options.likes:
             _get_content = lambda soup: soup['response']['liked_posts']
             blog = {}
-            last_post = resp['liked_count']
+            last_post = resp['likes']
         else:
             _get_content = lambda soup: soup['response']['posts']
             blog = resp['blog']
@@ -547,6 +580,11 @@ class TumblrBackup:
 
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
+
+        global client
+        consumer = oauth.Consumer(self.consumer_token, self.consumer_secret)
+        token = oauth.Token(self.access_token, self.access_secret)
+        client = oauth.Client(consumer, token)
 
         # find the post number limit to back up
         if options.count:
@@ -580,6 +618,11 @@ class TumblrBackup:
                 self.post_count += 1
             return True
 
+        base += '/%s%s' % (
+            'likes' if options.likes else 'posts',
+            '/draft' if options.drafts else ''
+        )
+
         # start the thread pool
         backup_pool = ThreadPool()
         try:
@@ -587,14 +630,25 @@ class TumblrBackup:
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
             last_batch = MAX_POSTS
             i = options.skip
-            while i < last_post:
+            before_id = 0
+            failures = 0
+            while (i < last_post if not options.drafts else failures < 5):
                 # find the upper bound
                 j = min(i + MAX_POSTS, last_post)
-                log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
+                if not options.drafts:
+                    log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
+                else:
+                    log(account, "Getting drafts, starting at number %d\r" % i)
 
-                soup = apiparse(base, j - i, i)
+                if not options.drafts:
+                    soup = apiparse(base, j - i, i)
+                else:
+                    soup = apiparse(base, start=before_id)
                 if soup is None:
-                    i += last_batch     # try the next batch
+                    if options.drafts:
+                        failures += 1
+                    else:
+                        i += last_batch     # try the next batch
                     self.errors = True
                     continue
 
@@ -605,6 +659,7 @@ class TumblrBackup:
 
                 last_batch = len(posts)
                 i += last_batch
+                before_id = posts[-1]['id']
         except:
             # ensure proper thread pool termination
             backup_pool.cancel()
@@ -1126,6 +1181,9 @@ if __name__ == '__main__':
     parser.add_option('-l', '--likes', action='store_true',
         dest='likes', help="save a blog's likes, not its posts"
     )
+    parser.add_option('-d', '--drafts', action='store_true',
+        dest='drafts', help="save a blog's drafts, not its posts"
+    )
     parser.add_option('-k', '--skip-images', action='store_false', default=True,
         dest='save_images', help="do not save images; link to Tumblr instead"
     )
@@ -1217,12 +1275,23 @@ if __name__ == '__main__':
         parser.error("-O can only be used for a single blog-name")
     if options.dirs and options.tag_index:
         parser.error("-D cannot be used with --tag-index")
+    if options.likes and options.drafts:
+        parser.error("--likes cannot be used with --drafts")
+    if options.incremental and options.drafts:
+        parser.error("--incremental cannot be used with --drafts")
     if options.exif and not pyexiv2:
         parser.error("--exif: module 'pyexif2' is not installed")
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
 
     tb = TumblrBackup()
+
+    try:
+        tb.set_credentials(os.path.expanduser(CONFIG))
+    except EnvironmentError:
+        sys.stderr.write('Credentials file %s not found or not readable\n' % CONFIG)
+        sys.exit(1)
+
     try:
         for account in args:
             tb.backup(account)
