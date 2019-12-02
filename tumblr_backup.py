@@ -82,6 +82,11 @@ try:
 except ImportError:
     bs4 = None
 
+try:
+    import pyjq
+except ImportError:
+    pyjq = None
+
 # These builtins have new names in Python 3
 try:
     long, xrange  # type: ignore[has-type]
@@ -526,6 +531,7 @@ class TumblrBackup(object):
         self.errors = False
         self.total_count = 0
         self.post_count = 0
+        self.filter_skipped = 0
         self.title = None  # type: Optional[Text]
         self.subtitle = None  # type: Optional[str]
 
@@ -600,6 +606,7 @@ class TumblrBackup(object):
             have_custom_css = os.access(path_to(custom_css), os.R_OK)
 
         self.post_count = 0
+        self.filter_skipped = 0
 
         # get the highest post id already saved
         ident_max = None
@@ -667,6 +674,9 @@ class TumblrBackup(object):
                             continue
                     elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
                         continue
+                if options.filter and not options.filter.first(p):
+                    self.filter_skipped += 1
+                    continue
 
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
@@ -716,7 +726,11 @@ class TumblrBackup(object):
             ix.save_index()
 
         log.status(None)
-        log('{} {}posts backed up\n'.format(self.post_count, 'liked ' if options.likes else ''), account=True)
+        skipped_msg = (', {} did not match filter'.format(self.filter_skipped)) if self.filter_skipped else ''
+        log(
+            '{} {}posts backed up{}\n'.format(self.post_count, 'liked ' if options.likes else '', skipped_msg),
+            account=True,
+        )
         self.total_count += self.post_count
 
 
@@ -1319,6 +1333,7 @@ if __name__ == '__main__':
     parser.add_argument('-T', '--type', action=RequestCallback, dest='request',
                         help='save only posts of type TYPE (comma-separated values from {})'
                              .format(', '.join(POST_TYPES)))
+    parser.add_argument('-F', '--filter', help='save posts matching a jq filter (needs pyjq)')
     parser.add_argument('--no-reblog', action='store_true', help="don't save reblogged posts")
     parser.add_argument('-I', '--image-names', choices=('o', 'i', 'bi'), default='o', metavar='FMT',
                         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)")
@@ -1378,6 +1393,10 @@ if __name__ == '__main__':
             parser.error('--notes-limit requires --save-notes')
         if options.notes_limit < 1:
             parser.error('--notes-limit: Value must be at least 1')
+    if options.filter is not None:
+        if pyjq is None:
+            parser.error("--filter: module 'pyjq' is not installed")
+        options.filter = pyjq.compile(options.filter)
 
     if not API_KEY:
         sys.stderr.write('''\
