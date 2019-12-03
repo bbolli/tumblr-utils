@@ -87,6 +87,14 @@ try:
 except ImportError:
     pyjq = None
 
+try:
+    from os import scandir  # type: ignore[attr-defined]
+except ImportError:
+    try:
+        from scandir import scandir  # type: ignore[no-redef]
+    except ImportError:
+        scandir = None  # type: ignore[assignment,no-redef]
+
 # These builtins have new names in Python 3
 try:
     long, xrange  # type: ignore[has-type]
@@ -168,6 +176,7 @@ else:
 
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
+old_json_dir_entries = None  # type: Optional[Tuple[str, ...]]
 
 
 class Logger(object):
@@ -279,7 +288,37 @@ def set_period():
     options.p_stop = mktime(tm)
 
 
+def initial_apiparse(base, old_json_dir):
+    global old_json_dir_entries
+    if old_json_dir is not None:
+        old_json_dir_entries = tuple(e.path for e in sorted(
+            (e for e in scandir(old_json_dir) if (e.name.endswith('.json') and e.is_file())),
+            key=lambda e: e.name))
+    else:
+        old_json_dir_entries = None
+
+    return apiparse(base, 1)
+
+
 def apiparse(base, count, start=0):
+    # type: (...) -> Optional[JSONDict]
+    if old_json_dir_entries is not None:
+        # Reconstruct the API response
+        posts = []
+        posts_respfiles = old_json_dir_entries[start:]
+        for prf in posts_respfiles[:count]:
+            with io.open(prf, encoding=FILE_ENCODING) as f:
+                try:
+                    post = json.load(f)
+                except ValueError as e:
+                    f.seek(0)
+                    log('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
+                    return None
+            posts.append(post)
+        return {'posts': posts,
+                'post_respfiles': posts_respfiles,
+                'blog': dict(posts[0]['blog'] if posts else {}, posts=len(old_json_dir_entries))}
+
     params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
     if start > 0:
         params['offset'] = start
@@ -581,7 +620,7 @@ class TumblrBackup(object):
         f += '</nav></footer>\n'
         return f
 
-    def backup(self, account):
+    def backup(self, account, old_json_dir):
         """makes single files and an index for every post on a public Tumblr blog account"""
 
         base = get_api_url(account)
@@ -622,8 +661,7 @@ class TumblrBackup(object):
         else:
             log.status('Getting basic information\r')
 
-        # start by calling the API with just a single post
-        resp = apiparse(base, 1)
+        resp = initial_apiparse(base, old_json_dir)
         if not resp:
             self.errors = True
             return
@@ -648,9 +686,11 @@ class TumblrBackup(object):
         backup_pool = ThreadPool()
 
         # returns whether any posts from this batch were saved
-        def _backup(posts):
-            for p in sorted(posts, key=lambda x: x['id'], reverse=True):
-                post = post_class(p, account)
+        def _backup(posts, post_respfiles):
+            sorted_posts = sorted(zip(posts, post_respfiles),
+                                  key=lambda x: x[0]['id'], reverse=True)
+            for p, prf in sorted_posts:
+                post = post_class(p, account, prf)
                 if ident_max and long(post.ident) <= ident_max:
                     return False
                 if options.count and self.post_count >= options.count:
@@ -699,8 +739,12 @@ class TumblrBackup(object):
                     continue
 
                 posts = resp[posts_key]
+                post_respfiles = resp.get('post_respfiles')
+                if post_respfiles is None:
+                    post_respfiles = [None for _ in posts]
+
                 # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
-                if not posts or not _backup(posts):
+                if not posts or not _backup(posts, post_respfiles):
                     log('Backup complete: Found empty set of posts\n', account=True)
                     break
 
@@ -737,12 +781,12 @@ class TumblrBackup(object):
 class TumblrPost(object):
     post_header = ''  # set by TumblrBackup.backup()
 
-    def __init__(self, post, backup_account):
-        # type: (JSONDict, str) -> None
+    def __init__(self, post, backup_account, respfile):
+        # type: (JSONDict, str, Text) -> None
         self.content = ''
         self.post = post
         self.backup_account = backup_account
-        self.json_content = to_unicode(json.dumps(post, sort_keys=True, indent=4, separators=(',', ': ')))
+        self.respfile = respfile
         self.creator = post['blog_name']
         self.ident = str(post['id'])
         self.url = post['post_url']
@@ -885,7 +929,7 @@ class TumblrPost(object):
 
         else:
             log(u"Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
-            append(escape(self.json_content), u'<pre>%s</pre>')
+            append(escape(self.get_json_content()), u'<pre>%s</pre>')
 
         self.content = '\n'.join(content)
 
@@ -1145,7 +1189,13 @@ class TumblrPost(object):
         os.utime(f.name, (self.date, self.date))
         if options.json:
             with open_text(json_dir, self.ident + '.json') as f:
-                f.write(self.json_content)
+                f.write(self.get_json_content())
+
+    def get_json_content(self):
+        if self.respfile is not None:
+            with io.open(self.respfile, encoding=FILE_ENCODING) as f:
+                return f.read()
+        return to_unicode(json.dumps(self.post, sort_keys=True, indent=4, separators=(',', ': ')))
 
     @staticmethod
     def _parse_url_match(match, transform=None):
@@ -1273,6 +1323,10 @@ if __name__ == '__main__':
         def __call__(self, parser, namespace, values, option_string=None):
             setattr(namespace, self.dest, set(values.split(',')))
 
+    class CSVListCallback(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            setattr(namespace, self.dest, list(values.split(',')))
+
     class RequestCallback(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
             request = getattr(namespace, self.dest) or {}
@@ -1341,6 +1395,8 @@ if __name__ == '__main__':
                         help='add EXIF keyword tags to each picture'
                              " (comma-separated values; '-' to remove all tags, '' to add no extra tags)")
     parser.add_argument('-S', '--no-ssl-verify', action='store_true', help='ignore SSL verification errors')
+    parser.add_argument('--json-dirs', action=CSVListCallback, default=[], metavar='DIRS',
+                        help='comma-separated list of directories containing API responses (one per blog)')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
 
@@ -1397,6 +1453,14 @@ if __name__ == '__main__':
         if pyjq is None:
             parser.error("--filter: module 'pyjq' is not installed")
         options.filter = pyjq.compile(options.filter)
+    if options.json_dirs:
+        if not scandir:
+            parser.error("--json-dirs: Python is less than 3.5 and module 'scandir' is not installed")
+        if len(options.json_dirs) != len(blogs):
+            parser.error('--json-dirs: expected {} directories, got {}'.format(len(blogs), len(options.json_dirs)))
+        for d in options.json_dirs:
+            if not os.access(d, os.R_OK | os.X_OK):
+                parser.error("--json-dirs: directory '{}' cannot be read".format(d))
 
     if not API_KEY:
         sys.stderr.write('''\
@@ -1406,9 +1470,9 @@ https://www.tumblr.com/oauth/apps\n''')
 
     tb = TumblrBackup()
     try:
-        for account in blogs:
+        for i, account in enumerate(blogs):
             log.backup_account = account
-            tb.backup(account)
+            tb.backup(account, options.json_dirs[i] if options.json_dirs else None)
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
 
