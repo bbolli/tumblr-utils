@@ -1,16 +1,22 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # standard Python library imports
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 from __future__ import with_statement
-import codecs
 from collections import defaultdict
 from datetime import datetime
 import errno
 from glob import glob
 import hashlib
-from httplib import HTTPException
+try:
+    from http.client import HTTPException
+except ImportError:
+    from httplib import HTTPException
 import imghdr
+import io
 try:
     import json
 except ImportError:
@@ -18,15 +24,24 @@ except ImportError:
 import locale
 import os
 from os.path import join, split, splitext
-import Queue
+try:
+    import queue
+except ImportError:
+    import Queue as queue
 import re
 import ssl
 import sys
 import threading
 import time
-import urllib
-import urllib2
-import urlparse
+try:
+    from urllib.parse import quote, urlencode, urlparse
+    from urllib.request import urlopen
+    NEW_URLLIB = True
+except ImportError:
+    from urllib import quote, urlencode
+    from urllib2 import urlopen
+    from urlparse import urlparse
+    NEW_URLLIB = False
 from xml.sax.saxutils import escape
 
 try:
@@ -45,12 +60,21 @@ try:
 except ImportError:
     youtube_dl = None
 
+from util import to_bytes, to_unicode
+
+# These builtins have new names in Python 3
+try:
+    long, xrange
+except NameError:
+    long = int
+    xrange = range
+
 # Format of displayed tags
-TAG_FMT = '#%s'
+TAG_FMT = u'#{}'
 
 # Format of tag link URLs; set to None to suppress the links.
 # Named placeholders that will be replaced: domain, tag
-TAGLINK_FMT = 'http://%(domain)s/tagged/%(tag)s'
+TAGLINK_FMT = u'http://{domain}/tagged/{tag}'
 
 # exit codes
 EXIT_SUCCESS    = 0
@@ -62,7 +86,7 @@ EXIT_ERRORS     = 4
 # add another JPEG recognizer
 # see http://www.garykessler.net/library/file_sigs.html
 def test_jpg(h, f):
-    if h[:3] == '\xFF\xD8\xFF' and h[3] in "\xDB\xE0\xE1\xE2\xE3":
+    if h[:3] == b'\xFF\xD8\xFF' and h[3] in b'\xDB\xE0\xE1\xE2\xE3':
         return 'jpg'
 
 imghdr.tests.append(test_jpg)
@@ -72,7 +96,7 @@ save_folder = ''
 media_folder = ''
 
 # constant names
-root_folder = os.getcwdu()
+root_folder = os.getcwd()
 post_dir = 'posts'
 json_dir = 'json'
 media_dir = 'media'
@@ -109,18 +133,18 @@ try:
     locale.setlocale(locale.LC_TIME, '')
 except locale.Error:
     pass
-encoding = 'utf-8'
-time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
+FILE_ENCODING = 'utf-8'
+TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
 
 have_ssl_ctx = sys.version_info >= (2, 7, 9)
 if have_ssl_ctx:
     ssl_ctx = ssl.create_default_context()
-    def urlopen(url):
-        return urllib2.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
+    def tb_urlopen(url):
+        return urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
 else:
-    def urlopen(url):
-        return urllib2.urlopen(url, timeout=HTTP_TIMEOUT)
+    def tb_urlopen(url):
+        return urlopen(url, timeout=HTTP_TIMEOUT)
 
 
 def log(account, s):
@@ -155,18 +179,19 @@ def open_file(open_fn, parts):
 
 def open_text(*parts):
     return open_file(
-        lambda f: codecs.open(f, 'w', encoding, 'xmlcharrefreplace'), parts
+        lambda f: io.open(f, 'w', encoding=FILE_ENCODING, errors='xmlcharrefreplace'), parts
     )
 
 
 def open_media(*parts):
-    return open_file(lambda f: open(f, 'wb'), parts)
+    return open_file(lambda f: io.open(f, 'wb'), parts)
 
 
 def strftime(format, t=None):
     if t is None:
         t = time.localtime()
-    return time.strftime(format, t).decode(time_encoding)
+    s = time.strftime(format, t)
+    return to_unicode(s, encoding=TIME_ENCODING)
 
 
 def get_api_url(account):
@@ -190,24 +215,25 @@ def set_period():
     if len(options.period) == 8:
         i = 2
         tm[2] = int(options.period[6:8])
-    options.p_start = time.mktime(tm)
+    options.p_start = time.mktime(tuple(tm))
     tm[i] += 1
-    options.p_stop = time.mktime(tm)
+    options.p_stop = time.mktime(tuple(tm))
 
 
 def apiparse(base, count, start=0):
     params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
     if start > 0:
         params['offset'] = start
-    url = base + '?' + urllib.urlencode(params)
+    url = base + '?' + urlencode(params)
     for _ in range(10):
         try:
-            resp = urlopen(url)
+            resp = tb_urlopen(url)
             data = resp.read()
         except (EnvironmentError, HTTPException) as e:
             sys.stderr.write("%s getting %s\n" % (e, url))
             continue
-        if resp.info().gettype() == 'application/json':
+        info = resp.info()
+        if (info.get_content_type() if NEW_URLLIB else info.gettype()) == 'application/json':
             break
         sys.stderr.write("Unexpected Content-Type: '%s'\n" % resp.info().gettype())
         return None
@@ -247,7 +273,7 @@ def add_exif(image_name, tags):
 
 def save_style():
     with open_text(backup_css) as css:
-        css.write('''\
+        css.write(u'''\
 @import url("override.css");
 
 body { width: 720px; margin: 0 auto; }
@@ -265,7 +291,7 @@ footer, article footer a { font-size: small; color: #999; }
 
 def get_avatar():
     try:
-        resp = urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
+        resp = tb_urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
         avatar_data = resp.read()
     except (EnvironmentError, HTTPException):
         return
@@ -279,12 +305,12 @@ def get_style():
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
     try:
-        resp = urlopen('http://%s/' % blog_name)
+        resp = tb_urlopen('http://%s/' % blog_name)
         page_data = resp.read()
     except (EnvironmentError, HTTPException):
         return
-    for match in re.findall(r'(?s)<style type=.text/css.>(.*?)</style>', page_data):
-        css = match.strip().decode(encoding, 'replace')
+    for match in re.findall(br'(?s)<style type=.text/css.>(.*?)</style>', page_data):
+        css = match.strip().decode('utf-8', errors='replace')
         if not '\n' in css:
             continue
         css = css.replace('\r', '').replace('\n    ', '\n')
@@ -293,7 +319,7 @@ def get_style():
         return
 
 
-class Index:
+class Index(object):
 
     def __init__(self, blog, body_class='index'):
         self.blog = blog
@@ -323,15 +349,15 @@ class Index:
             )
 
     def save_year(self, idx, index_dir, year):
-        idx.write('<h3>%s</h3>\n<ul>\n' % year)
+        idx.write(u'<h3>%s</h3>\n<ul>\n' % year)
         for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
-            tm = time.localtime(time.mktime([year, month, 3, 0, 0, 0, 0, 0, -1]))
+            tm = time.localtime(time.mktime((year, month, 3, 0, 0, 0, 0, 0, -1)))
             month_name = self.save_month(index_dir, year, month, tm)
             idx.write(u'    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
                 archive_dir, month_name, len(self.index[year][month]),
                 strftime('%B', tm)
             ))
-        idx.write('</ul>\n\n')
+        idx.write(u'</ul>\n\n')
 
     def save_month(self, index_dir, year, month, tm):
         posts = sorted(self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month)
@@ -340,7 +366,7 @@ class Index:
 
         def pages_per_month(y, m):
             posts = len(self.index[y][m])
-            return posts / posts_page + bool(posts % posts_page)
+            return posts // posts_page + bool(posts % posts_page)
 
         def next_month(inc):
             i = self.archives.index((year, month))
@@ -351,7 +377,7 @@ class Index:
 
         FILE_FMT = '%d-%02d-p%s'
         pages_month = pages_per_month(year, month)
-        for page, start in enumerate(range(0, posts_month, posts_page), start=1):
+        for page, start in enumerate(xrange(0, posts_month, posts_page), start=1):
 
             archive = [self.blog.header(strftime('%B %Y', tm), body_class='archive')]
             archive.extend(p.get_post() for p in posts[start:start + posts_page])
@@ -388,7 +414,7 @@ class Index:
         return first_file
 
 
-class Indices:
+class Indices(object):
 
     def __init__(self, blog):
         self.blog = blog
@@ -397,7 +423,7 @@ class Indices:
 
     def build_index(self):
         filter = join('*', dir_index) if options.dirs else '*' + post_ext
-        self.all_posts = map(LocalPost, glob(path_to(post_dir, filter)))
+        self.all_posts = list(map(LocalPost, glob(path_to(post_dir, filter))))
         for post in self.all_posts:
             self.main_index.add_post(post)
             if options.tag_index:
@@ -416,7 +442,7 @@ class Indices:
         self.fixup_media_links()
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
         for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
-            digest = hashlib.md5(tag).hexdigest()
+            digest = hashlib.md5(to_bytes(tag)).hexdigest()
             index.save_index(tag_index_dir + os.sep + digest,
                 u"Tag ‛%s’" % index.name
             )
@@ -435,7 +461,7 @@ class Indices:
             p.post = p.post.replace(shallow_media, deep_media)
 
 
-class TumblrBackup:
+class TumblrBackup(object):
 
     def __init__(self):
         self.errors = False
@@ -464,7 +490,7 @@ class TumblrBackup:
 <body%s>
 
 <header>
-''' % (encoding, self.title, css_rel, body_class)
+''' % (FILE_ENCODING, self.title, css_rel, body_class)
         if avatar:
             f = glob(path_to(theme_dir, avatar_base + '.*'))
             if f:
@@ -624,7 +650,7 @@ class TumblrBackup:
         self.total_count += self.post_count
 
 
-class TumblrPost:
+class TumblrPost(object):
 
     post_header = ''    # set by TumblrBackup.backup()
 
@@ -845,7 +871,7 @@ class TumblrPost:
         if image_url.startswith('//'):
             image_url = 'http:' + image_url
         image_url = self.maxsize_image_url(image_url)
-        path = urlparse.urlparse(image_url).path
+        path = urlparse(image_url).path
         image_filename = path.split('/')[-1]
         if not image_filename or not image_url.startswith('http'):
             return match.group(0)
@@ -862,7 +888,7 @@ class TumblrPost:
         poster_url = match.group(2)
         if poster_url.startswith('//'):
             poster_url = 'http:' + poster_url
-        path = urlparse.urlparse(poster_url).path
+        path = urlparse(poster_url).path
         poster_filename = path.split('/')[-1]
         if not poster_filename or not poster_url.startswith('http'):
             return match.group(0)
@@ -881,7 +907,7 @@ class TumblrPost:
         video_url = match.group(2)
         if video_url.startswith('//'):
             video_url = 'http:' + video_url
-        path = urlparse.urlparse(video_url).path
+        path = urlparse(video_url).path
         video_filename = path.split('/')[-1]
         if not video_filename or not video_url.startswith('http'):
             return match.group(0)
@@ -914,7 +940,7 @@ class TumblrPost:
             return split(image_glob[0])[1]
         # download the media data
         try:
-            resp = urlopen(url)
+            resp = tb_urlopen(url)
             with open_media(self.media_dir, filename) as dest:
                 data = resp.read(HTTP_CHUNK_SIZE)
                 hdr = data[:32]     # save the first few bytes
@@ -925,8 +951,8 @@ class TumblrPost:
             sys.stderr.write('%s downloading %s\n' % (e, url))
             try:
                 os.unlink(path_to(self.media_dir, filename))
-            except OSError as e:
-                if e.errno != errno.ENOENT:
+            except OSError as oe:
+                if oe.errno != errno.ENOENT:
                     raise
             return None
         # determine the file type if it's unknown
@@ -940,7 +966,7 @@ class TumblrPost:
 
     def get_post(self):
         """returns this post in HTML"""
-        typ = ('liked-' if options.likes else '') + self.typ
+        typ = (u'liked-' if options.likes else u'') + self.typ
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
         post += u'<header>\n'
         if options.likes:
@@ -967,15 +993,15 @@ class TumblrPost:
             )
         if foot:
             post += u'\n<footer>%s</footer>' % u' — '.join(foot)
-        post += '\n</article>\n'
+        post += u'\n</article>\n'
         return post
 
     @staticmethod
     def tag_link(tag):
-        tag_disp = escape(TAG_FMT % tag)
+        tag_disp = escape(TAG_FMT.format(tag))
         if not TAGLINK_FMT:
-            return tag_disp + ' '
-        url = TAGLINK_FMT % {'domain': blog_name, 'tag': urllib.quote(tag.encode('utf-8'))}
+            return tag_disp + u' '
+        url = TAGLINK_FMT.format(domain=blog_name, tag=quote(to_bytes(tag)))
         return u'<a href=%s>%s</a>\n' % (url, tag_disp)
 
     def save_post(self):
@@ -1006,10 +1032,10 @@ class BlosxomPost(TumblrPost):
         return post
 
 
-class LocalPost:
+class LocalPost(object):
 
     def __init__(self, post_file):
-        with codecs.open(post_file, 'r', encoding) as f:
+        with io.open(post_file, encoding=FILE_ENCODING) as f:
             post = f.read()
         # extract all URL-encoded tags
         self.tags = []
@@ -1037,10 +1063,10 @@ class LocalPost:
         return self.post
 
 
-class ThreadPool:
+class ThreadPool(object):
 
     def __init__(self, thread_count=20, max_queue=1000):
-        self.queue = Queue.Queue(max_queue)
+        self.queue = queue.Queue(max_queue)
         self.quit = threading.Event()
         self.abort = threading.Event()
         self.threads = [threading.Thread(target=self.handler) for _ in range(thread_count)]
@@ -1066,7 +1092,7 @@ class ThreadPool:
         while not self.abort.is_set():
             try:
                 work = self.queue.get(True, 0.1)
-            except Queue.Empty:
+            except queue.Empty:
                 if self.quit.is_set():
                     break
             else:
