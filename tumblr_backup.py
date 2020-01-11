@@ -637,7 +637,7 @@ class TumblrBackup(object):
         backup_pool.wait()
 
         # postprocessing
-        if not options.blosxom and self.post_count:
+        if not options.blosxom and (self.post_count or options.count == 0):
             get_avatar()
             get_style()
             if not have_custom_css:
@@ -827,7 +827,7 @@ class TumblrPost(object):
             'fragment_retries': 3000,
             'ignoreerrors': True
         }
-        if options.cookiefile:
+        if options.cookiefile is not None:
             ydl_options['cookiefile'] = options.cookiefile
         ydl = youtube_dl.YoutubeDL(ydl_options)
         ydl.add_default_info_extractors()
@@ -1180,7 +1180,7 @@ if __name__ == '__main__':
         help="do a full backup at HOUR hours, otherwise do an incremental backup"
         " (useful for cron jobs)"
     )
-    parser.add_option('-n', '--count', type='int', default=0,
+    parser.add_option('-n', '--count', type='int',
         help="save only COUNT posts"
     )
     parser.add_option('-s', '--skip', type='int', default=0,
@@ -1241,6 +1241,14 @@ if __name__ == '__main__':
     args = args or DEFAULT_BLOGS
     if not args:
         parser.error("Missing blog-name")
+    if options.count is not None and options.count < 0:
+        parser.error('--count: count must not be negative')
+    if options.count == 0 and (options.incremental or options.auto is not None):
+        parser.error('--count 0 conflicts with --incremental and --auto')
+    if options.skip < 0:
+        parser.error('--skip: skip must not be negative')
+    if options.posts_per_page < 0:
+        parser.error('--posts-per-page: posts per page must not be negative')
     if options.outdir and len(args) > 1:
         parser.error("-O can only be used for a single blog-name")
     if options.dirs and options.tag_index:
@@ -1249,6 +1257,8 @@ if __name__ == '__main__':
         parser.error("--exif: module 'pyexiv2' is not installed")
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
+    if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
+        parser.error('--cookiefile: file cannot be read')
 
     if not API_KEY:
         sys.stderr.write('''\
