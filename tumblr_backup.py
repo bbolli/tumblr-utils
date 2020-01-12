@@ -380,7 +380,7 @@ class Index(object):
         for page, start in enumerate(xrange(0, posts_month, posts_page), start=1):
 
             archive = [self.blog.header(strftime('%B %Y', tm), body_class='archive')]
-            archive.extend(p.get_post() for p in posts[start:start + posts_page])
+            archive.extend(p.get_post(self.body_class == 'tag-archive') for p in posts[start:start + posts_page])
 
             file_name = FILE_FMT % (year, month, page)
             if options.dirs:
@@ -423,8 +423,7 @@ class Indices(object):
 
     def build_index(self):
         filter = join('*', dir_index) if options.dirs else '*' + post_ext
-        self.all_posts = list(map(LocalPost, glob(path_to(post_dir, filter))))
-        for post in self.all_posts:
+        for post in (LocalPost(f) for f in glob(path_to(post_dir, filter))):
             self.main_index.add_post(post)
             if options.tag_index:
                 for tag, name in post.tags:
@@ -439,7 +438,6 @@ class Indices(object):
         global save_dir
         save_dir = '../../../'
         mkdir(path_to(tag_index_dir))
-        self.fixup_media_links()
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
         for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
             digest = hashlib.md5(to_bytes(tag)).hexdigest()
@@ -452,13 +450,6 @@ class Indices(object):
         tag_index.extend(['</ul>', ''])
         with open_text(tag_index_dir, dir_index) as f:
             f.write(u'\n'.join(tag_index))
-
-    def fixup_media_links(self):
-        """Fixup all media links which now have to be two folders lower."""
-        shallow_media = '../' + media_dir
-        deep_media = save_dir + media_dir
-        for p in self.all_posts:
-            p.post = p.post.replace(shallow_media, deep_media)
 
 
 class TumblrBackup(object):
@@ -638,10 +629,12 @@ class TumblrBackup(object):
 
         # postprocessing
         if not options.blosxom and (self.post_count or options.count == 0):
+            log(account, 'Getting avatar and style\r')
             get_avatar()
             get_style()
             if not have_custom_css:
                 save_style()
+            log(account, 'Building index\r')
             ix = Indices(self)
             ix.build_index()
             ix.save_index()
@@ -1044,20 +1037,15 @@ class BlosxomPost(TumblrPost):
 class LocalPost(object):
 
     def __init__(self, post_file):
-        with io.open(post_file, encoding=FILE_ENCODING) as f:
-            post = f.read()
-        # extract all URL-encoded tags
-        self.tags = []
-        footer_pos = post.find('<footer>')
-        if footer_pos > 0:
-            self.tags = re.findall(r'(?m)<a.+?/tagged/(.+?)>#(.+?)</a>', post[footer_pos:])
-        # remove header and footer
-        lines = post.split('\n')
-        while lines and '<article ' not in lines[0]:
-            del lines[0]
-        while lines and '</article>' not in lines[-1]:
-            del lines[-1]
-        self.post = '\n'.join(lines)
+        self.post_file = post_file
+        if options.tag_index:
+            with io.open(post_file, encoding=FILE_ENCODING) as f:
+                post = f.read()
+            # extract all URL-encoded tags
+            self.tags = []
+            footer_pos = post.find('<footer>')
+            if footer_pos > 0:
+                self.tags = re.findall(r'(?m)<a.+?/tagged/(.+?)>#(.+?)</a>', post[footer_pos:])
         parts = post_file.split(os.sep)
         if parts[-1] == dir_index:  # .../<post_id>/index.html
             self.file_name = os.sep.join(parts[-2:])
@@ -1068,8 +1056,22 @@ class LocalPost(object):
         self.date = os.stat(post_file).st_mtime
         self.tm = time.localtime(self.date)
 
-    def get_post(self):
-        return self.post
+    def get_post(self, in_tag_index):
+        with io.open(self.post_file, encoding=FILE_ENCODING) as f:
+            post = f.read()
+        # remove header and footer
+        lines = post.split('\n')
+        while lines and '<article ' not in lines[0]:
+            del lines[0]
+        while lines and '</article>' not in lines[-1]:
+            del lines[-1]
+        post = '\n'.join(lines)
+        if in_tag_index:
+            # fixup all media links which now have to be two folders lower
+            shallow_media = '../' + media_dir
+            deep_media = save_dir + media_dir
+            post = post.replace(shallow_media, deep_media)
+        return post
 
 
 class ThreadPool(object):
