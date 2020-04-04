@@ -537,21 +537,24 @@ class TumblrBackup:
         if options.likes:
             _get_content = lambda soup: soup['response']['liked_posts']
             blog = {}
-            last_post = resp['liked_count']
+            count_estimate = resp['liked_count']
         else:
             _get_content = lambda soup: soup['response']['posts']
             blog = resp['blog']
-            last_post = blog['posts']
+            count_estimate = blog['posts']
         self.title = escape(blog.get('title', account))
         self.subtitle = blog.get('description', '')
 
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
 
-        # find the post number limit to back up
+        # find the limit of how many posts to back up
         if options.count:
-            last_post = min(last_post, options.count + options.skip)
+            desired_count = options.count + options.skip
+        else:
+            desired_count = None
 
+        # returns whether any posts from this batch were saved
         def _backup(posts):
             for p in sorted(posts, key=lambda x: x['id'], reverse=True):
                 post = post_class(p)
@@ -583,28 +586,27 @@ class TumblrBackup:
         # start the thread pool
         backup_pool = ThreadPool()
         try:
-            # Get the JSON entries from the API, which we can only do for max 50 posts at once.
+            # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
-            last_batch = MAX_POSTS
             i = options.skip
-            while i < last_post:
+            # Download posts until we have `desired_count` (if specified), or until post range responses are empty
+            while not desired_count or self.post_count < desired_count:
                 # find the upper bound
-                j = min(i + MAX_POSTS, last_post)
-                log(account, "Getting posts %d to %d of %d\r" % (i, j - 1, last_post))
+                log(account, "Getting posts %d to %d (of %d expected)\r" % (i, i + MAX_POSTS - 1, count_estimate))
 
-                soup = apiparse(base, j - i, i)
+                soup = apiparse(base, MAX_POSTS, i)
                 if soup is None:
-                    i += last_batch     # try the next batch
+                    i += 1 # try skipping a post
                     self.errors = True
                     continue
 
                 posts = _get_content(soup)
-                # posts can be empty if we don't backup reblogged posts
+                # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
                 if not posts or not _backup(posts):
+                    log(account, "Backing up posts found empty set of posts, finishing\r")
                     break
 
-                last_batch = len(posts)
-                i += last_batch
+                i += MAX_POSTS
         except:
             # ensure proper thread pool termination
             backup_pool.cancel()
