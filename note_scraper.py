@@ -2,17 +2,16 @@
 
 from __future__ import absolute_import, division, print_function, with_statement
 
-import contextlib
 import itertools
 import re
-import ssl
 import sys
 import time
 import traceback
+import warnings
 
 from bs4 import BeautifulSoup
 
-from util import ConnectionFile, HAVE_SSL_CTX, HTTP_TIMEOUT, to_bytes, to_native_str
+from util import ConnectionFile, is_dns_working, to_bytes, to_native_str
 
 try:
     from typing import TYPE_CHECKING
@@ -23,27 +22,41 @@ if TYPE_CHECKING:
     from typing import List, Text
 
 try:
-    from http.client import HTTPException
-except ImportError:
-    from httplib import HTTPException  # type: ignore[no-redef]
-
-try:
     from http.cookiejar import MozillaCookieJar
 except ImportError:
     from cookielib import MozillaCookieJar  # type: ignore[no-redef]
 
 try:
-    from urllib.error import HTTPError, URLError
+    import requests
+except ImportError:
+    try:
+        from pip._vendor import requests  # type: ignore[no-redef]
+    except ImportError:
+        raise RuntimeError('The requests module is required for note scraping. '
+                           'Please install it with pip or your package manager.')
+
+try:
     from urllib.parse import quote, urlparse, urlsplit, urlunsplit
-    from urllib.request import BaseHandler, HTTPCookieProcessor, HTTPSHandler, build_opener
 except ImportError:
     from urllib import quote  # type: ignore[attr-defined,no-redef]
-    from urllib2 import (BaseHandler, HTTPCookieProcessor, HTTPSHandler, HTTPError, URLError,  # type: ignore[no-redef]
-                         build_opener)
     from urlparse import urlparse, urlsplit, urlunsplit  # type: ignore[no-redef]
+
+try:
+    from urllib3 import Retry
+    from urllib3.exceptions import HTTPError, InsecureRequestWarning
+except ImportError:
+    try:
+        # pip includes urllib3
+        from pip._vendor.urllib3 import Retry
+        from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
+    except ImportError:
+        raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
 
 EXIT_SUCCESS = 0
 EXIT_SAFE_MODE = 2
+EXIT_NO_INTERNET = 3
+
+HTTP_RETRY = Retry(3, connect=False)
 
 # Globals
 post_url = None
@@ -73,10 +86,11 @@ class WebCrawler(object):
         self.notes_limit = notes_limit
         self.lasturl = None
 
-        handlers = []  # type: List[BaseHandler]  # pytype: disable=invalid-annotation
-        if HAVE_SSL_CTX:
-            context = ssl._create_unverified_context() if noverify else ssl.create_default_context()
-            handlers.append(HTTPSHandler(context=context))
+        self.session = requests.Session()
+        self.session.verify = not noverify
+        for adapter in self.session.adapters.values():
+            adapter.max_retries = HTTP_RETRY
+
         if cookiefile is not None:
             cookies = MozillaCookieJar(cookiefile)
             cookies.load()
@@ -88,9 +102,7 @@ class WebCrawler(object):
                     cookie.expires = None
                     cookie.discard = True
 
-            handlers.append(HTTPCookieProcessor(cookies))
-
-        self.opener = build_opener(*handlers)
+            self.session.cookies = cookies  # type: ignore[assignment]
 
     @classmethod
     def quote_unsafe(cls, string):
@@ -140,19 +152,23 @@ class WebCrawler(object):
     def urlopen(self, iri):
         self.lasturl = iri
         uri = self.iri_to_uri(iri)
+
         try_count = 0
         while True:
-            try:
-                with contextlib.closing(self.opener.open(uri, timeout=HTTP_TIMEOUT)) as resp:
-                    try_count += 1
-                    parsed_uri = urlparse(resp.geturl())
-                    if re.match(r'(www\.)?tumblr\.com', parsed_uri.netloc) and parsed_uri.path == '/safe-mode':
-                        sys.exit(EXIT_SAFE_MODE)
-                    return resp.read().decode('utf-8', errors='ignore')
-            except HTTPError as e:
-                if e.code == 429 and try_count < self.TRY_LIMIT and self.ratelimit_sleep(e.headers):
+            with self.session.get(uri) as resp:
+                try_count += 1
+                parsed_uri = urlparse(resp.url)
+                if re.match(r'(www\.)?tumblr\.com', parsed_uri.netloc) and parsed_uri.path == '/safe-mode':
+                    sys.exit(EXIT_SAFE_MODE)
+                if resp.status_code == 429 and try_count < self.TRY_LIMIT and self.ratelimit_sleep(resp.headers):
                     continue
-                raise
+                if 200 <= resp.status_code < 300:
+                    return resp.content.decode('utf-8', errors='ignore')
+                log(iri, 'Unexpected response status: HTTP {} {}{}'.format(
+                    resp.status_code, resp.reason,
+                    '' if resp.status_code == 404 else '\nHeaders: {}'.format(resp.headers),
+                ))
+                return None
 
     @staticmethod
     def get_more_link(soup, base, notes_url):
@@ -220,6 +236,10 @@ def main(stdout_conn, msg_conn, post_url_, ident_, noverify, notes_limit, cookie
     global post_url, ident, msg_pipe
     post_url, ident = post_url_, ident_
 
+    if noverify:
+        # Hide the InsecureRequestWarning from urllib3
+        warnings.filterwarnings('ignore', category=InsecureRequestWarning)
+
     with ConnectionFile(msg_conn, 'w') as msg_pipe:
         crawler = WebCrawler(noverify, cookiefile, notes_limit)
 
@@ -228,13 +248,9 @@ def main(stdout_conn, msg_conn, post_url_, ident_, noverify, notes_limit, cookie
         except KeyboardInterrupt:
             sys.exit()  # Ignore these so they don't propogate into the parent
         except HTTPError as e:
-            log(crawler.lasturl, 'HTTP Error {} {}'.format(e.code, e.reason))
-            sys.exit()
-        except URLError as e:
-            log(crawler.lasturl, 'URL Error: {}'.format(e.reason))
-            sys.exit()
-        except HTTPException as e:
-            log(crawler.lasturl, 'HTTP Exception: {}'.format(e))
+            if not is_dns_working(timeout=5):
+                sys.exit(EXIT_NO_INTERNET)
+            log(crawler.lasturl, e)
             sys.exit()
         except Exception:
             log(crawler.lasturl, 'Caught an exception')
