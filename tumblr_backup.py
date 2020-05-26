@@ -147,12 +147,23 @@ else:
         return urlopen(url, timeout=HTTP_TIMEOUT)
 
 
-def log(account, s):
-    if not options.quiet:
-        if account:
-            sys.stdout.write('%s: ' % account)
-        sys.stdout.write(s[:-1] + ' ' * 20 + s[-1:])
-        sys.stdout.flush()
+def log(account, msg):
+    if options.quiet:
+        return
+
+    # Separate terminator
+    it = (i for i, c in enumerate(reversed(msg)) if c not in '\r\n')
+    try:
+        idx = len(msg) - next(it)
+    except StopIteration:
+        idx = 0
+    msg, term = msg[:idx], msg[idx:]
+
+    if account:  # Optional account prefix
+        msg = '{}: {}'.format(account, msg)
+    msg += ''.join([' ' for _ in range(80 - len(msg))])  # Pad to 80 chars
+    print(msg + term, end='')
+    sys.stdout.flush()
 
 
 def mkdir(dir, recursive=False):
