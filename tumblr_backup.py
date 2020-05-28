@@ -1118,8 +1118,9 @@ class ThreadPool(object):
                 if self.quit.is_set():
                     break
             else:
-                if self.quit.is_set() and self.queue.qsize() % MAX_POSTS == 0:
-                    log(account, "%d remaining posts to save\r" % self.queue.qsize())
+                qsize = self.queue.qsize()
+                if self.quit.is_set() and qsize % MAX_POSTS == 0:
+                    log(account, '{} remaining posts to save\r'.format(qsize))
                 try:
                     work()
                 finally:
