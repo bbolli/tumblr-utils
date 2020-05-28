@@ -74,7 +74,7 @@ TAG_FMT = u'#{}'
 
 # Format of tag link URLs; set to None to suppress the links.
 # Named placeholders that will be replaced: domain, tag
-TAGLINK_FMT = u'http://{domain}/tagged/{tag}'
+TAGLINK_FMT = u'https://{domain}/tagged/{tag}'
 
 # exit codes
 EXIT_SUCCESS    = 0
@@ -302,7 +302,7 @@ footer, article footer a { font-size: small; color: #999; }
 
 def get_avatar():
     try:
-        resp = tb_urlopen('http://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
+        resp = tb_urlopen('https://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
         avatar_data = resp.read()
     except (EnvironmentError, HTTPException):
         return
@@ -316,7 +316,7 @@ def get_style():
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
     try:
-        resp = tb_urlopen('http://%s/' % blog_name)
+        resp = tb_urlopen('https://%s/' % blog_name)
         page_data = resp.read()
     except (EnvironmentError, HTTPException):
         return
@@ -983,7 +983,7 @@ class TumblrPost(object):
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
         post += u'<header>\n'
         if options.likes:
-            post += u'<p><a href=\"http://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
+            post += u'<p><a href=\"https://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
         post += u'<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
         post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
         post += u'<a href=%s>●</a>\n' % self.shorturl
