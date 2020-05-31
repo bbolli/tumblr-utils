@@ -26,8 +26,8 @@ from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from tempfile import NamedTemporaryFile
 from types import ModuleType
-from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type, Union,
-                    cast)
+from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, Iterator, List, Optional, Set, TextIO,
+                    Tuple, Type, Union, cast)
 from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
@@ -171,7 +171,7 @@ MUST_MATCH_OPTIONS = PREV_MUST_MATCH_OPTIONS + MEDIA_PATH_OPTIONS
 BACKUP_CHANGING_OPTIONS = (
     'save_images', 'save_video', 'save_video_tumblr', 'save_audio', 'save_notes', 'copy_notes', 'notes_limit', 'json',
     'count', 'skip', 'period', 'request', 'filter', 'no_reblog', 'only_reblog', 'exif', 'prev_archives',
-    'use_server_timestamps', 'user_agent', 'no_get', 'internet_archive',
+    'use_server_timestamps', 'user_agent', 'no_get', 'internet_archive', 'media_list',
 )
 
 wget_retrieve: Optional[WgetRetrieveWrapper] = None
@@ -265,13 +265,13 @@ def open_file(open_fn, parts):
 
 
 @contextlib.contextmanager
-def open_text(*parts):
+def open_text(*parts, mode='w') -> Iterator[TextIO]:
+    assert 'b' not in mode
     dest_path = open_file(lambda f: f, parts)
     dest_dirname, dest_basename = split(dest_path)
 
-    with NamedTemporaryFile('w', prefix='.{}.'.format(dest_basename), dir=dest_dirname, delete=False) as partf:
-        # Yield the file for writing
-        with open(partf.fileno(), 'w', encoding=FILE_ENCODING, errors='xmlcharrefreplace', closefd=False) as f:
+    with NamedTemporaryFile(mode, prefix='.{}.'.format(dest_basename), dir=dest_dirname, delete=False) as partf:
+        with open(partf.fileno(), mode, encoding=FILE_ENCODING, errors='xmlcharrefreplace', closefd=False) as f:
             yield f
 
         # NamedTemporaryFile is created 0600, set mode to the usual 0644
@@ -882,6 +882,8 @@ class TumblrBackup:
         self.title: Optional[str] = None
         self.subtitle: Optional[str] = None
         self.pa_options: Optional[JSONDict] = None
+        self.media_list_file: Optional[TextIO] = None
+        self.mlf_seen: Set[int] = set()
 
     def exit_code(self):
         if self.failed_blogs or self.postfail_blogs:
@@ -1052,6 +1054,12 @@ class TumblrBackup:
 
         return oldest_tstamp, pa_options, write_fro
 
+    def record_media(self, ident: int, urls: Set[str]) -> None:
+        if self.media_list_file is not None and ident not in self.mlf_seen:
+            json.dump(dict(post=ident, media=sorted(urls)), self.media_list_file, separators=(',', ':'))
+            self.media_list_file.write('\n')
+            self.mlf_seen.add(ident)
+
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
 
@@ -1193,7 +1201,7 @@ class TumblrBackup:
             oldest_date = None
             for p, prf in sorted_posts:
                 no_internet.check()
-                post = post_class(p, account, prf, prev_archive, self.pa_options)
+                post = post_class(p, account, prf, prev_archive, self.pa_options, self.record_media)
                 oldest_date = post.date
                 if before is not None and post.date >= before:
                     if api_parser.dashboard_only_blog:
@@ -1250,6 +1258,16 @@ class TumblrBackup:
                     return False, oldest_date
             return True, oldest_date
 
+        if options.media_list:
+            mlf = open_text('media.json', mode='r+')
+            self.media_list_file = mlf.__enter__()
+            self.mlf_seen.clear()
+            for line in self.media_list_file:
+                doc = json.loads(line)
+                self.mlf_seen.add(doc['post'])
+        else:
+            mlf = None
+
         try:
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
@@ -1284,6 +1302,7 @@ class TumblrBackup:
                 post_respfiles = resp.get('post_respfiles')
                 if post_respfiles is None:
                     post_respfiles = [None for _ in posts]
+
                 res, oldest_date = _backup(posts, post_respfiles)
                 if not res:
                     break
@@ -1307,6 +1326,10 @@ class TumblrBackup:
             api_thread.quit()
             backup_pool.cancel()  # ensure proper thread pool termination
             raise
+        finally:
+            if mlf is not None:
+                mlf.__exit__(*sys.exc_info())
+                self.media_list_file = None
 
         if backup_pool.errors:
             self.postfail_blogs.append(account)
@@ -1334,12 +1357,15 @@ class TumblrPost:
         respfile: str,
         prev_archive: Optional[str],
         pa_options: Optional[JSONDict],
+        record_media: Callable[[int, Set[str]], None],
     ) -> None:
         self.post = post
         self.backup_account = backup_account
         self.respfile = respfile
         self.prev_archive = prev_archive
         self.pa_options = pa_options
+        self.record_media = record_media
+        self.post_media: Set[str] = set()
         self.creator = post.get('blog_name') or post['tumblelog']
         self.ident = str(post['id'])
         self.url = post['post_url']
@@ -1369,6 +1395,7 @@ class TumblrPost:
         """generates the content for this post"""
         post = self.post
         content = []
+        self.post_media.clear()
 
         def append(s, fmt='%s'):
             content.append(fmt % s)
@@ -1484,6 +1511,9 @@ class TumblrPost:
         else:
             logger.warn("Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
             append(escape(self.get_json_content()), '<pre>%s</pre>')
+
+        # Write URLs to media.json
+        self.record_media(int(self.ident), self.post_media)
 
         content_str = '\n'.join(content)
 
@@ -1661,6 +1691,8 @@ class TumblrPost:
                 downloading_media_cond.notify_all()
 
     def _download_media_inner(self, url, get_path, path_parts, media_path):
+        self.post_media.add(url)
+
         if self.prev_archive is None:
             cpy_res = False
         else:
@@ -2123,6 +2155,7 @@ if __name__ == '__main__':
                                  help='Reuse the API responses saved with --json (implies --copy-notes)')
     parser.add_argument('--internet-archive', action='store_true',
                         help='Fall back to the Internet Archive for Tumblr media 403 and 404 responses')
+    parser.add_argument('--media-list', action='store_true', help='Save post media URLs to media.json')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
     blogs = options.blogs or DEFAULT_BLOGS
