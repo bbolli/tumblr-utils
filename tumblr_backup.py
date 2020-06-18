@@ -101,8 +101,8 @@ MAX_POSTS = 50
 HTTP_TIMEOUT = 90
 HTTP_CHUNK_SIZE = 1024 * 1024
 
-# bb-tumblr-backup API key
-API_KEY = '8YUsKJvcJxo2MDwmWMDiXZGuMuIbeCwuQGP5ZHSEA4jBJPMnJT'
+# bb-tumblr-backup-gen2 API key
+API_KEY = 'brVeh51SIEuLgQIJqRwmJYJMNdXHSvk0R3GiN0ETcaDYrEqH1B'
 
 # ensure the right date/time format
 try:
