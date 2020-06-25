@@ -8,10 +8,12 @@ import errno
 import hashlib
 import imghdr
 import io
+import itertools
 import locale
 import multiprocessing
 import os
 import re
+import shutil
 import ssl
 import sys
 import threading
@@ -22,7 +24,7 @@ from glob import glob
 from os.path import join, split, splitext
 from xml.sax.saxutils import escape
 
-from util import ConnectionFile, HAVE_SSL_CTX, HTTP_TIMEOUT, LockedQueue, PY3, to_bytes, to_unicode
+from util import ConnectionFile, HAVE_SSL_CTX, HTTP_TIMEOUT, LockedQueue, PY3, nullcontext, to_bytes, to_unicode
 
 try:
     from typing import TYPE_CHECKING
@@ -176,7 +178,7 @@ else:
 
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
-old_json_dir_entries = None  # type: Optional[Tuple[str, ...]]
+prev_resps = None  # type: Optional[Tuple[str, ...]]
 
 
 class Logger(object):
@@ -288,25 +290,26 @@ def set_period():
     options.p_stop = mktime(tm)
 
 
-def initial_apiparse(base, old_json_dir):
-    global old_json_dir_entries
-    if old_json_dir is not None:
-        old_json_dir_entries = tuple(e.path for e in sorted(
-            (e for e in scandir(old_json_dir) if (e.name.endswith('.json') and e.is_file())),
-            key=lambda e: e.name))
-    else:
-        old_json_dir_entries = None
+def initial_apiparse(base, prev_archive):
+    prev_resps = None
+    if prev_archive:
+        prev_resps = tuple(
+            e.path for e in sorted(
+                (e for e in scandir(join(prev_archive, 'json')) if (e.name.endswith('.json') and e.is_file())),
+                key=lambda e: e.name,
+            )
+        )
 
-    return apiparse(base, 1)
+    return prev_resps, apiparse(base, prev_resps, 1)
 
 
-def apiparse(base, count, start=0):
+def apiparse(base, prev_resps, count, start=0):
     # type: (...) -> Optional[JSONDict]
-    if old_json_dir_entries is not None:
+    if prev_resps is not None:
         # Reconstruct the API response
         posts = []
-        posts_respfiles = old_json_dir_entries[start:]
-        for prf in posts_respfiles[:count]:
+        post_respfiles = prev_resps[start:]
+        for prf in post_respfiles[:count]:
             with io.open(prf, encoding=FILE_ENCODING) as f:
                 try:
                     post = json.load(f)
@@ -316,8 +319,8 @@ def apiparse(base, count, start=0):
                     return None
             posts.append(post)
         return {'posts': posts,
-                'post_respfiles': posts_respfiles,
-                'blog': dict(posts[0]['blog'] if posts else {}, posts=len(old_json_dir_entries))}
+                'post_respfiles': post_respfiles,
+                'blog': dict(posts[0]['blog'] if posts else {}, posts=len(prev_resps))}
 
     params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
     if start > 0:
@@ -391,7 +394,14 @@ footer, article footer a { font-size: small; color: #999; }
 ''')
 
 
-def get_avatar():
+def get_avatar(prev_archive):
+    path_parts = (theme_dir, avatar_base)
+    if prev_archive is not None:
+        # Copy old avatar, if present
+        cpy_res = maybe_copy_media(prev_archive, path_parts, known_extension=False)
+        if cpy_res:
+            return  # We got the avatar
+
     try:
         resp = tb_urlopen('https://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
         avatar_data = resp.read()
@@ -401,14 +411,25 @@ def get_avatar():
     ext = imghdr.what(None, avatar_data[:32])
     if ext is not None:
         avatar_file += '.' + ext
+    # Remove avatars with a different extension
+    for old_avatar in glob(join(theme_dir, avatar_base + '.*')):
+        if split(old_avatar)[-1] != avatar_file:
+            os.unlink(old_avatar)
     with open_media(theme_dir, avatar_file) as f:
         f.write(avatar_data)
 
 
-def get_style():
+def get_style(prev_archive):
     """Get the blog's CSS by brute-forcing it from the home page.
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
+    if prev_archive is not None:
+        # Copy old style, if present
+        path_parts = (theme_dir, 'style.css')
+        cpy_res = maybe_copy_media(prev_archive, path_parts, known_extension=False)
+        if cpy_res:
+            return  # We got the style
+
     try:
         resp = tb_urlopen('https://%s/' % blog_name)
         page_data = resp.read()
@@ -422,6 +443,66 @@ def get_style():
         with open_text(theme_dir, 'style.css') as f:
             f.write(css + '\n')
         return
+
+
+# Copy media file, if present in prev_archive
+def maybe_copy_media(prev_archive, path_parts, known_extension):
+    if prev_archive is None:
+        return False  # Source does not exist
+
+    if known_extension:
+        srcpath = join(prev_archive, *path_parts)
+    else:
+        image_glob = glob(join(*itertools.chain((prev_archive,), path_parts[:-1], ('{}.*'.format(path_parts[-1]),))))
+        if not image_glob:
+            return False  # Source does not exist
+        srcpath = image_glob[0]
+        path_parts = tuple(itertools.chain(path_parts[:-1], (split(srcpath)[-1],)))
+    dstpath = open_file(lambda f: f, path_parts)
+
+    if PY3:
+        try:
+            srcf = io.open(srcpath, 'rb')
+        except EnvironmentError as e:
+            if getattr(e, 'errno', None) not in (errno.ENOENT, errno.EISDIR):
+                raise
+            return False  # Source does not exist (Python 3)
+    else:
+        srcf = nullcontext()
+
+    with srcf:
+        if PY3:
+            src = srcf.fileno()  # pytype: disable=attribute-error
+            def dup(fd): return os.dup(fd)
+        else:
+            src = srcpath
+            def dup(fd): return fd
+
+        try:
+            src_st = os.stat(src)
+        except EnvironmentError as e:
+            if getattr(e, 'errno', None) not in (errno.ENOENT, errno.EISDIR):
+                raise
+            return False  # Source does not exist (Python 2)
+
+        try:
+            dst_st = os.stat(dstpath)  # type: Optional[os.stat_result]
+        except EnvironmentError as e:
+            if getattr(e, 'errno', None) != errno.ENOENT:
+                raise
+            dst_st = None  # Destination does not exist yet
+
+        # Do not overwrite if destination is no newer and has the same size
+        if (dst_st is None
+            or dst_st.st_mtime > src_st.st_mtime
+            or dst_st.st_size != src_st.st_size
+        ):
+            # dup src because open() takes ownership and closes it
+            shutil.copyfile(dup(src), dstpath)
+            shutil.copystat(src, dstpath)  # type: ignore[arg-type]
+
+        return True  # Either we copied it or we didn't need to
+
 
 
 class Index(object):
@@ -620,7 +701,7 @@ class TumblrBackup(object):
         f += '</nav></footer>\n'
         return f
 
-    def backup(self, account, old_json_dir):
+    def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
 
         base = get_api_url(account)
@@ -661,7 +742,7 @@ class TumblrBackup(object):
         else:
             log.status('Getting basic information\r')
 
-        resp = initial_apiparse(base, old_json_dir)
+        prev_resps, resp = initial_apiparse(base, prev_archive)
         if not resp:
             self.errors = True
             return
@@ -690,7 +771,7 @@ class TumblrBackup(object):
             sorted_posts = sorted(zip(posts, post_respfiles),
                                   key=lambda x: x[0]['id'], reverse=True)
             for p, prf in sorted_posts:
-                post = post_class(p, account, prf)
+                post = post_class(p, account, prf, prev_archive)
                 if ident_max and long(post.ident) <= ident_max:
                     return False
                 if options.count and self.post_count >= options.count:
@@ -732,7 +813,7 @@ class TumblrBackup(object):
                     'liked ' if options.likes else '', i, i + MAX_POSTS - 1, count_estimate,
                 ))
 
-                resp = apiparse(base, MAX_POSTS, i)
+                resp = apiparse(base, prev_resps, MAX_POSTS, i)
                 if resp is None:
                     i += 1 # try skipping a post
                     self.errors = True
@@ -760,8 +841,8 @@ class TumblrBackup(object):
         # postprocessing
         if not options.blosxom and (self.post_count or options.count == 0):
             log.status('Getting avatar and style\r')
-            get_avatar()
-            get_style()
+            get_avatar(prev_archive)
+            get_style(prev_archive)
             if not have_custom_css:
                 save_style()
             log.status('Building index\r')
@@ -781,12 +862,13 @@ class TumblrBackup(object):
 class TumblrPost(object):
     post_header = ''  # set by TumblrBackup.backup()
 
-    def __init__(self, post, backup_account, respfile):
-        # type: (JSONDict, str, Text) -> None
+    def __init__(self, post, backup_account, respfile, prev_archive):
+        # type: (JSONDict, str, Text, Text) -> None
         self.content = ''
         self.post = post
         self.backup_account = backup_account
         self.respfile = respfile
+        self.prev_archive = prev_archive
         self.creator = post['blog_name']
         self.ident = str(post['id'])
         self.url = post['post_url']
@@ -1060,35 +1142,45 @@ class TumblrPost(object):
         ))
         if image_glob:
             return split(image_glob[0])[1]
-        # download the media data
-        try:
-            resp = tb_urlopen(url)
-            with open_media(self.media_dir, filename) as dest:
-                data = resp.read(HTTP_CHUNK_SIZE)
-                hdr = data[:32]  # save the first few bytes
-                while data:
-                    dest.write(data)
-                    data = resp.read(HTTP_CHUNK_SIZE)
-        except (EnvironmentError, ValueError, HTTPException) as e:
-            sys.stderr.write('%s downloading %s\n' % (e, url))
-            try:
-                os.unlink(path_to(self.media_dir, filename))
-            except EnvironmentError as ee:
-                if getattr(ee, 'errno', None) != errno.ENOENT:
-                    raise
 
-            return None
-        # determine the file type if it's unknown
-        if not known_extension:
-            image_type = imghdr.what(None, hdr)
-            if image_type:
-                oldname = path_to(self.media_dir, filename)
-                filename += '.' + image_type.replace('jpeg', 'jpg')
-                os.rename(oldname, path_to(self.media_dir, filename))
+        path_parts = (self.media_dir, filename)
+
+        cpy_res = maybe_copy_media(self.prev_archive, path_parts, known_extension)
+        if not cpy_res:
+            # download the media data
+            try:
+                resp = tb_urlopen(url)
+                with open_media(*path_parts) as dest:
+                    data = resp.read(HTTP_CHUNK_SIZE)
+                    hdr = data[:32]     # save the first few bytes
+                    while data:
+                        dest.write(data)
+                        data = resp.read(HTTP_CHUNK_SIZE)
+            except (EnvironmentError, ValueError, HTTPException) as e:
+                sys.stderr.write('%s downloading %s\n' % (e, url))
+
+                try:
+                    os.unlink(path_to(self.media_dir, filename))
+                except EnvironmentError as ee:
+                    if getattr(ee, 'errno', None) != errno.ENOENT:
+                        raise
+
+                return None
+            # determine the file type if it's unknown
+            if not known_extension:
+                image_type = imghdr.what(None, hdr)
+                if image_type:
+                    oldname = path_to(self.media_dir, filename)
+                    filename += '.' + image_type.replace('jpeg', 'jpg')
+                    os.rename(oldname, path_to(self.media_dir, filename))
         return filename
 
     def get_post(self):
         """returns this post in HTML"""
+        if self.prev_archive is not None:
+            with io.open(join(self.prev_archive, 'posts', '{}.html'.format(self.ident))) as post_file:
+                return post_file.read()
+
         typ = (u'liked-' if options.likes else u'') + self.typ
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
         post += u'<header>\n'
@@ -1178,13 +1270,12 @@ class TumblrPost(object):
         url = TAGLINK_FMT.format(domain=blog_name, tag=quote(to_bytes(tag)))
         return u'<a href=%s>%s</a>\n' % (url, tag_disp)
 
+    def get_path(self):
+        return (post_dir, self.ident, dir_index) if options.dirs else (post_dir, self.file_name)
+
     def save_post(self):
         """saves this post locally"""
-        if options.dirs:
-            f = open_text(post_dir, self.ident, dir_index)
-        else:
-            f = open_text(post_dir, self.file_name)
-        with f:
+        with open_text(*self.get_path()) as f:
             f.write(self.get_post())
         os.utime(f.name, (self.date, self.date))
         if options.json:
@@ -1395,8 +1486,8 @@ if __name__ == '__main__':
                         help='add EXIF keyword tags to each picture'
                              " (comma-separated values; '-' to remove all tags, '' to add no extra tags)")
     parser.add_argument('-S', '--no-ssl-verify', action='store_true', help='ignore SSL verification errors')
-    parser.add_argument('--json-dirs', action=CSVListCallback, default=[], metavar='DIRS',
-                        help='comma-separated list of directories containing API responses (one per blog)')
+    parser.add_argument('--prev-archives', action=CSVListCallback, default=[], metavar='DIRS',
+                        help='comma-separated list of directories (one per blog) containing previous blog archives')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
 
@@ -1453,14 +1544,16 @@ if __name__ == '__main__':
         if pyjq is None:
             parser.error("--filter: module 'pyjq' is not installed")
         options.filter = pyjq.compile(options.filter)
-    if options.json_dirs:
-        if not scandir:
-            parser.error("--json-dirs: Python is less than 3.5 and module 'scandir' is not installed")
-        if len(options.json_dirs) != len(blogs):
-            parser.error('--json-dirs: expected {} directories, got {}'.format(len(blogs), len(options.json_dirs)))
-        for d in options.json_dirs:
+    if options.prev_archives:
+        if scandir is None:
+            parser.error("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
+        if len(options.prev_archives) != len(blogs):
+            parser.error('--prev-archives: expected {} directories, got {}'.format(
+                len(blogs), len(options.prev_archives),
+            ))
+        for d in options.prev_archives:
             if not os.access(d, os.R_OK | os.X_OK):
-                parser.error("--json-dirs: directory '{}' cannot be read".format(d))
+                parser.error("--prev-archives: directory '{}' cannot be read".format(d))
 
     if not API_KEY:
         sys.stderr.write('''\
@@ -1472,7 +1565,7 @@ https://www.tumblr.com/oauth/apps\n''')
     try:
         for i, account in enumerate(blogs):
             log.backup_account = account
-            tb.backup(account, options.json_dirs[i] if options.json_dirs else None)
+            tb.backup(account, options.prev_archives[i] if options.prev_archives else None)
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
 

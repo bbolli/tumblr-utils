@@ -85,3 +85,12 @@ class ConnectionFile(object):
     def __exit__(self, *excinfo):
         self.file.__exit__(*excinfo)
         self.conn.close()
+
+
+# contextlib.nullcontext, not available in Python 2
+class nullcontext(object):
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *excinfo):
+        pass
