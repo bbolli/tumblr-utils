@@ -171,7 +171,7 @@ MUST_MATCH_OPTIONS = PREV_MUST_MATCH_OPTIONS + MEDIA_PATH_OPTIONS
 BACKUP_CHANGING_OPTIONS = (
     'save_images', 'save_video', 'save_video_tumblr', 'save_audio', 'save_notes', 'copy_notes', 'notes_limit', 'json',
     'count', 'skip', 'period', 'request', 'filter', 'no_reblog', 'only_reblog', 'exif', 'prev_archives',
-    'use_server_timestamps', 'user_agent', 'no_get', 'internet_archive', 'media_list',
+    'use_server_timestamps', 'user_agent', 'no_get', 'internet_archive', 'media_list', 'idents',
 )
 
 wget_retrieve: Optional[WgetRetrieveWrapper] = None
@@ -343,7 +343,7 @@ class ApiParser:
     def __init__(self, base, account):
         self.base = base
         self.account = account
-        self.prev_resps: Optional[Tuple[str, ...]] = None
+        self.prev_resps: Optional[List[str]] = None
         self.dashboard_only_blog: Optional[bool] = None
 
     @classmethod
@@ -366,12 +366,22 @@ class ApiParser:
         if options.likes:
             logger.warn('Reading liked timestamps from saved responses (may take a while)\n', account=True)
 
-        self.prev_resps = tuple(
-            e.path for e in sorted(
-                (e for e in os.scandir(join(prev_archive, 'json')) if (e.name.endswith('.json') and e.is_file())),
-                key=lambda e: read_resp(e)['liked_timestamp'] if options.likes else int(e.name[:-5]),
-                reverse=True,
+        if options.idents is None:
+            respfiles = (
+                e.path for e in os.scandir(join(prev_archive, 'json'))
+                if e.name.endswith('.json') and e.is_file()
             )
+        else:
+            respfiles = (join(prev_archive, 'json', str(i) + '.json') for i in options.idents)
+            respfiles = (p for p in respfiles if os.path.isfile(p))
+
+        self.prev_resps = sorted(
+            respfiles,
+            key=lambda p: (
+                read_resp(p)['liked_timestamp'] if options.likes
+                else int(os.path.basename(p)[:-5])
+            ),
+            reverse=True,
         )
 
     def apiparse(self, count, start=0, before=None) -> Optional[JSONDict]:
@@ -1087,6 +1097,9 @@ class TumblrBackup:
         oldest_tstamp, self.pa_options, write_fro = self.process_existing_backup(account, prev_archive)
         check_optional_modules()
 
+        if options.idents and not isinstance(options.idents, frozenset):
+            options.idents = frozenset(options.idents)
+
         if options.incremental or options.resume:
             post_glob = list(find_post_files())
 
@@ -1185,6 +1198,12 @@ class TumblrBackup:
         if options.request is not None:
             request_sets = {typ: set(tags) for typ, tags in options.request.items()}
 
+        if options.idents is not None:
+            if options.likes:
+                idents_remaining = set(options.idents)
+            else:
+                ident_min = min(options.idents)
+
         # start the thread pool
         backup_pool = ThreadPool()
 
@@ -1216,6 +1235,12 @@ class TumblrBackup:
                 if options.period and post.date < options.period[0]:
                     logger.info('Stopping backup: Reached end of period\n', account=True)
                     return False, oldest_date
+                if options.idents is not None:
+                    if not options.likes and int(post.ident) < ident_min:
+                        log('Stopping backup: Found post older than oldest requested post\n', account=True)
+                        return False, oldest_date
+                    if int(post.ident) not in options.idents:
+                        continue
                 if request_sets:
                     if post.typ not in request_sets:
                         continue
@@ -1256,6 +1281,11 @@ class TumblrBackup:
                 if options.count and self.post_count >= options.count:
                     logger.info('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
                     return False, oldest_date
+                if options.idents is not None and options.likes:
+                    idents_remaining.remove(int(post.ident))
+                    if not idents_remaining:
+                        log('Stopping backup: Found all requested posts\n', account=True)
+                        return False, oldest_date
             return True, oldest_date
 
         if options.media_list:
@@ -2081,6 +2111,13 @@ if __name__ == '__main__':
                 prange = parse_period_date(period)
             setattr(namespace, self.dest, prange)
 
+    class IdFileCallback(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            with open(values) as f:
+                setattr(namespace, self.dest, tuple(map(
+                    int, (line for line in map(lambda l: l.rstrip('\n'), f) if line),
+                )))
+
     parser = argparse.ArgumentParser(usage='%(prog)s [options] blog-name ...',
                                      description='Makes a local backup of Tumblr blogs.')
     postexist_group = parser.add_mutually_exclusive_group()
@@ -2156,6 +2193,8 @@ if __name__ == '__main__':
     parser.add_argument('--internet-archive', action='store_true',
                         help='Fall back to the Internet Archive for Tumblr media 403 and 404 responses')
     parser.add_argument('--media-list', action='store_true', help='Save post media URLs to media.json')
+    parser.add_argument('--id-file', action=IdFileCallback, dest='idents', metavar='FILE',
+                        help='file containing a list of post IDs to save, one per line')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
     blogs = options.blogs or DEFAULT_BLOGS
