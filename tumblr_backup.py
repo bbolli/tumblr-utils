@@ -80,9 +80,9 @@ except ImportError:
     youtube_dl = None
 
 try:
-    import bs4
+    from bs4 import BeautifulSoup
 except ImportError:
-    bs4 = None
+    BeautifulSoup = None
 
 try:
     import pyjq
@@ -1177,10 +1177,6 @@ class TumblrPost(object):
 
     def get_post(self):
         """returns this post in HTML"""
-        if self.prev_archive is not None:
-            with io.open(join(self.prev_archive, 'posts', '{}.html'.format(self.ident))) as post_file:
-                return post_file.read()
-
         typ = (u'liked-' if options.likes else u'') + self.typ
         post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
         post += u'<header>\n'
@@ -1206,7 +1202,17 @@ class TumblrPost(object):
             )
 
         notes_html = u''
-        if options.save_notes and self.backup_account not in disable_note_scraper:
+
+        if options.copy_notes:
+            # Copy notes from prev_archive
+            with io.open(join(self.prev_archive, post_dir, self.ident + post_ext)) as post_file:
+                soup = BeautifulSoup(post_file, 'lxml')
+            notes = soup.find('ol', class_='notes')
+            if notes is not None:
+                notes_html = u''.join([n.prettify() for n in notes.find_all('li')])
+
+        if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
+            # Scrape and save notes
             ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
             ns_msg_rd, ns_msg_wr = multiprocessing.Pipe(duplex=False)
             try:
@@ -1452,6 +1458,7 @@ if __name__ == '__main__':
     parser.add_argument('--save-video-tumblr', action='store_true', help='save only Tumblr video files')
     parser.add_argument('--save-audio', action='store_true', help='save audio files')
     parser.add_argument('--save-notes', action='store_true', help='save a list of notes for each post')
+    parser.add_argument('--copy-notes', action='store_true', help='copy the notes list from a previous archive')
     parser.add_argument('--notes-limit', type=int, metavar='COUNT', help='limit requested notes to COUNT, per-post')
     parser.add_argument('--cookiefile', help='cookie file for youtube-dl and --save-notes')
     parser.add_argument('-j', '--json', action='store_true', help='save the original JSON source')
@@ -1532,9 +1539,14 @@ if __name__ == '__main__':
     if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
         parser.error('--cookiefile: file cannot be read')
     if options.save_notes:
-        if not bs4:
+        if BeautifulSoup is None:
             parser.error("--save-notes: module 'bs4' is not installed")
         import note_scraper
+    if options.copy_notes:
+        if not options.prev_archives:
+            parser.error('--copy-notes requires --prev-archives')
+        if BeautifulSoup is None:
+            parser.error("--copy-notes: module 'bs4' is not installed")
     if options.notes_limit is not None:
         if not options.save_notes:
             parser.error('--notes-limit requires --save-notes')
