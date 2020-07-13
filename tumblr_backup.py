@@ -67,17 +67,6 @@ except ImportError:
     pyexiv2 = None
 
 try:
-    import youtube_dl
-    from youtube_dl.utils import sanitize_filename
-except ImportError:
-    youtube_dl = None
-
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    BeautifulSoup = None
-
-try:
     import pyjq
 except ImportError:
     pyjq = None
@@ -1470,11 +1459,11 @@ class LocalPost(object):
 
 
 class ThreadPool(object):
-    def __init__(self, thread_count=20, max_queue=1000):
+    def __init__(self, max_queue=1000):
         self.queue = LockedQueue(threading.RLock(), max_queue)  # type: LockedQueue[Callable[[], None]]
         self.quit = threading.Event()
         self.abort = threading.Event()
-        self.threads = [threading.Thread(target=self.handler) for _ in range(thread_count)]
+        self.threads = [threading.Thread(target=self.handler) for _ in range(options.threads)]
         for t in self.threads:
             t.start()
 
@@ -1626,6 +1615,7 @@ if __name__ == '__main__':
                         help="timestamping: work around low-precision mtime on FAT filesystems")
     parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
     parser.add_argument('--user-agent', help='User agent string to use with HTTP requests')
+    parser.add_argument('--threads', type=int, default=20, help='number of threads to use for post retrieval')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
 
@@ -1664,19 +1654,27 @@ if __name__ == '__main__':
             parser.error("--exif: module 'pyexiv2' is not installed")
         if not hasattr(pyexiv2, 'ImageMetadata'):
             parser.error("--exif: module 'pyexiv2' is missing features, perhaps you need 'py3exiv2'?")
-    if options.save_video and not youtube_dl:
-        parser.error("--save-video: module 'youtube_dl' is not installed")
+    if options.save_video:
+        try:
+            import youtube_dl
+            from youtube_dl.utils import sanitize_filename
+        except ImportError:
+            parser.error("--save-video: module 'youtube_dl' is not installed")
+    if options.save_notes or options.copy_notes:
+        sys.modules['soupsieve'] = ()  # type: ignore[assignment]
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError:
+            parser.error("--{}: module 'bs4' is not installed".format(
+                'save-notes' if options.save_notes else 'copy-notes'
+            ))
     if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
         parser.error('--cookiefile: file cannot be read')
     if options.save_notes:
-        if BeautifulSoup is None:
-            parser.error("--save-notes: module 'bs4' is not installed")
         import note_scraper
     if options.copy_notes:
         if not options.prev_archives:
             parser.error('--copy-notes requires --prev-archives')
-        if BeautifulSoup is None:
-            parser.error("--copy-notes: module 'bs4' is not installed")
     if options.notes_limit is not None:
         if not options.save_notes:
             parser.error('--notes-limit requires --save-notes')
@@ -1703,6 +1701,8 @@ if __name__ == '__main__':
     if not options.mtime_postfix and path_is_on_vfat.works and path_is_on_vfat('.'):
         print('Warning: FAT filesystem detected, enabling --mtime-postfix', file=sys.stderr)
         options.mtime_postfix = True
+    if options.threads < 1:
+        parser.error('--threads: must use at least one thread')
 
     if not API_KEY:
         sys.stderr.write('''\
