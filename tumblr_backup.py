@@ -153,6 +153,7 @@ TYPE_ANY = 'any'
 TAG_ANY = '__all__'
 
 MAX_POSTS = 50
+REM_POST_INC = 10
 
 HTTP_CHUNK_SIZE = 1024 * 1024
 
@@ -1371,6 +1372,7 @@ class ThreadPool(object):
         self.queue.put(*args, **kwargs)
 
     def wait(self):
+        log.status('{} remaining posts to save\r'.format(self.queue.qsize()))
         self.quit.set()
         self.queue.join()
 
@@ -1395,7 +1397,7 @@ class ThreadPool(object):
                     continue
                 qsize = self.queue.qsize()
 
-            if self.quit.is_set() and qsize % MAX_POSTS == 0:
+            if self.quit.is_set() and qsize % REM_POST_INC == 0:
                 log.status('{} remaining posts to save\r'.format(qsize))
 
             try:
