@@ -327,32 +327,45 @@ def apiparse(base, prev_resps, count, start=0):
     if start > 0:
         params['offset'] = start
     url = base + '?' + urlencode(params)
-    for _ in range(10):
+
+    def get_resp():
+        for _ in range(10):
+            try:
+                resp = tb_urlopen(url)
+                data = resp.read()
+            except (EnvironmentError, HTTPException) as e:
+                log('URL is {}\nError retrieving API repsonse: {}\n'.format(url, e))
+                continue
+            info = resp.info()
+            if (info.get_content_type() if NEW_URLLIB else info.gettype()) == 'application/json':
+                break
+            log("Unexpected Content-Type: '{}'\n".format(resp.info().gettype()))
+            return None
+        else:
+            return None
         try:
-            resp = tb_urlopen(url)
-            data = resp.read()
-        except (EnvironmentError, HTTPException) as e:
-            log('URL is {}\nError retrieving API repsonse: {}\n'.format(url, e))
+            doc = json.loads(data)
+        except ValueError as e:
+            log('{}: {}\n{} {} {}\n{!r}\n'.format(
+                e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), data,
+            ))
+            return None
+        return doc
+
+    sleep_dur = 30  # in seconds
+    while True:
+        doc = get_resp()
+        if doc is None:
+            return None
+        status = doc['meta']['status']
+        if status == 429:
+            time.sleep(sleep_dur)
+            sleep_dur *= 2
             continue
-        info = resp.info()
-        if (info.get_content_type() if NEW_URLLIB else info.gettype()) == 'application/json':
-            break
-        log("Unexpected Content-Type: '{}'\n".format(resp.info().gettype()))
-        return None
-    else:
-        return None
-    try:
-        doc = json.loads(data)
-    except ValueError as e:
-        log('{}: {}\n{} {} {}\n{!r}\n'.format(
-            e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), data,
-        ))
-        return None
-    status = doc['meta']['status']
-    if status != 200:
-        log('API response has non-200 status:\n{}\n'.format(doc))
-        return None
-    return doc.get('response')
+        if status != 200:
+            log('API response has non-200 status:\n{}\n'.format(doc))
+            return None
+        return doc.get('response')
 
 
 def add_exif(image_name, tags):
@@ -816,9 +829,8 @@ class TumblrBackup(object):
 
                 resp = apiparse(base, prev_resps, MAX_POSTS, i)
                 if resp is None:
-                    i += 1 # try skipping a post
                     self.errors = True
-                    continue
+                    break
 
                 posts = resp[posts_key]
                 post_respfiles = resp.get('post_respfiles')
