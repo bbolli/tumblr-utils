@@ -147,7 +147,7 @@ else:
         return urlopen(url, timeout=HTTP_TIMEOUT)
 
 
-def log(account, msg):
+def log(msg, account=None):
     if options.quiet:
         return
 
@@ -159,7 +159,7 @@ def log(account, msg):
         idx = 0
     msg, term = msg[:idx], msg[idx:]
 
-    if account:  # Optional account prefix
+    if account is not None:  # Optional account prefix
         msg = '{}: {}'.format(account, msg)
     msg += ''.join([' ' for _ in range(80 - len(msg))])  # Pad to 80 chars
     print(msg + term, end='')
@@ -241,20 +241,21 @@ def apiparse(base, count, start=0):
             resp = tb_urlopen(url)
             data = resp.read()
         except (EnvironmentError, HTTPException) as e:
-            sys.stderr.write("%s getting %s\n" % (e, url))
+            log('URL is {}\n'.format(url))
+            log('Error retrieving API repsonse: {}\n'.format(e))
             continue
         info = resp.info()
         if (info.get_content_type() if NEW_URLLIB else info.gettype()) == 'application/json':
             break
-        sys.stderr.write("Unexpected Content-Type: '%s'\n" % resp.info().gettype())
+        log("Unexpected Content-Type: '{}'\n".format(resp.info().gettype()))
         return None
     else:
         return None
     try:
         doc = json.loads(data)
     except ValueError as e:
-        sys.stderr.write('%s: %s\n%d %s %s\n%r\n' % (
-            e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), data
+        log('{}: {}\n{} {} {}\n{!r}\n'.format(
+            e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), data,
         ))
         return None
     return doc if doc.get('meta', {}).get('status', 0) == 200 else None
@@ -265,7 +266,7 @@ def add_exif(image_name, tags):
         metadata = pyexiv2.ImageMetadata(image_name)
         metadata.read()
     except EnvironmentError:
-        sys.stderr.write("Error reading metadata for image %s\n" % image_name)
+        log('Error reading metadata for image {}\n'.format(image_name))
         return
     KW_KEY = 'Iptc.Application2.Keywords'
     if '-' in options.exif:     # remove all tags
@@ -279,7 +280,7 @@ def add_exif(image_name, tags):
     try:
         metadata.write()
     except EnvironmentError:
-        sys.stderr.write("Writing metadata failed for tags: %s in: %s\n" % (tags, image_name))
+        log('Writing metadata failed for tags: {} in: {}\n'.format(tags, image_name))
 
 
 def save_style():
@@ -548,11 +549,11 @@ class TumblrBackup(object):
                     long(splitext(split(f)[1])[0])
                     for f in glob(path_to(post_dir, '*' + post_ext))
                 )
-                log(account, "Backing up posts after %d\r" % ident_max)
+                log('Backing up posts after {}\r'.format(ident_max), account)
             except ValueError:  # max() arg is an empty sequence
                 pass
         else:
-            log(account, "Getting basic information\r")
+            log('Getting basic information\r', account)
 
         # start by calling the API with just a single post
         soup = apiparse(base, 1)
@@ -615,7 +616,7 @@ class TumblrBackup(object):
             i = options.skip
             while True:
                 # find the upper bound
-                log(account, "Getting posts %d to %d (of %d expected)\r" % (i, i + MAX_POSTS - 1, count_estimate))
+                log('Getting posts {} to {} (of {} expected)\r'.format(i, i + MAX_POSTS - 1, count_estimate), account)
 
                 soup = apiparse(base, MAX_POSTS, i)
                 if soup is None:
@@ -626,7 +627,7 @@ class TumblrBackup(object):
                 posts = _get_content(soup)
                 # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
                 if not posts or not _backup(posts):
-                    log(account, "done\r")
+                    log('Backup complete: Found empty set of posts\n', account)
                     break
 
                 i += MAX_POSTS
@@ -640,17 +641,17 @@ class TumblrBackup(object):
 
         # postprocessing
         if not options.blosxom and (self.post_count or options.count == 0):
-            log(account, 'Getting avatar and style\r')
+            log('Getting avatar and style\r', account)
             get_avatar()
             get_style()
             if not have_custom_css:
                 save_style()
-            log(account, 'Building index\r')
+            log('Building index\r', account)
             ix = Indices(self)
             ix.build_index()
             ix.save_index()
 
-        log(account, "%d posts backed up\n" % self.post_count)
+        log('{} posts backed up\n'.format(self.post_count), account)
         self.total_count += self.post_count
 
 
@@ -752,9 +753,7 @@ class TumblrPost(object):
             elif options.save_video:
                 src = self.get_youtube_url(self.url)
                 if not src:
-                    sys.stdout.write(u'Unable to download video in post #%s%-50s\n' %
-                        (self.ident, ' ')
-                    )
+                    log('Unable to download video in post #{}\n'.format(self.ident))
             if src:
                 append(u'<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
                     src, "Your browser does not support the video element.", src, "Video file"
@@ -804,9 +803,7 @@ class TumblrPost(object):
             )
 
         else:
-            sys.stderr.write(
-                u"Unknown post type '%s' in post #%s%-50s\n" % (self.typ, self.ident, ' ')
-            )
+            log(u"Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
             append(escape(self.json_content), u'<pre>%s</pre>')
 
         self.content = '\n'.join(content)
@@ -1105,9 +1102,7 @@ class ThreadPool(object):
     def cancel(self):
         self.abort.set()
         for i, t in enumerate(self.threads, start=1):
-            log('', "\rStopping threads %s%s\r" %
-                (' ' * i, '.' * (len(self.threads) - i))
-            )
+            log('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
             t.join()
 
     def handler(self):
@@ -1120,7 +1115,7 @@ class ThreadPool(object):
             else:
                 qsize = self.queue.qsize()
                 if self.quit.is_set() and qsize % MAX_POSTS == 0:
-                    log(account, '{} remaining posts to save\r'.format(qsize))
+                    log('{} remaining posts to save\r'.format(qsize), account)
                 try:
                     work()
                 finally:
