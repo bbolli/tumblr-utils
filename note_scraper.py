@@ -3,7 +3,6 @@
 from __future__ import absolute_import, division, print_function, with_statement
 
 import contextlib
-import io
 import itertools
 import re
 import ssl
@@ -13,7 +12,7 @@ import traceback
 
 from bs4 import BeautifulSoup
 
-from util import HAVE_SSL_CTX, HTTP_TIMEOUT, to_bytes, to_native_str
+from util import ConnectionFile, HAVE_SSL_CTX, HTTP_TIMEOUT, to_bytes, to_native_str
 
 try:
     from typing import TYPE_CHECKING
@@ -46,9 +45,13 @@ except ImportError:
 EXIT_SUCCESS = 0
 EXIT_SAFE_MODE = 2
 
+# Globals
+post_url = None
+ident = None
+msg_pipe = None
+
 
 def log(url, msg):
-    global msg_pipe
     url_msg = ", URL '{}'".format(url) if url != post_url else ''
     print('[Note Scraper] Post {}{}: {}'.format(ident, url_msg, msg), file=msg_pipe)
 
@@ -74,7 +77,7 @@ class WebCrawler(object):
         if HAVE_SSL_CTX:
             context = ssl._create_unverified_context() if noverify else ssl.create_default_context()
             handlers.append(HTTPSHandler(context=context))
-        if cookiefile:
+        if cookiefile is not None:
             cookies = MozillaCookieJar(cookiefile)
             cookies.load()
 
@@ -206,18 +209,19 @@ class WebCrawler(object):
             if len(notes_list) > (notes_10k + 1) * 10000:
                 notes_10k += 1
                 log(notes_url, 'Note: {} notes retrieved so far'.format(notes_10k * 10000))
-            if self.notes_limit != 0 and len(notes_list) > self.notes_limit:
+            if self.notes_limit is not None and len(notes_list) > self.notes_limit:
                 log(notes_url, 'Warning: Reached notes limit, stopping early.')
                 break
 
         return u''.join(notes_list)
 
 
-if __name__ == '__main__':
-    post_url, ident, noverify, notes_limit, cookiefile, msg_fd = sys.argv[1:]
+def main(stdout_conn, msg_conn, post_url_, ident_, noverify, notes_limit, cookiefile):
+    global post_url, ident, msg_pipe
+    post_url, ident = post_url_, ident_
 
-    with io.open(int(msg_fd), 'w') as msg_pipe:
-        crawler = WebCrawler(bool(int(noverify)), cookiefile, int(notes_limit))
+    with ConnectionFile(msg_conn, 'w') as msg_pipe:
+        crawler = WebCrawler(noverify, cookiefile, notes_limit)
 
         try:
             notes = crawler.get_notes(post_url)
@@ -237,4 +241,5 @@ if __name__ == '__main__':
             traceback.print_exc(file=msg_pipe)
             sys.exit()
 
-    print(notes, end=u'')
+    with ConnectionFile(stdout_conn, 'w') as stdout:
+        print(notes, end=u'', file=stdout)

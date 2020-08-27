@@ -5,13 +5,12 @@ from __future__ import absolute_import, division, print_function, with_statement
 
 # standard Python library imports
 import errno
-import fcntl
 import hashlib
 import imghdr
 import io
 import locale
+import multiprocessing
 import os
-import py_compile
 import re
 import ssl
 import sys
@@ -23,7 +22,7 @@ from glob import glob
 from os.path import join, split, splitext
 from xml.sax.saxutils import escape
 
-from util import HAVE_SSL_CTX, HTTP_TIMEOUT, LockedQueue, PY3, to_bytes, to_unicode
+from util import ConnectionFile, HAVE_SSL_CTX, HTTP_TIMEOUT, LockedQueue, PY3, to_bytes, to_unicode
 
 try:
     from typing import TYPE_CHECKING
@@ -50,14 +49,6 @@ try:
     import queue
 except ImportError:
     import Queue as queue  # type: ignore[no-redef]
-
-if PY3:
-    import subprocess
-else:
-    try:
-        import subprocess32 as subprocess  # pytype: disable=import-error
-    except ImportError:
-        subprocess = None
 
 try:
     from urllib.parse import quote, urlencode, urlparse
@@ -120,8 +111,6 @@ def test_jpg(h, f):
 
 imghdr.tests.append(test_jpg)
 
-script_dir = os.path.dirname(os.path.realpath(__file__))
-
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
 media_folder = ''
@@ -172,8 +161,6 @@ else:
     def tb_urlopen(url):
         return urlopen(url, timeout=HTTP_TIMEOUT)
 
-# Guards open fds without O_CLOEXEC to avoid leaking them
-cloexec_lock = threading.Lock()
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
 
@@ -1069,41 +1056,37 @@ class TumblrPost(object):
 
         notes_html = u''
         if options.save_notes and self.backup_account not in disable_note_scraper:
-            with cloexec_lock:
-                msg_fd_rd, msg_fd_wr = os.pipe()
-                try:
-                    if sys.version_info[:2] >= (3, 4):
-                        # O_CLOEXEC is default in Python 3.4 and newer, unset it for the child side
-                        os.set_inheritable(msg_fd_wr, True)
-                    else:
-                        # O_CLOEXEC must be set manually in older Python, set it for the parent side
-                        fcntl.fcntl(msg_fd_rd, fcntl.F_SETFD, fcntl.FD_CLOEXEC)
-
-                    args = [sys.executable, '-m', 'note_scraper', self.url, self.ident,
-                            str(int(options.no_ssl_verify)), str(options.notes_limit or 0),
-                            options.cookiefile or '', str(msg_fd_wr)]
-                    env = os.environ.copy()
-                    env['PYTHONPATH'] = script_dir
-                    # stdout is captured, stderr goes to our stderr, msg_fd handles informational messages
-                    process = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=False, env=env)
-                except:
-                    os.close(msg_fd_rd)
-                    raise
-                finally:
-                    os.close(msg_fd_wr)
+            ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
+            ns_msg_rd, ns_msg_wr = multiprocessing.Pipe(duplex=False)
+            try:
+                args = (ns_stdout_wr, ns_msg_wr, self.url, self.ident,
+                        options.no_ssl_verify, options.notes_limit,
+                        options.cookiefile)
+                process = multiprocessing.Process(target=note_scraper.main, args=args)
+                process.start()
+            except:
+                ns_stdout_rd.close()
+                ns_msg_rd.close()
+                raise
+            finally:
+                ns_stdout_wr.close()
+                ns_msg_wr.close()
 
             try:
-                with io.open(msg_fd_rd) as msg_file:
-                    for line in msg_file:
+                with ConnectionFile(ns_msg_rd) as msg_pipe:
+                    for line in msg_pipe:
                         log(line)
 
-                notes_html = process.communicate()[0].decode('utf-8')
+                with ConnectionFile(ns_stdout_rd) as stdout:
+                    notes_html = stdout.read()
+
+                process.join()
             except:
                 process.terminate()
-                process.wait()
+                process.join()
                 raise
 
-            if process.returncode == 2:  # EXIT_SAFE_MODE
+            if process.exitcode == 2:  # EXIT_SAFE_MODE
                 # Safe mode is blocking us, disable note scraping for this blog
                 notes_html = u''
                 with disablens_lock:
@@ -1260,6 +1243,15 @@ class ThreadPool(object):
 
 
 if __name__ == '__main__':
+    # The default of 'fork' can cause deadlocks, even on Linux
+    # See https://bugs.python.org/issue40399
+    if not PY3:
+        pass  # No set_start_method. Here be dragons
+    elif 'forkserver' in multiprocessing.get_all_start_methods():
+        multiprocessing.set_start_method('forkserver')  # Fastest safe option, if supported
+    else:
+        multiprocessing.set_start_method('spawn')  # Slow but safe
+
     import argparse
 
     class CSVCallback(argparse.Action):
@@ -1377,11 +1369,9 @@ if __name__ == '__main__':
     if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
         parser.error('--cookiefile: file cannot be read')
     if options.save_notes:
-        if not subprocess:
-            parser.error("--save-notes: Python is older than 3.2 and module 'subprocess32' is not installed")
         if not bs4:
             parser.error("--save-notes: module 'bs4' is not installed")
-        py_compile.compile(join(script_dir, 'note_scraper.py'))
+        import note_scraper
     if options.notes_limit is not None:
         if not options.save_notes:
             parser.error('--notes-limit requires --save-notes')

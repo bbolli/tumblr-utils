@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import, division, print_function, with_statement
 
+import io
 import sys
 import threading
 
@@ -70,3 +71,17 @@ class LockedQueue(GenericQueue[T]):
         self.not_empty = threading.Condition(lock)
         self.not_full = threading.Condition(lock)
         self.all_tasks_done = threading.Condition(lock)
+
+
+class ConnectionFile(object):
+    def __init__(self, conn, *args, **kwargs):
+        kwargs.setdefault('closefd', False)
+        self.conn = conn
+        self.file = io.open(conn.fileno(), *args, **kwargs)
+
+    def __enter__(self):
+        return self.file.__enter__()
+
+    def __exit__(self, *excinfo):
+        self.file.__exit__(*excinfo)
+        self.conn.close()
