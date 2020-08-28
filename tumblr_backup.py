@@ -844,6 +844,8 @@ class TumblrBackup(object):
                             continue
                     elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
                         continue
+                if os.path.exists(open_file(lambda f: f, post.get_path())) and options.no_post_clobber:
+                    continue  # Post exists and no-clobber enabled
                 if options.filter and not options.filter.first(p):
                     self.filter_skipped += 1
                     continue
@@ -1555,6 +1557,7 @@ if __name__ == '__main__':
     parser.add_argument('-S', '--no-ssl-verify', action='store_true', help='ignore SSL verification errors')
     parser.add_argument('--prev-archives', action=CSVListCallback, default=[], metavar='DIRS',
                         help='comma-separated list of directories (one per blog) containing previous blog archives')
+    parser.add_argument('--no-post-clobber', action='store_true', help='Do not re-download existing posts')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
 
