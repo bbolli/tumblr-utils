@@ -24,8 +24,8 @@ from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from xml.sax.saxutils import escape
 
-from util import (ConnectionFile, LockedQueue, PY3, is_dns_working, make_requests_session, no_internet, nullcontext,
-                  path_is_on_vfat, to_bytes, to_unicode)
+from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, is_dns_working,
+                  make_requests_session, no_internet, nullcontext, path_is_on_vfat, to_bytes, to_unicode)
 from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, urlopen
 
 try:
@@ -34,7 +34,6 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from queue import Queue
     from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Text, Tuple, Type
 
     JSONDict = Dict[str, Any]
@@ -43,11 +42,6 @@ try:
     import json
 except ImportError:
     import simplejson as json  # type: ignore[no-redef]
-
-try:
-    import queue
-except ImportError:
-    import Queue as queue  # type: ignore[no-redef]
 
 try:
     from urllib.parse import quote, urlencode, urlparse
@@ -164,6 +158,8 @@ except locale.Error:
 FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
+main_thread_lock = threading.RLock()
+multicond = MultiCondition(main_thread_lock)
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
 prev_resps = None  # type: Optional[Tuple[str, ...]]
@@ -817,9 +813,12 @@ class TumblrBackup(object):
         log.status('Getting basic information\r')
 
         api_parser = ApiParser(base, account)
-        if prev_archive:
-            api_parser.read_archive(prev_archive)
-        resp = api_parser.apiparse(1)
+        api_thread = AsyncCallable(main_thread_lock, api_parser.apiparse, 'API Thread')
+        with api_thread.response.mutex:
+            if prev_archive:
+                api_parser.read_archive(prev_archive)
+            api_thread.put(1)
+            resp = api_thread.get()
         if not resp:
             self.errors = True
             return
@@ -885,13 +884,12 @@ class TumblrBackup(object):
                     self.filter_skipped += 1
                     continue
 
-                while True:
-                    try:
-                        backup_pool.add_work(post.save_content, timeout=0.1)
-                        break
-                    except queue.Full:
-                        pass
-                    no_internet.check()
+                with multicond:
+                    while backup_pool.queue.qsize() >= backup_pool.queue.maxsize:
+                        no_internet.check(release=True)
+                        # All conditions false, wait for a change
+                        multicond.wait((backup_pool.queue.not_full, no_internet.cond))
+                    backup_pool.add_work(post.save_content)
 
                 self.post_count += 1
                 if options.count and self.post_count >= options.count:
@@ -904,6 +902,7 @@ class TumblrBackup(object):
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
             i = options.skip
             before = options.p_stop if options.period else None
+
             while True:
                 # find the upper bound
                 log.status('Getting {}posts {} to {}{}\r'.format(
@@ -911,7 +910,16 @@ class TumblrBackup(object):
                     '' if count_estimate is None else ' (of {} expected)'.format(count_estimate),
                 ))
 
-                resp = api_parser.apiparse(MAX_POSTS, i, before)
+                with multicond:
+                    api_thread.put(MAX_POSTS, i, before)
+
+                    while not api_thread.response.qsize():
+                        no_internet.check(release=True)
+                        # All conditions false, wait for a change
+                        multicond.wait((api_thread.response.not_empty, no_internet.cond))
+
+                    resp = api_thread.get(block=False)
+
                 if resp is None:
                     self.errors = True
                     break
@@ -934,13 +942,13 @@ class TumblrBackup(object):
                         break
                     before = next_['query_params']['before']
                 i += MAX_POSTS
-        except:
-            # ensure proper thread pool termination
-            backup_pool.cancel()
-            raise
 
-        # wait until all posts have been saved
-        backup_pool.wait()
+            api_thread.quit()
+            backup_pool.wait()  # wait until all posts have been saved
+        except:
+            api_thread.quit()
+            backup_pool.cancel()  # ensure proper thread pool termination
+            raise
 
         # postprocessing
         if not options.blosxom and (self.post_count or options.count == 0):
@@ -1460,9 +1468,10 @@ class LocalPost(object):
 
 class ThreadPool(object):
     def __init__(self, max_queue=1000):
-        self.queue = LockedQueue(threading.RLock(), max_queue)  # type: LockedQueue[Callable[[], None]]
-        self.quit = threading.Event()
-        self.abort = threading.Event()
+        self.queue = LockedQueue(main_thread_lock, max_queue)  # type: LockedQueue[Callable[[], None]]
+        self.quit = threading.Condition(main_thread_lock)
+        self.quit_flag = False
+        self.abort_flag = False
         self.threads = [threading.Thread(target=self.handler) for _ in range(options.threads)]
         for t in self.threads:
             t.start()
@@ -1471,39 +1480,48 @@ class ThreadPool(object):
         self.queue.put(*args, **kwargs)
 
     def wait(self):
-        log.status('{} remaining posts to save\r'.format(self.queue.qsize()))
-        self.quit.set()
-        while True:
-            with self.queue.all_tasks_done:
-                if not self.queue.unfinished_tasks:
-                    break
-                self.queue.all_tasks_done.wait(timeout=0.1)
-            no_internet.check()
+        with multicond:
+            log.status('{} remaining posts to save\r'.format(self.queue.qsize()))
+            self.quit_flag = True
+            self.quit.notify_all()
+            while self.queue.unfinished_tasks:
+                no_internet.check(release=True)
+                # All conditions false, wait for a change
+                multicond.wait((self.queue.all_tasks_done, no_internet.cond))
 
     def cancel(self):
-        self.abort.set()
-        no_internet.destroy()
+        with main_thread_lock:
+            self.abort_flag = True
+            self.quit.notify_all()
+            no_internet.destroy()
+
         for i, t in enumerate(self.threads, start=1):
             log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
             t.join()
 
-        with self.queue.mutex:
+        with main_thread_lock:
             self.queue.queue.clear()
             self.queue.all_tasks_done.notify_all()
 
     def handler(self):
-        while not self.abort.is_set():
-            with self.queue.mutex:
-                try:
-                    work = self.queue.get(block=not self.quit.is_set(), timeout=0.1)
-                except queue.Empty:
-                    if self.quit.is_set():
-                        break
-                    continue
-                qsize = self.queue.qsize()
+        def wait_for_work():
+            while not self.abort_flag:
+                if self.queue.qsize():
+                    return True
+                elif self.quit_flag:
+                    break
+                # All conditions false, wait for a change
+                multicond.wait((self.queue.not_empty, self.quit))
+            return False
 
-            if self.quit.is_set() and qsize % REM_POST_INC == 0:
-                log.status('{} remaining posts to save\r'.format(qsize))
+        while True:
+            with multicond:
+                if not wait_for_work():
+                    break
+                work = self.queue.get(block=False)
+                qsize = self.queue.qsize()
+                if self.quit_flag and qsize % REM_POST_INC == 0:
+                    log.status('{} remaining posts to save\r'.format(qsize))
 
             try:
                 work()
@@ -1521,7 +1539,7 @@ if __name__ == '__main__':
     else:
         multiprocessing.set_start_method('spawn')  # Slow but safe
 
-    no_internet.setup()
+    no_internet.setup(main_thread_lock)
 
     import argparse
 

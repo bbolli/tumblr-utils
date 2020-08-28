@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import, division, print_function, with_statement
 
+import collections
 import io
 import os
 import socket
@@ -16,7 +17,7 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from typing import Generic, Optional, TypeVar
+    from typing import Any, Deque, Dict, Generic, List, Optional, Tuple, TypeVar
 
 try:
     import queue
@@ -212,13 +213,20 @@ class WaitOnMainThread(object):
             if self.flag is None:
                 sys.exit(1)
 
-    # Call on main thread when signaled or idle.
-    def check(self):
+    # Call on main thread when signaled or idle. If the lock is held, pass release=True.
+    def check(self, release=False):
         assert self.cond is not None
         if self.flag is False:
             return
 
-        self._do_wait()
+        if release:
+            saved_state = lock_release_save(self.cond)
+            try:
+                self._do_wait()
+            finally:
+                lock_acquire_restore(self.cond, saved_state)
+        else:
+            self._do_wait()
 
         with self.cond:
             self.flag = False
@@ -341,3 +349,152 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
 
         session.cookies = cookies  # type: ignore[assignment]
     return session
+
+
+if TYPE_CHECKING:
+    if PY3:
+        WaiterSeq = Deque[Any]
+    else:
+        WaiterSeq = List[Any]
+    MCBase = threading.Condition
+elif PY3:
+    WaiterSeq = collections.deque
+    MCBase = threading.Condition
+else:
+    WaiterSeq = list
+    MCBase = threading._Condition
+
+
+# Minimal implementation of a sum of mutable sequences
+class MultiSeqProxy(object):
+    def __init__(self, subseqs):
+        self.subseqs = subseqs
+
+    def append(self, value):
+        for sub in self.subseqs:
+            sub.append((value, self.subseqs))
+
+    def remove(self, value):
+        for sub in self.subseqs:
+            sub.remove((value, self.subseqs))
+
+
+# Hooks into methods used by threading.Condition.notify
+class NotifierWaiters(WaiterSeq):
+    def __iter__(self):
+        return (value[0] for value in super(NotifierWaiters, self).__iter__())
+
+    def __getitem__(self, index):
+        item = super(NotifierWaiters, self).__getitem__(index)
+        return WaiterSeq(v[0] for v in item) if isinstance(index, slice) else item[0]  # pytype: disable=not-callable
+
+    if not PY3:
+        def __getslice__(self, i, j):
+            return self[max(0, i):max(0, j):]
+
+    def remove(self, value):
+        try:
+            match = next(x for x in super(NotifierWaiters, self).__iter__() if x[0] == value)
+        except StopIteration:
+            raise ValueError('deque.remove(x): x not in deque')
+        for ref in match[1]:
+            try:
+                super(NotifierWaiters, ref).remove(match)  # Remove waiter from known location
+            except ValueError:
+                raise RuntimeError('Unexpected missing waiter!')
+
+
+# Supports waiting on multiple threading.Conditions objects simultaneously
+class MultiCondition(MCBase):
+    def __init__(self, lock):
+        super(MultiCondition, self).__init__(lock)
+
+    def wait(self, children, timeout=None):
+        def get_waiters(c):    return getattr(c, '_waiters' if PY3 else '_Condition__waiters')
+        def set_waiters(c, v):        setattr(c, '_waiters' if PY3 else '_Condition__waiters', v)
+        def get_lock(c):       return getattr(c, '_lock'    if PY3 else '_Condition__lock')
+
+        assert len(frozenset(id(c) for c in children)) == len(children), 'Children must be unique'
+        assert all(get_lock(c) is get_lock(self) for c in children), 'All locks must be the same'
+
+        # Modify children so their notify methods do cleanup
+        for child in children:
+            if not isinstance(get_waiters(child), NotifierWaiters):
+                set_waiters(child, NotifierWaiters((w, (get_waiters(child),))
+                                                   for w in get_waiters(child)))
+        set_waiters(self, MultiSeqProxy(tuple(get_waiters(c) for c in children)))
+
+        super(MultiCondition, self).wait(timeout)
+
+    def notify(self, n=1):
+        raise NotImplementedError
+
+    def notify_all(self):
+        raise NotImplementedError
+
+    notifyAll = notify_all
+
+
+def lock_is_owned(lock):
+    try:
+        return lock._is_owned()
+    except AttributeError:
+        if lock.acquire(0):
+            lock.release()
+            return False
+        return True
+
+
+def lock_release_save(lock):
+    try:
+        return lock._release_save()  # pytype: disable=attribute-error
+    except AttributeError:
+        lock.release()  # No state to save
+        return None
+
+
+def lock_acquire_restore(lock, state):
+    try:
+        lock._acquire_restore(state)  # pytype: disable=attribute-error
+    except AttributeError:
+        lock.acquire()  # Ignore saved state
+
+
+class AsyncCallable(object):
+    def __init__(self, lock, fun, name=None):
+        self.lock = lock
+        self.fun = fun
+        if TYPE_CHECKING:
+            Params = Tuple[Tuple[Any, ...], Dict[str, Any]]  # (args, kwargs)
+        self.request = LockedQueue(lock, maxsize=1)  # type: LockedQueue[Optional[Params]]
+        self.response = LockedQueue(lock, maxsize=1)  # type: LockedQueue[Any]
+        self.quit_flag = False
+        if PY3:
+            self.thread = threading.Thread(target=self.run_thread, name=name, daemon=True)
+        else:
+            self.thread = threading.Thread(target=self.run_thread, name=name)
+        self.thread.start()
+
+    def run_thread(self):
+        while not self.quit_flag:
+            request = self.request.get()
+            if request is None:
+                break  # quit sentinel
+            args, kwargs = request
+            response = self.fun(*args, **kwargs)
+            self.response.put(response)
+
+    def put(self, *args, **kwargs):
+        self.request.put((args, kwargs))
+
+    def get(self, *args, **kwargs):
+        return self.response.get(*args, **kwargs)
+
+    def quit(self):
+        self.quit_flag = True
+        # Make sure the thread wakes up
+        try:
+            self.request.put(None, block=False)
+        except queue.Full:
+            pass
+        self.thread.join()
