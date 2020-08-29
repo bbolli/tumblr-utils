@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# encoding: utf-8
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
 
 # standard Python library imports
 from __future__ import with_statement
