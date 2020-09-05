@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Read a feed from stdin and post its entries to tumblr.
 
@@ -33,13 +33,10 @@ Non-standard Python dependencies:
 import sys
 import os
 import getopt
-import urllib
+from urllib.parse import urlencode
 from datetime import datetime
 from calendar import timegm
-try:
-    import simplejson as json   # for Python <= 2.6
-except ImportError:
-    import json
+import json
 
 import oauth2 as oauth
 import feedparser
@@ -117,7 +114,7 @@ class Tumble:
             return dict(url=url, entry=entry, data=data)
 
         for k in data:
-            if type(data[k]) is unicode:
+            if type(data[k]) is str:
                 data[k] = data[k].encode('utf-8')
 
         # do the OAuth thing
@@ -125,11 +122,11 @@ class Tumble:
         token = oauth.Token(self.access_token, self.access_secret)
         client = oauth.Client(consumer, token)
         try:
-            headers, resp = client.request(url, method='POST', body=urllib.urlencode(data))
+            headers, resp = client.request(url, method='POST', body=urlencode(data))
             resp = json.loads(resp)
-        except ValueError, e:
+        except ValueError as e:
             return 'error', 'json', resp
-        except EnvironmentError, e:
+        except EnvironmentError as e:
             return 'error', str(e)
         if resp['meta']['status'] in (200, 201):
             return op, str(resp['response']['id'])
@@ -141,12 +138,12 @@ if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'hb:c:e:d')
     except getopt.GetoptError:
-        print "Usage: %s [-b blog-name] [-c cred-file] [-e post-id] [-d]" % \
-            sys.argv[0].split(os.sep)[-1]
+        print("Usage: %s [-b blog-name] [-c cred-file] [-e post-id] [-d]" %
+            sys.argv[0].split(os.sep)[-1])
         sys.exit(1)
     for o, v in opts:
         if o == '-h':
-            print __doc__.strip()
+            print(__doc__.strip())
             sys.exit(0)
         if o == '-b':
             t.blog = v
@@ -161,7 +158,7 @@ if __name__ == '__main__':
     except EnvironmentError:
         sys.stderr.write('Credentials file %s not found or not readable\n' % CONFIG)
         sys.exit(1)
-    result = t.tumble(sys.stdin)
+    result = t.tumble(sys.stdin.buffer)  # read stdin in binary mode
     if result:
         import pprint
         pprint.pprint(result)
