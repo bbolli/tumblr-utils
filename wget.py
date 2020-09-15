@@ -7,69 +7,31 @@ import functools
 import io
 import itertools
 import os
-import sys
 import time
 import warnings
 from email.utils import mktime_tz, parsedate_tz
 from tempfile import NamedTemporaryFile
 from wsgiref.handlers import format_date_time
 
-from util import PY3, is_dns_working, no_internet
+from util import PY3, URLLIB3_FROM_PIP, get_supported_encodings, is_dns_working, no_internet, setup_urllib3_ssl
 
 try:
     from urllib.parse import urljoin, urlsplit
 except ImportError:
     from urlparse import urljoin, urlsplit  # type: ignore[no-redef]
 
-try:
+if URLLIB3_FROM_PIP:
+    from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Retry, Timeout
+    from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
+    from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
+    from pip._vendor.urllib3.util import make_headers
+else:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Retry, Timeout
-    from urllib3.exceptions import ConnectTimeoutError, DependencyWarning, InsecureRequestWarning, MaxRetryError
+    from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
     from urllib3.exceptions import HTTPError as HTTPError
     from urllib3.util import make_headers
-    URLLIB3_FROM_PIP = False
-except ImportError:
-    try:
-        # pip includes urllib3
-        from pip._vendor.urllib3 import (HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Retry,
-                                         Timeout)
-        from pip._vendor.urllib3.exceptions import (ConnectTimeoutError, DependencyWarning, InsecureRequestWarning,
-                                                    MaxRetryError)
-        from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
-        from pip._vendor.urllib3.util import make_headers
-        URLLIB3_FROM_PIP = True
-    except ImportError:
-        raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
 
-# Don't complain about missing socks
-warnings.filterwarnings('ignore', category=DependencyWarning)
-
-try:
-    import ssl as ssl
-except ImportError:
-    ssl = None  # type: ignore[assignment,no-redef]
-
-# Inject SecureTransport on macOS if the linked OpenSSL is too old to handle TLSv1.2
-if ssl is not None and sys.platform == 'darwin' and ssl.OPENSSL_VERSION_NUMBER < 0x1000100F:
-    try:
-        if URLLIB3_FROM_PIP:
-            from pip._vendor.urllib3.contrib import securetransport
-        else:
-            from urllib3.contrib import securetransport
-    except (ImportError, EnvironmentError):
-        pass
-    else:
-        securetransport.inject_into_urllib3()
-
-if ssl is not None and not getattr(ssl, 'HAS_SNI', False):
-    try:
-        if URLLIB3_FROM_PIP:
-            from pip._vendor.urllib3.contrib import pyopenssl
-        else:
-            from urllib3.contrib import pyopenssl
-    except ImportError:
-        pass
-    else:
-        pyopenssl.inject_into_urllib3()
+setup_urllib3_ssl()
 
 # long is int in Python 3
 try:
@@ -81,15 +43,7 @@ HTTP_TIMEOUT = Timeout(90)
 HTTP_RETRY = Retry(3, connect=False)
 HTTP_CHUNK_SIZE = 1024 * 1024
 
-try:
-    from brotli import brotli
-    have_brotlipy = True
-except ImportError:
-    have_brotlipy = False
-
-supported_encodings = (('br',) if have_brotlipy else ()) + ('deflate', 'gzip')
-
-base_headers = make_headers(keep_alive=True, accept_encoding=list(supported_encodings))
+base_headers = make_headers(keep_alive=True, accept_encoding=list(get_supported_encodings()))
 
 
 # Document type flags
@@ -792,11 +746,13 @@ def try_unlink(path):
             raise
 
 
-def set_ssl_verify(verify):
-    if not verify:
+def setup_wget(ssl_verify, user_agent):
+    if not ssl_verify:
         # Hide the InsecureRequestWarning from urllib3
         warnings.filterwarnings('ignore', category=InsecureRequestWarning)
-    poolman.connection_pool_kw['cert_reqs'] = 'CERT_REQUIRED' if verify else 'CERT_NONE'
+    poolman.connection_pool_kw['cert_reqs'] = 'CERT_REQUIRED' if ssl_verify else 'CERT_NONE'
+    if user_agent is not None:
+        base_headers['User-Agent'] = user_agent
 
 
 # This is a simple urllib3-based urlopen function.

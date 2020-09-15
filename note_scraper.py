@@ -11,7 +11,8 @@ import warnings
 
 from bs4 import BeautifulSoup
 
-from util import ConnectionFile, is_dns_working, to_bytes, to_native_str
+from util import (ConnectionFile, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl, to_bytes,
+                  to_native_str)
 
 try:
     from typing import TYPE_CHECKING
@@ -22,9 +23,19 @@ if TYPE_CHECKING:
     from typing import List, Text
 
 try:
-    from http.cookiejar import MozillaCookieJar
+    from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 except ImportError:
-    from cookielib import MozillaCookieJar  # type: ignore[no-redef]
+    from urllib import quote  # type: ignore[attr-defined,no-redef]
+    from urlparse import urlparse, urlsplit, urlunsplit  # type: ignore[no-redef]
+
+if URLLIB3_FROM_PIP:
+    from pip._vendor.urllib3 import Retry, Timeout
+    from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
+else:
+    from urllib3 import Retry, Timeout
+    from urllib3.exceptions import HTTPError, InsecureRequestWarning
+
+setup_urllib3_ssl()
 
 try:
     import requests
@@ -40,27 +51,11 @@ except ImportError:
         raise RuntimeError('The requests module is required for note scraping. '
                            'Please install it with pip or your package manager.')
 
-try:
-    from urllib.parse import quote, urlparse, urlsplit, urlunsplit
-except ImportError:
-    from urllib import quote  # type: ignore[attr-defined,no-redef]
-    from urlparse import urlparse, urlsplit, urlunsplit  # type: ignore[no-redef]
-
-try:
-    from urllib3 import Retry
-    from urllib3.exceptions import HTTPError, InsecureRequestWarning
-except ImportError:
-    try:
-        # pip includes urllib3
-        from pip._vendor.urllib3 import Retry
-        from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
-    except ImportError:
-        raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
-
 EXIT_SUCCESS = 0
 EXIT_SAFE_MODE = 2
 EXIT_NO_INTERNET = 3
 
+HTTP_TIMEOUT = Timeout(90)
 HTTP_RETRY = Retry(3, connect=False)
 
 # Globals
@@ -87,27 +82,12 @@ class WebCrawler(object):
 
     TRY_LIMIT = 2  # For code 429, only give it one extra try
 
-    def __init__(self, noverify, cookiefile, notes_limit):
+    def __init__(self, noverify, user_agent, cookiefile, notes_limit):
         self.notes_limit = notes_limit
         self.lasturl = None
-
-        self.session = requests.Session()
-        self.session.verify = not noverify
-        for adapter in self.session.adapters.values():
-            adapter.max_retries = HTTP_RETRY
-
-        if cookiefile is not None:
-            cookies = MozillaCookieJar(cookiefile)
-            cookies.load()
-
-            # Session cookies are denoted by either `expires` field set to an empty string or 0. MozillaCookieJar only
-            # recognizes the former (see https://bugs.python.org/issue17164).
-            for cookie in cookies:
-                if cookie.expires == 0:
-                    cookie.expires = None
-                    cookie.discard = True
-
-            self.session.cookies = cookies  # type: ignore[assignment]
+        self.session = make_requests_session(
+            requests.Session, HTTP_RETRY, HTTP_TIMEOUT, not noverify, user_agent, cookiefile,
+        )
 
     @classmethod
     def quote_unsafe(cls, string):
@@ -237,7 +217,7 @@ class WebCrawler(object):
         return u''.join(notes_list)
 
 
-def main(stdout_conn, msg_conn, post_url_, ident_, noverify, notes_limit, cookiefile):
+def main(stdout_conn, msg_conn, post_url_, ident_, noverify, user_agent, cookiefile, notes_limit):
     global post_url, ident, msg_pipe
     post_url, ident = post_url_, ident_
 
@@ -246,7 +226,7 @@ def main(stdout_conn, msg_conn, post_url_, ident_, noverify, notes_limit, cookie
         warnings.filterwarnings('ignore', category=InsecureRequestWarning)
 
     with ConnectionFile(msg_conn, 'w') as msg_pipe:
-        crawler = WebCrawler(noverify, cookiefile, notes_limit)
+        crawler = WebCrawler(noverify, user_agent, cookiefile, notes_limit)
 
         try:
             notes = crawler.get_notes(post_url)

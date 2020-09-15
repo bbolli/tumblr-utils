@@ -24,8 +24,9 @@ from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from xml.sax.saxutils import escape
 
-from util import ConnectionFile, LockedQueue, PY3, no_internet, nullcontext, path_is_on_vfat, to_bytes, to_unicode
-from wget import HTTPError, WGError, WgetRetrieveWrapper, set_ssl_verify, urlopen
+from util import (ConnectionFile, LockedQueue, PY3, is_dns_working, make_requests_session, no_internet, nullcontext,
+                  path_is_on_vfat, to_bytes, to_unicode)
+from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, urlopen
 
 try:
     from typing import TYPE_CHECKING
@@ -88,6 +89,17 @@ except ImportError:
         from scandir import DirEntry, scandir  # type: ignore[no-redef]
     except ImportError:
         scandir = None  # type: ignore[assignment,no-redef]
+
+# NB: setup_urllib3_ssl has already been called by wget
+
+try:
+    import requests
+except ImportError:
+    if not TYPE_CHECKING:
+        try:
+            from pip._vendor import requests  # type: ignore[no-redef]
+        except ImportError:
+            raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
 
 # These builtins have new names in Python 3
 try:
@@ -268,9 +280,23 @@ def set_period():
     options.p_stop = int(mktime(tm))
 
 
-def initial_apiparse(base, prev_archive):
-    prev_resps = None
-    if prev_archive:
+class ApiParser(object):
+    session = None  # type: Optional[requests.Session]
+
+    def __init__(self, base, account):
+        self.base = base
+        self.account = account
+        self.prev_resps = None  # type: Optional[Tuple[str, ...]]
+        self.dashboard_only_blog = None  # type: Optional[bool]
+
+    @classmethod
+    def setup(cls):
+        cls.session = make_requests_session(
+            requests.Session, HTTP_RETRY, HTTP_TIMEOUT,
+            not options.no_ssl_verify, options.user_agent, options.cookiefile,
+        )
+
+    def read_archive(self, prev_archive):
         def read_resp(path):
             with io.open(path, encoding=FILE_ENCODING) as jf:
                 return json.load(jf)
@@ -278,7 +304,7 @@ def initial_apiparse(base, prev_archive):
         if options.likes:
             log('Reading liked timestamps from saved responses (may take a while)\n', account=True)
 
-        prev_resps = tuple(
+        self.prev_resps = tuple(
             e.path for e in sorted(
                 (e for e in scandir(join(prev_archive, 'json')) if (e.name.endswith('.json') and e.is_file())),
                 key=lambda e: read_resp(e)['liked_timestamp'] if options.likes else long(e.name[:-5]),
@@ -286,78 +312,108 @@ def initial_apiparse(base, prev_archive):
             )
         )
 
-    return prev_resps, apiparse(base, prev_resps, 1)
+    def apiparse(self, count, start=0, before=None):
+        # type: (...) -> Optional[JSONDict]
+        assert self.session is not None
+        if self.prev_resps is not None:
+            # Reconstruct the API response
+            def read_post(prf):
+                with io.open(prf, encoding=FILE_ENCODING) as f:
+                    try:
+                        post = json.load(f)
+                    except ValueError as e:
+                        f.seek(0)
+                        log('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
+                        return None
+                return prf, post
+            posts = map(read_post, self.prev_resps)  # type: Iterable[Tuple[DirEntry[str], JSONDict]]
+            if before is not None:
+                posts = itertools.dropwhile(
+                    lambda pp: pp[1]['liked_timestamp' if options.likes else 'timestamp'] >= before,
+                    posts,
+                )
+            posts = list(itertools.islice(posts, start, start + count))
+            return {'posts': [post for prf, post in posts],
+                    'post_respfiles': [prf for prf, post in posts],
+                    'blog': dict(posts[0][1]['blog'] if posts else {}, posts=len(self.prev_resps))}
 
+        if self.dashboard_only_blog:
+            base = 'https://www.tumblr.com/svc/indash_blog'
+            params = {'tumblelog_name_or_id': self.account, 'post_id': '', 'limit': count,
+                      'should_bypass_safemode': 'true', 'should_bypass_tagfiltering': 'true'}
+            headers = {
+                'Referer': 'https://www.tumblr.com/dashboard/blog/' + self.account,
+                'X-Requested-With': 'XMLHttpRequest',
+            }  # type: Optional[Dict[str, str]]
+        else:
+            base = self.base
+            params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
+            headers = None
+        if before:
+            params['before'] = before
+        if start > 0 and not options.likes:
+            params['offset'] = start
 
-def apiparse(base, prev_resps, count, start=0, before=None):
-    # type: (...) -> Optional[JSONDict]
-    if prev_resps is not None:
-        # Reconstruct the API response
-        def read_post(prf):
-            with io.open(prf, encoding=FILE_ENCODING) as f:
-                try:
-                    post = json.load(f)
-                except ValueError as e:
-                    f.seek(0)
-                    log('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
-                    return None
-            return prf, post
-        posts = map(read_post, prev_resps)  # type: Iterable[Tuple[DirEntry[str], JSONDict]]
-        if before is not None:
-            posts = itertools.dropwhile(
-                lambda pp: pp[1]['liked_timestamp' if options.likes else 'timestamp'] >= before,
-                posts,
-            )
-        posts = list(itertools.islice(posts, start, start + count))
-        return {'posts': [post for prf, post in posts],
-                'post_respfiles': [prf for prf, post in posts],
-                'blog': dict(posts[0][1]['blog'] if posts else {}, posts=len(prev_resps))}
-
-    params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
-    if before:
-        params['before'] = before
-    if start > 0 and not options.likes:
-        params['offset'] = start
-
-    def get_resp():
-        try:
-            resp = urlopen(base, fields=params)
-        except (EnvironmentError, HTTPError) as e:
-            log('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
-            return None
-        if not (200 <= resp.status < 300 or 400 <= resp.status < 500):
-            log('URL is {}?{}\nError retrieving API repsonse: HTTP {} {}\n'.format(
-                base, urlencode(params), resp.status, resp.reason,
-            ))
-            return None
-        ctype = resp.headers.get('Content-Type')
-        if ctype and ctype.split(';', 1)[0].strip() != 'application/json':
-            log("Unexpected Content-Type: '{}'\n".format(ctype))
-            return None
-        data = resp.data.decode('utf-8')
-        try:
-            doc = json.loads(data)
-        except ValueError as e:
-            log('{}: {}\n{} {} {}\n{!r}\n'.format(
-                e.__class__.__name__, e, resp.status, resp.reason, ctype, data,
-            ))
-            return None
-        return doc
-
-    sleep_dur = 30  # in seconds
-    while True:
-        doc = get_resp()
-        if doc is None:
-            return None
-        status = doc['meta']['status']
-        if status == 429:
+        sleep_dur = 30  # in seconds
+        while True:
+            doc = self._get_resp(base, params, headers)
+            if doc is None:
+                return None
+            status = doc['meta']['status']
+            if status != 429:
+                break
             time.sleep(sleep_dur)
             sleep_dur *= 2
-            continue
         if status != 200:
+            # Detect dashboard-only blogs by the error codes
+            if self.dashboard_only_blog is None and status == 404:
+                errors = doc.get('errors', ())
+                if len(errors) == 1 and errors[0].get('code') == 4012:
+                    self.dashboard_only_blog = True
+                    log('Found dashboard-only blog, trying svc API\n', account=True)
+                    return self.apiparse(count, start)  # Recurse once
             log('API response has non-200 status:\n{}\n'.format(doc))
+            if status == 401 and self.dashboard_only_blog:
+                log("This is a dashboard-only blog, so you probably don't have the right cookies.{}\n".format(
+                    '' if options.cookiefile else ' Try --cookiefile.',
+                ))
             return None
-        return doc.get('response')
+        # If the first API request succeeds, it's a public blog
+        if self.dashboard_only_blog is None:
+            self.dashboard_only_blog = False
+        resp = doc.get('response')
+        if resp is not None and self.dashboard_only_blog:
+            # svc API doesn't return blog info, steal it from the first post
+            resp['blog'] = resp['posts'][0]['blog'] if resp['posts'] else {}
+        return resp
+
+    def _get_resp(self, base, params, headers):
+        assert self.session is not None
+        while True:
+            try:
+                with self.session.get(base, params=params, headers=headers) as resp:
+                    if not (200 <= resp.status_code < 300 or 400 <= resp.status_code < 500):
+                        log('URL is {}?{}\nError retrieving API repsonse: HTTP {} {}\n'.format(
+                            base, urlencode(params), resp.status_code, resp.reason,
+                        ))
+                        return None
+                    ctype = resp.headers.get('Content-Type')
+                    if ctype and ctype.split(';', 1)[0].strip() != 'application/json':
+                        log("Unexpected Content-Type: '{}'\n".format(ctype))
+                        return None
+                    try:
+                        return resp.json()
+                    except ValueError as e:
+                        log('{}: {}\n{} {} {}\n{!r}\n'.format(
+                            e.__class__.__name__, e, resp.status_code, resp.reason, ctype, resp.content.decode('utf-8'),
+                        ))
+                        return None
+            except (EnvironmentError, HTTPError) as e:
+                if isinstance(e, HTTPError) and not is_dns_working(timeout=5):
+                    no_internet.signal()
+                    continue
+                log('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
+                return None
 
 
 def add_exif(image_name, tags):
@@ -766,7 +822,10 @@ class TumblrBackup(object):
 
         log.status('Getting basic information\r')
 
-        prev_resps, resp = initial_apiparse(base, prev_archive)
+        api_parser = ApiParser(base, account)
+        if prev_archive:
+            api_parser.read_archive(prev_archive)
+        resp = api_parser.apiparse(1)
         if not resp:
             self.errors = True
             return
@@ -782,9 +841,8 @@ class TumblrBackup(object):
             count_estimate = resp['liked_count']
         else:
             posts_key = 'posts'
-            blog = resp['blog']
-            count_estimate = blog['posts']
-        assert isinstance(count_estimate, int)
+            blog = resp.get('blog', {})
+            count_estimate = blog.get('posts')
         self.title = escape(blog.get('title', account))
         self.subtitle = blog.get('description', '')
 
@@ -854,11 +912,12 @@ class TumblrBackup(object):
             before = options.p_stop if options.period else None
             while True:
                 # find the upper bound
-                log.status('Getting {}posts {} to {} (of {} expected)\r'.format(
-                    'liked ' if options.likes else '', i, i + MAX_POSTS - 1, count_estimate,
+                log.status('Getting {}posts {} to {}{}\r'.format(
+                    'liked ' if options.likes else '', i, i + MAX_POSTS - 1,
+                    '' if count_estimate is None else ' (of {} expected)'.format(count_estimate),
                 ))
 
-                resp = apiparse(base, prev_resps, MAX_POSTS, i, before)
+                resp = api_parser.apiparse(MAX_POSTS, i, before)
                 if resp is None:
                     self.errors = True
                     break
@@ -920,7 +979,7 @@ class TumblrPost(object):
         self.backup_account = backup_account
         self.respfile = respfile
         self.prev_archive = prev_archive
-        self.creator = post['blog_name']
+        self.creator = post.get('blog_name') or post['tumblelog']
         self.ident = str(post['id'])
         self.url = post['post_url']
         self.shorturl = post['short_url']
@@ -930,7 +989,11 @@ class TumblrPost(object):
         self.tm = time.localtime(self.date)
         self.title = u''
         self.tags = post['tags']
-        self.note_count = post.get('note_count', 0)
+        self.note_count = post.get('note_count')
+        if self.note_count is None:
+            self.note_count = post.get('notes', {}).get('count')
+        if self.note_count is None:
+            self.note_count = 0
         self.reblogged_from = post.get('reblogged_from_url')
         self.reblogged_root = post.get('reblogged_root_url')
         self.source_title = post.get('source_title', '')
@@ -1258,8 +1321,7 @@ class TumblrPost(object):
                 ns_msg_rd, ns_msg_wr = multiprocessing.Pipe(duplex=False)
                 try:
                     args = (ns_stdout_wr, ns_msg_wr, self.url, self.ident,
-                            options.no_ssl_verify, options.notes_limit,
-                            options.cookiefile)
+                            options.no_ssl_verify, options.user_agent, options.cookiefile, options.notes_limit)
                     process = multiprocessing.Process(target=note_scraper.main, args=args)
                     process.start()
                 except:
@@ -1513,7 +1575,7 @@ if __name__ == '__main__':
     parser.add_argument('--save-notes', action='store_true', help='save a list of notes for each post')
     parser.add_argument('--copy-notes', action='store_true', help='copy the notes list from a previous archive')
     parser.add_argument('--notes-limit', type=int, metavar='COUNT', help='limit requested notes to COUNT, per-post')
-    parser.add_argument('--cookiefile', help='cookie file for youtube-dl and --save-notes')
+    parser.add_argument('--cookiefile', help='cookie file for youtube-dl, --save-notes, and svc API')
     parser.add_argument('-j', '--json', action='store_true', help='save the original JSON source')
     parser.add_argument('-b', '--blosxom', action='store_true', help='save the posts in blosxom format')
     parser.add_argument('-r', '--reverse-month', action='store_false',
@@ -1558,6 +1620,7 @@ if __name__ == '__main__':
     parser.add_argument('--mtime-postfix', action='store_true',
                         help="timestamping: work around low-precision mtime on FAT filesystems")
     parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
+    parser.add_argument('--user-agent', help='User agent string to use with HTTP requests')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
 
@@ -1574,7 +1637,7 @@ if __name__ == '__main__':
         set_period()
 
     wget_retrieve = WgetRetrieveWrapper(options, log)
-    set_ssl_verify(not options.no_ssl_verify)
+    setup_wget(not options.no_ssl_verify, options.user_agent)
 
     blogs = options.blogs or DEFAULT_BLOGS
     if not blogs:
@@ -1642,6 +1705,7 @@ Missing API_KEY; please get your own API key at
 https://www.tumblr.com/oauth/apps\n''')
         sys.exit(1)
 
+    ApiParser.setup()
     tb = TumblrBackup()
     try:
         for i, account in enumerate(blogs):
