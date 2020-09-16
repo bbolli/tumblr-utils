@@ -240,7 +240,7 @@ class Logger:
         msg, term = msg[:idx], msg[idx:]
 
         pad = ' ' * (80 - len(msg))  # Pad to 80 chars
-        print(msg + pad + term, end='')
+        print(msg + pad + term, end='', file=sys.stderr if options.json_info else sys.stdout)
 
 
 logger = Logger()
@@ -900,7 +900,7 @@ class TumblrBackup:
     def exit_code(self):
         if self.failed_blogs or self.postfail_blogs:
             return EXIT_ERRORS
-        if self.total_count == 0:
+        if self.total_count == 0 and not options.json_info:
             return EXIT_NOPOSTS
         return EXIT_SUCCESS
 
@@ -1079,7 +1079,9 @@ class TumblrBackup:
 
         # make sure there are folders to save in
         global save_folder, media_folder, post_ext, post_dir, save_dir, have_custom_css
-        if options.blosxom:
+        if options.json_info:
+            pass  # Not going to save anything
+        elif options.blosxom:
             save_folder = root_folder
             post_ext = '.txt'
             post_dir = os.curdir
@@ -1151,6 +1153,14 @@ class TumblrBackup:
             count_estimate = blog.get('posts')
         self.title = escape(blog.get('title', account))
         self.subtitle = blog.get('description', '')
+
+        if options.json_info:
+            posts = resp[posts_key]
+            info = {'uuid': blog.get('uuid'),
+                    'post_count': count_estimate,
+                    'last_post_ts': posts[0]['timestamp'] if posts else None}
+            json.dump(info, sys.stdout)
+            return
 
         if write_fro:
             # Blog directory gets created here
@@ -2211,6 +2221,8 @@ if __name__ == '__main__':
     parser.add_argument('--media-list', action='store_true', help='Save post media URLs to media.json')
     parser.add_argument('--id-file', action=IdFileCallback, dest='idents', metavar='FILE',
                         help='file containing a list of post IDs to save, one per line')
+    parser.add_argument('--json-info', action='store_true',
+                        help="Just print some info for each blog, don't make a backup")
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
     blogs = options.blogs or DEFAULT_BLOGS
@@ -2223,6 +2235,8 @@ if __name__ == '__main__':
     if options.resume or options.incremental:
         # Do not clobber or count posts that were already backed up
         options.no_post_clobber = True
+    if options.json_info:
+        options.quiet = True
     if options.count is not None and options.count < 0:
         parser.error('--count: count must not be negative')
     if options.count == 0 and (options.incremental or options.auto is not None):
