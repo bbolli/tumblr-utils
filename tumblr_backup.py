@@ -175,7 +175,8 @@ class Logger(object):
         with self.lock:
             for line in msg.splitlines(True):
                 self._print(line, account)
-            self._print(self.status_msg, account=True)
+            if self.status_msg:
+                self._print(self.status_msg, account=True)
             sys.stdout.flush()
 
     def status(self, msg):
@@ -714,6 +715,7 @@ class TumblrBackup(object):
             ix.build_index()
             ix.save_index()
 
+        log.status(None)
         log('{} {}posts backed up\n'.format(self.post_count, 'liked ' if options.likes else ''), account=True)
         self.total_count += self.post_count
 
