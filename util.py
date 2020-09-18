@@ -3,6 +3,7 @@
 from __future__ import absolute_import, division, print_function, with_statement
 
 import collections
+import contextlib
 import io
 import os
 import socket
@@ -138,6 +139,19 @@ class nullcontext(object):
 
     def __exit__(self, *excinfo):
         pass
+
+
+@contextlib.contextmanager
+def disable_unraisable_hook():
+    if sys.version_info >= (3, 8):
+        def hook(hookargs): pass
+        old_hook, sys.unraisablehook = sys.unraisablehook, hook  # pytype: disable=module-attr
+        try:
+            yield None
+        finally:
+            sys.unraisablehook = old_hook  # pytype: disable=module-attr
+    else:
+        yield None
 
 
 KNOWN_GOOD_NAMESERVER = '8.8.8.8'

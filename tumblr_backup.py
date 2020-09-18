@@ -14,6 +14,7 @@ import multiprocessing
 import os
 import re
 import shutil
+import signal
 import sys
 import threading
 import time
@@ -24,8 +25,9 @@ from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from xml.sax.saxutils import escape
 
-from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, is_dns_working,
-                  make_requests_session, no_internet, nullcontext, path_is_on_vfat, to_bytes, to_unicode)
+from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, disable_unraisable_hook,
+                  is_dns_working, make_requests_session, no_internet, nullcontext, path_is_on_vfat, to_bytes,
+                  to_unicode)
 from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, urlopen
 
 try:
@@ -1495,9 +1497,18 @@ class ThreadPool(object):
             self.quit.notify_all()
             no_internet.destroy()
 
-        for i, t in enumerate(self.threads, start=1):
-            log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
-            t.join()
+        duh = disable_unraisable_hook() if hasattr(signal, 'pthread_kill') else nullcontext()  # type: Any
+        with duh:
+            # The SIGTERM handler raises SystemExit to gracefully stop the worker
+            # threads. Otherwise, we must wait for them to finish their posts.
+            if hasattr(signal, 'pthread_kill'):
+                for t in self.threads:
+                    if t.ident is not None:
+                        signal.pthread_kill(t.ident, signal.SIGTERM)  # type: ignore[attr-defined]
+
+            for i, t in enumerate(self.threads, start=1):
+                log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
+                t.join()
 
         with main_thread_lock:
             self.queue.queue.clear()
@@ -1538,6 +1549,19 @@ if __name__ == '__main__':
         multiprocessing.set_start_method('forkserver')  # Fastest safe option, if supported
     else:
         multiprocessing.set_start_method('spawn')  # Slow but safe
+
+    # Raises SystemExit to terminate gracefully
+    def handle_term_signal(signum, frame):
+        if sys.exc_info() != (None, None, None):
+            return  # Not a good time to exit
+        if not PY3:
+            pass  # No is_finalizing
+        elif sys.is_finalizing():
+            return  # Not a good time to exit
+        sys.exit(1)
+    signal.signal(signal.SIGTERM, handle_term_signal)
+    if hasattr(signal, 'SIGHUP'):
+        signal.signal(signal.SIGHUP, handle_term_signal)
 
     no_internet.setup(main_thread_lock)
 
