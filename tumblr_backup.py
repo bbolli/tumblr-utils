@@ -283,8 +283,7 @@ def apiparse(base, count, start=0):
             resp = tb_urlopen(url)
             data = resp.read()
         except (EnvironmentError, HTTPException) as e:
-            log('URL is {}\n'.format(url))
-            log('Error retrieving API repsonse: {}\n'.format(e))
+            log('URL is {}\nError retrieving API repsonse: {}\n'.format(url, e))
             continue
         info = resp.info()
         if (info.get_content_type() if NEW_URLLIB else info.gettype()) == 'application/json':
