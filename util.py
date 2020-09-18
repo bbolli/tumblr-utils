@@ -201,7 +201,19 @@ class NoInternet(WaitOnMainThread):
             sleep_time = min(sleep_time * 2, 900)
 
 
+class Enospc(WaitOnMainThread):
+    @staticmethod
+    def _wait():
+        if not os.isatty(sys.stdin.fileno()):
+            # Pausing or consuming input does no good during unattended execution.
+            # We have no hope of recovering, so raise an uncaught exception.
+            raise RuntimeError(OSError(errno.ENOSPC, os.strerror(errno.ENOSPC)))
+        print('Error: No space left on device. Press Enter to try again...', file=sys.stderr)
+        input()
+
+
 no_internet = NoInternet()
+enospc = Enospc()
 
 
 # Set up ssl for urllib3. This should be called before using urllib3 or importing requests.

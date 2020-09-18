@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import errno
 import functools
 import itertools
 import os
@@ -13,7 +14,8 @@ from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
-from util import URLLIB3_FROM_PIP, LogLevel, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl, try_unlink
+from util import (URLLIB3_FROM_PIP, LogLevel, enospc, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl,
+                  try_unlink)
 
 if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
@@ -410,6 +412,8 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
 
         if hstat.bytes_read == hstat.restval:
             raise  # No data read
+        if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+            raise  # Handled specialy in outer except block
         if not retry_counter.should_retry():
             raise  # This won't be retried
 
@@ -641,6 +645,13 @@ def _retrieve_loop(
                 raise WGUnreachableHostError(logger, url, msg, e)
 
             retry_counter.increment(url, hstat, repr(e))
+            continue
+        except OSError as e:
+            if e.errno != errno.ENOSPC:
+                raise
+
+            # Being low on disk space is a temporary system error, don't count against the server
+            enospc.signal()
             continue
         except WGUnreachableHostError as e:
             # Set the logger for unreachable host errors thrown from WGHTTP(S)ConnectionPool

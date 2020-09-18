@@ -4,6 +4,7 @@
 # standard Python library imports
 import calendar
 import contextlib
+import errno
 import hashlib
 import http.client
 import itertools
@@ -32,7 +33,8 @@ from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
 from util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, MultiCondition, copyfile,
-                  fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir, to_bytes)
+                  enospc, fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir,
+                  to_bytes)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
 if TYPE_CHECKING:
@@ -1220,6 +1222,7 @@ class TumblrBackup:
             oldest_date = None
             for p, prf in sorted_posts:
                 no_internet.check()
+                enospc.check()
                 post = post_class(p, account, prf, prev_archive, self.pa_options, self.record_media)
                 oldest_date = post.date
                 if before is not None and post.date >= before:
@@ -1237,7 +1240,7 @@ class TumblrBackup:
                     return False, oldest_date
                 if options.idents is not None:
                     if not options.likes and int(post.ident) < ident_min:
-                        log('Stopping backup: Found post older than oldest requested post\n', account=True)
+                        logger.info('Stopping backup: Found post older than oldest requested post\n', account=True)
                         return False, oldest_date
                     if int(post.ident) not in options.idents:
                         continue
@@ -1273,8 +1276,9 @@ class TumblrBackup:
                 with multicond:
                     while backup_pool.queue.qsize() >= backup_pool.queue.maxsize:
                         no_internet.check(release=True)
+                        enospc.check(release=True)
                         # All conditions false, wait for a change
-                        multicond.wait((backup_pool.queue.not_full, no_internet.cond))
+                        multicond.wait((backup_pool.queue.not_full, no_internet.cond, enospc.cond))
                     backup_pool.add_work(post.save_post)
 
                 self.post_count += 1
@@ -1284,7 +1288,7 @@ class TumblrBackup:
                 if options.idents is not None and options.likes:
                     idents_remaining.remove(int(post.ident))
                     if not idents_remaining:
-                        log('Stopping backup: Found all requested posts\n', account=True)
+                        logger.info('Stopping backup: Found all requested posts\n', account=True)
                         return False, oldest_date
             return True, oldest_date
 
@@ -1315,8 +1319,9 @@ class TumblrBackup:
 
                     while not api_thread.response.qsize():
                         no_internet.check(release=True)
+                        enospc.check(release=True)
                         # All conditions false, wait for a change
-                        multicond.wait((api_thread.response.not_empty, no_internet.cond))
+                        multicond.wait((api_thread.response.not_empty, no_internet.cond, enospc.cond))
 
                     resp = api_thread.get(block=False)
 
@@ -1991,14 +1996,16 @@ class ThreadPool:
             self.quit.notify_all()
             while self.queue.unfinished_tasks:
                 no_internet.check(release=True)
+                enospc.check(release=True)
                 # All conditions false, wait for a change
-                multicond.wait((self.queue.all_tasks_done, no_internet.cond))
+                multicond.wait((self.queue.all_tasks_done, no_internet.cond, enospc.cond))
 
     def cancel(self):
         with main_thread_lock:
             self.abort_flag = True
             self.quit.notify_all()
             no_internet.destroy()
+            enospc.destroy()
 
         for i, t in enumerate(self.threads, start=1):
             logger.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
@@ -2031,7 +2038,15 @@ class ThreadPool:
                     self._print_remaining(qsize)
 
             try:
-                success = work()
+                while True:
+                    try:
+                        success = work()
+                        break
+                    except OSError as e:
+                        if e.errno == errno.ENOSPC:
+                            enospc.signal()
+                            continue
+                        raise
             finally:
                 self.queue.task_done()
             if not success:
@@ -2063,6 +2078,7 @@ if __name__ == '__main__':
         signal.signal(signal.SIGHUP, handle_term_signal)
 
     no_internet.setup(main_thread_lock)
+    enospc.setup(main_thread_lock)
 
     import argparse
 
