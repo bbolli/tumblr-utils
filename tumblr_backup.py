@@ -286,9 +286,9 @@ def set_period():
         tmt = tuple(tml)  # type: Any
         return time.mktime(tmt)
 
-    options.p_start = mktime(tm)
+    options.p_start = int(mktime(tm))
     tm[i] += 1
-    options.p_stop = mktime(tm)
+    options.p_stop = int(mktime(tm))
 
 
 def initial_apiparse(base, prev_archive):
@@ -304,7 +304,7 @@ def initial_apiparse(base, prev_archive):
     return prev_resps, apiparse(base, prev_resps, 1)
 
 
-def apiparse(base, prev_resps, count, start=0):
+def apiparse(base, prev_resps, count, start=0, before=None):
     # type: (...) -> Optional[JSONDict]
     if prev_resps is not None:
         # Reconstruct the API response
@@ -324,6 +324,8 @@ def apiparse(base, prev_resps, count, start=0):
                 'blog': dict(posts[0]['blog'] if posts else {}, posts=len(prev_resps))}
 
     params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
+    if before:
+        params['before'] = before
     if start > 0:
         params['offset'] = start
     url = base + '?' + urlencode(params)
@@ -792,7 +794,8 @@ class TumblrBackup(object):
                     return False
                 if options.period:
                     if post.date >= options.p_stop:
-                        continue
+                        raise RuntimeError('Found post with date ({}) older than before param ({})'.format(
+                            post.date, options.p_stop))
                     if post.date < options.p_start:
                         return False
                 if options.request:
@@ -821,13 +824,14 @@ class TumblrBackup(object):
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
             i = options.skip
+            before = options.p_stop if options.period else None
             while True:
                 # find the upper bound
                 log.status('Getting {}posts {} to {} (of {} expected)\r'.format(
                     'liked ' if options.likes else '', i, i + MAX_POSTS - 1, count_estimate,
                 ))
 
-                resp = apiparse(base, prev_resps, MAX_POSTS, i)
+                resp = apiparse(base, prev_resps, MAX_POSTS, i, before)
                 if resp is None:
                     self.errors = True
                     break
