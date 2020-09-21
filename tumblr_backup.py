@@ -548,17 +548,13 @@ class TumblrBackup:
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
 
-        # find the limit of how many posts to back up
-        if options.count:
-            desired_count = options.count + options.skip
-        else:
-            desired_count = None
-
         # returns whether any posts from this batch were saved
         def _backup(posts):
             for p in sorted(posts, key=lambda x: x['id'], reverse=True):
                 post = post_class(p)
                 if ident_max and long(post.ident) <= ident_max:
+                    return False
+                if options.count and self.post_count >= options.count:
                     return False
                 if options.period:
                     if post.date >= options.p_stop:
@@ -589,8 +585,7 @@ class TumblrBackup:
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
             i = options.skip
-            # Download posts until we have `desired_count` (if specified), or until post range responses are empty
-            while not desired_count or self.post_count < desired_count:
+            while True:
                 # find the upper bound
                 log(account, "Getting posts %d to %d (of %d expected)\r" % (i, i + MAX_POSTS - 1, count_estimate))
 
