@@ -4,6 +4,7 @@ from __future__ import absolute_import, division, print_function, with_statement
 
 import collections
 import contextlib
+import errno
 import io
 import os
 import socket
@@ -512,3 +513,19 @@ class AsyncCallable(object):
         except queue.Full:
             pass
         self.thread.join()
+
+
+def opendir(dir_, flags):
+    try:
+        flags |= os.O_DIRECTORY
+    except AttributeError:
+        dir_ += os.path.sep  # Fallback, some systems don't support O_DIRECTORY
+    return os.open(dir_, flags)
+
+
+def try_unlink(path):
+    try:
+        os.unlink(path)
+    except EnvironmentError as e:
+        if getattr(e, 'errno', None) != errno.ENOENT:
+            raise

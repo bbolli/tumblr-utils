@@ -13,7 +13,8 @@ from email.utils import mktime_tz, parsedate_tz
 from tempfile import NamedTemporaryFile
 from wsgiref.handlers import format_date_time
 
-from util import PY3, URLLIB3_FROM_PIP, get_supported_encodings, is_dns_working, no_internet, setup_urllib3_ssl
+from util import (PY3, URLLIB3_FROM_PIP, get_supported_encodings, is_dns_working, no_internet, opendir,
+                  setup_urllib3_ssl, try_unlink)
 
 try:
     from urllib.parse import urljoin, urlsplit
@@ -569,14 +570,8 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
     got_head = False  # used for time-stamping
     dest_dirname, dest_basename = os.path.split(dest_file)
 
-    flags = os.O_RDONLY
-    try:
-        flags |= os.O_DIRECTORY
-    except AttributeError:
-        dest_dirname += os.path.sep  # Fallback, some systems don't support O_DIRECTORY
-
     if os.name == 'posix':  # Opening directories is a POSIX feature
-        hstat.dest_dir = os.open(dest_dirname, flags)
+        hstat.dest_dir = opendir(dest_dirname, os.O_RDONLY)
     hstat.set_part_file_supplier(functools.partial(
         lambda pfx, dir_: NamedTemporaryFile('wb', prefix=pfx, dir=dir_, delete=False),
         '.{}.'.format(dest_basename), dest_dirname,
@@ -732,18 +727,7 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
             os.replace(os.path.basename(pfname), new_dest_basename,
                        src_dir_fd=hstat.dest_dir, dst_dir_fd=hstat.dest_dir)
 
-        # Sync the directory and return
-        if hstat.dest_dir is not None:
-            os.fdatasync(hstat.dest_dir)
         return
-
-
-def try_unlink(path):
-    try:
-        os.unlink(path)
-    except EnvironmentError as e:
-        if getattr(e, 'errno', None) != errno.ENOENT:
-            raise
 
 
 def setup_wget(ssl_verify, user_agent):

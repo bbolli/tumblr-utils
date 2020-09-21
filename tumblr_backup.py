@@ -4,6 +4,7 @@
 from __future__ import absolute_import, division, print_function, with_statement
 
 # standard Python library imports
+import contextlib
 import errno
 import hashlib
 import imghdr
@@ -23,11 +24,12 @@ from datetime import datetime, timedelta
 from glob import glob
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
+from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
 
 from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, disable_unraisable_hook,
-                  is_dns_working, make_requests_session, no_internet, nullcontext, path_is_on_vfat, to_bytes,
-                  to_unicode)
+                  is_dns_working, make_requests_session, no_internet, nullcontext, opendir, path_is_on_vfat, to_bytes,
+                  to_unicode, try_unlink)
 from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, urlopen
 
 try:
@@ -160,11 +162,25 @@ except locale.Error:
 FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
+MUST_MATCH_OPTIONS = ('dirs', 'likes', 'blosxom', 'hostdirs', 'image_names')
+BACKUP_CHANGING_OPTIONS = (
+    'save_images', 'save_video', 'save_video_tumblr', 'save_audio', 'save_notes', 'copy_notes', 'notes_limit', 'json',
+    'count', 'skip', 'period', 'request', 'filter', 'no_reblog', 'exif', 'prev_archives')
+
 main_thread_lock = threading.RLock()
 multicond = MultiCondition(main_thread_lock)
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
 prev_resps = None  # type: Optional[Tuple[str, ...]]
+
+
+def load_bs4(reason):
+    sys.modules['soupsieve'] = ()  # type: ignore[assignment]
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        raise RuntimeError("Cannot {} without module 'bs4'".format(reason))
+    return BeautifulSoup
 
 
 class Logger(object):
@@ -228,10 +244,32 @@ def open_file(open_fn, parts):
     return open_fn(path_to(*parts))
 
 
+@contextlib.contextmanager
 def open_text(*parts):
-    return open_file(
-        lambda f: io.open(f, 'w', encoding=FILE_ENCODING, errors='xmlcharrefreplace'), parts
-    )
+    dest_path = open_file(lambda f: f, parts)
+    dest_dirname, dest_basename = split(dest_path)
+
+    with NamedTemporaryFile('w', prefix='.{}.'.format(dest_basename), dir=dest_dirname, delete=False) as partf:
+        # Yield the file for writing
+        with io.open(partf.fileno(), 'w', encoding=FILE_ENCODING, errors='xmlcharrefreplace', closefd=False) as f:
+            yield f
+
+        # NamedTemporaryFile is created 0600, set mode to the usual 0644
+        os.fchmod(partf.fileno(), 0o644)
+
+        # Flush buffers and sync the inode
+        partf.flush()
+        os.fsync(partf)  # type: ignore
+
+        pfname = partf.name
+
+    # Move to final destination
+    if PY3:
+        os.replace(pfname, dest_path)
+    else:
+        if os.name == 'nt':
+            try_unlink(dest_path)  # Avoid potential FileExistsError
+        os.rename(pfname, dest_path)
 
 
 def strftime(fmt, t=None):
@@ -252,24 +290,25 @@ def get_api_url(account):
     )
 
 
-def set_period():
+def set_period(period):
     """Prepare the period start and end timestamps"""
     i = 0
-    tm = [int(options.period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
-    if len(options.period) >= 6:
+    tm = [int(period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
+    if len(period) >= 6:
         i = 1
-        tm[1] = int(options.period[4:6])
-    if len(options.period) == 8:
+        tm[1] = int(period[4:6])
+    if len(period) == 8:
         i = 2
-        tm[2] = int(options.period[6:8])
+        tm[2] = int(period[6:8])
 
     def mktime(tml):
         tmt = tuple(tml)  # type: Any
         return time.mktime(tmt)
 
-    options.p_start = int(mktime(tm))
+    p_start = int(mktime(tm))
     tm[i] += 1
-    options.p_stop = int(mktime(tm))
+    p_stop = int(mktime(tm))
+    return [p_start, p_stop]
 
 
 class ApiParser(object):
@@ -565,6 +604,18 @@ def maybe_copy_media(prev_archive, path_parts):
         return True  # Either we copied it or we didn't need to
 
 
+def check_optional_modules():
+    if options.exif:
+        if pyexiv2 is None:
+            raise RuntimeError("--exif: module 'pyexiv2' is not installed")
+        if not hasattr(pyexiv2, 'ImageMetadata'):
+            raise RuntimeError("--exif: module 'pyexiv2' is missing features, perhaps you need 'py3exiv2'?")
+    if options.filter is not None and pyjq is None:
+        raise RuntimeError("--filter: module 'pyjq' is not installed")
+    if options.prev_archives and scandir is None:
+        raise RuntimeError("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
+
+
 class Index(object):
     def __init__(self, blog, body_class='index'):
         self.blog = blog
@@ -650,7 +701,8 @@ class Index(object):
 
             archive.append(self.blog.footer(base, pp, np))
 
-            arch.write('\n'.join(archive))
+            with arch as archf:
+                archf.write('\n'.join(archive))
 
         assert first_file is not None
         return first_file
@@ -758,7 +810,8 @@ class TumblrBackup(object):
         return f
 
     @staticmethod
-    def get_post_timestamps(posts):
+    def get_post_timestamps(posts, reason):
+        BeautifulSoup = load_bs4(reason)
         for post in posts:
             with io.open(post, encoding=FILE_ENCODING) as pf:
                 soup = BeautifulSoup(pf, 'lxml')
@@ -766,6 +819,90 @@ class TumblrBackup(object):
             del soup
             # No datetime.fromisoformat or datetime.timestamp on Python 2
             yield (datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ') - datetime(1970, 1, 1)) // timedelta(seconds=1)
+
+    @classmethod
+    def process_existing_backup(cls, account, prev_archive):
+        complete_backup = os.path.exists(path_to('.complete'))
+        if options.resume and complete_backup:
+            raise RuntimeError('{}: Cannot continue complete backup'.format(account))
+        try:
+            with io.open(path_to('.first_run_options'), encoding=FILE_ENCODING) as f:
+                first_run_options = json.load(f)
+        except EnvironmentError as e:
+            if getattr(e, 'errno', None) != errno.ENOENT:
+                raise
+            first_run_options = None
+
+        class Options(object):
+            def __init__(self, fro): self.fro = fro
+            def differs(self, opt): return opt not in self.fro or orig_options[opt] != self.fro[opt]
+            def first(self, opts): return {opt: self.fro.get(opt, '<not present>') for opt in opts}
+            @staticmethod
+            def this(opts): return {opt: orig_options[opt] for opt in opts}
+
+        # These options must always match
+        if first_run_options is not None:
+            opts = Options(first_run_options)
+            mustmatchdiff = tuple(filter(opts.differs, MUST_MATCH_OPTIONS))
+            if mustmatchdiff:
+                raise RuntimeError('{}: The script was given {} but the existing backup was made with {}'.format(
+                    account, opts.this(mustmatchdiff), opts.first(mustmatchdiff)))
+
+            backdiff = tuple(filter(opts.differs, BACKUP_CHANGING_OPTIONS))
+            if options.resume:
+                backdiff_nondef = tuple(opt for opt in backdiff if orig_options[opt] != parser.get_default(opt))
+                if backdiff_nondef:
+                    raise RuntimeError('{}: The script was given {} but the existing backup was made with {}'.format(
+                        account, opts.this(backdiff_nondef), opts.first(backdiff_nondef)))
+            elif complete_backup:
+                pass  # Complete archives may be added to with different options
+            elif not backdiff:
+                raise RuntimeError('{}: Found incomplete archive, try --continue'.format(account))
+            elif not options.ignore_resume:
+                raise RuntimeError('{}: Refusing to make a different backup (with {} instead of {}) over an incomplete '
+                                   'archive. Delete the old backup to start fresh, or skip this check with '
+                                   '--continue=ignore.'.format(account, opts.this(backdiff), opts.first(backdiff)))
+
+        if prev_archive is not None:
+            try:
+                with io.open(join(prev_archive, '.first_run_options'), encoding=FILE_ENCODING) as f:
+                    pa_first_run_options = json.load(f)
+            except EnvironmentError as e:
+                if getattr(e, 'errno', None) != errno.ENOENT:
+                    raise
+                pa_first_run_options = None
+
+            # These options must always match
+            if pa_first_run_options is not None:
+                pa_opts = Options(pa_first_run_options)
+                mustmatchdiff = tuple(filter(pa_opts.differs, MUST_MATCH_OPTIONS))
+                if mustmatchdiff:
+                    raise RuntimeError('{}: The script was given {} but the previous archive was made with {}'.format(
+                        account, pa_opts.this(mustmatchdiff), pa_opts.first(mustmatchdiff)))
+
+        oldest_tstamp = None
+        if not complete_backup:
+            # Read every post to find the oldest timestamp we've saved.
+            filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
+            post_glob = glob(path_to(post_dir, filter_))
+            if options.resume and post_glob:
+                log('Found incomplete backup. Finding oldest post (may take a while)\n', account=True)
+                oldest_tstamp = min(cls.get_post_timestamps(post_glob, 'continue incomplete backup'))
+
+        if first_run_options is not None and options.resume:
+            # Load saved options
+            for opt in BACKUP_CHANGING_OPTIONS:
+                setattr(options, opt, first_run_options[opt])
+        else:
+            # Load original options
+            for opt in BACKUP_CHANGING_OPTIONS:
+                setattr(options, opt, orig_options[opt])
+            if first_run_options is None and not (complete_backup or post_glob):
+                # Presumably this is the initial backup of this blog
+                with open_text('.first_run_options') as f:
+                    f.write(to_unicode(json.dumps(orig_options)))
+
+        return oldest_tstamp
 
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -794,6 +931,9 @@ class TumblrBackup(object):
         self.post_count = 0
         self.filter_skipped = 0
 
+        oldest_tstamp = self.process_existing_backup(account, prev_archive)
+        check_optional_modules()
+
         # get the highest post id already saved
         ident_max = None
         if options.incremental:
@@ -803,10 +943,8 @@ class TumblrBackup(object):
                 pass  # No posts to read
             elif options.likes:
                 # Read every post to find the newest timestamp we've saved.
-                if BeautifulSoup is None:
-                    raise RuntimeError("Incremental likes backup: module 'bs4' is not installed")
                 log('Finding newest liked post (may take a while)\n', account=True)
-                ident_max = max(self.get_post_timestamps(post_glob))
+                ident_max = max(self.get_post_timestamps(post_glob, 'backup likes incrementally'))
             else:
                 ident_max = max(long(splitext(split(f)[1])[0]) for f in post_glob)
             if ident_max is not None:
@@ -844,6 +982,9 @@ class TumblrBackup(object):
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
 
+        jq_filter = None if options.filter is None else pyjq.compile(options.filter)  # pytype: disable=attribute-error
+        request_sets = None if options.request is None else {typ: set(tags) for typ, tags in options.request.items()}
+
         # start the thread pool
         backup_pool = ThreadPool()
 
@@ -860,17 +1001,17 @@ class TumblrBackup(object):
                     log('Stopping backup: Incremental backup complete\n', account=True)
                     return False
                 if options.period:
-                    if post.date >= options.p_stop:
+                    if post.date >= options.period[1]:
                         raise RuntimeError('Found post with date ({}) older than before param ({})'.format(
-                            post.date, options.p_stop))
-                    if post.date < options.p_start:
+                            post.date, options.period[1]))
+                    if post.date < options.period[0]:
                         log('Stopping backup: Reached end of period\n', account=True)
                         return False
-                if options.request:
-                    if post.typ not in options.request:
+                if request_sets:
+                    if post.typ not in request_sets:
                         continue
-                    tags = options.request[post.typ]
-                    if not (TAG_ANY in tags or tags & post.tags_lower):
+                    tags = request_sets[post.typ]
+                    if not (TAG_ANY in tags or tags & {t.lower() for t in post.tags}):
                         continue
                 if options.no_reblog:
                     if 'reblogged_from_name' in p or 'reblogged_root_name' in p:
@@ -882,7 +1023,7 @@ class TumblrBackup(object):
                         continue
                 if os.path.exists(path_to(*post.get_path())) and options.no_post_clobber:
                     continue  # Post exists and no-clobber enabled
-                if options.filter and not options.filter.first(p):
+                if jq_filter and not jq_filter.first(p):
                     self.filter_skipped += 1
                     continue
 
@@ -903,7 +1044,9 @@ class TumblrBackup(object):
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
             i = options.skip
-            before = options.p_stop if options.period else None
+            before = options.period[1] if options.period else None
+            if oldest_tstamp is not None:
+                before = oldest_tstamp if before is None else min(before, oldest_tstamp)
 
             while True:
                 # find the upper bound
@@ -964,6 +1107,17 @@ class TumblrBackup(object):
             ix.build_index()
             ix.save_index()
 
+        if not os.path.exists(path_to('.complete')):
+            # Make .complete file
+            sf = opendir(save_folder, os.O_RDONLY)
+            try:
+                os.fdatasync(sf)
+                with io.open(open_file(lambda f: f, ('.complete',)), 'wb') as f:
+                    os.fsync(f)  # type: ignore
+                os.fdatasync(sf)
+            finally:
+                os.close(sf)
+
         log.status(None)
         skipped_msg = (', {} did not match filter'.format(self.filter_skipped)) if self.filter_skipped else ''
         log(
@@ -992,7 +1146,7 @@ class TumblrPost(object):
         self.isodate = datetime.utcfromtimestamp(self.date).isoformat() + 'Z'
         self.tm = time.localtime(self.date)
         self.title = u''
-        self.tags = post['tags']
+        self.tags = post['tags']  # type: Text
         self.note_count = post.get('note_count')
         if self.note_count is None:
             self.note_count = post.get('notes', {}).get('count')
@@ -1002,9 +1156,6 @@ class TumblrPost(object):
         self.reblogged_root = post.get('reblogged_root_url')
         self.source_title = post.get('source_title', '')
         self.source_url = post.get('source_url', '')
-        self.tags_lower = None  # type: Optional[Set[str]]
-        if options.request:
-            self.tags_lower = {t.lower() for t in self.tags}
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
         self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
@@ -1155,6 +1306,11 @@ class TumblrPost(object):
         }
         if options.cookiefile is not None:
             ydl_options['cookiefile'] = options.cookiefile
+        try:
+            import youtube_dl
+            from youtube_dl.utils import sanitize_filename
+        except ImportError:
+            raise RuntimeError("--save-video: module 'youtube_dl' is not installed")
         ydl = youtube_dl.YoutubeDL(ydl_options)
         ydl.add_default_info_extractors()
         try:
@@ -1310,6 +1466,9 @@ class TumblrPost(object):
 
         notes_html = u''
 
+        if options.save_notes or options.copy_notes:
+            BeautifulSoup = load_bs4('save notes' if options.save_notes else 'copy notes')
+
         if options.copy_notes:
             # Copy notes from prev_archive
             with io.open(join(self.prev_archive, post_dir, self.ident + post_ext)) as post_file:
@@ -1319,6 +1478,8 @@ class TumblrPost(object):
                 notes_html = u''.join([n.prettify() for n in notes.find_all('li')])
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
+            import note_scraper
+
             # Scrape and save notes
             while True:
                 ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
@@ -1392,9 +1553,10 @@ class TumblrPost(object):
 
     def save_post(self):
         """saves this post locally"""
-        with open_text(*self.get_path()) as f:
+        path_parts = self.get_path()
+        with open_text(*path_parts) as f:
             f.write(self.get_post())
-        os.utime(f.name, (self.date, self.date))
+        os.utime(path_to(*path_parts), (self.date, self.date))
         if options.json:
             with open_text(json_dir, self.ident + '.json') as f:
                 f.write(self.get_json_content())
@@ -1569,10 +1731,6 @@ if __name__ == '__main__':
 
     class CSVCallback(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
-            setattr(namespace, self.dest, set(values.split(',')))
-
-    class CSVListCallback(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
             setattr(namespace, self.dest, list(values.split(',')))
 
     class RequestCallback(argparse.Action):
@@ -1584,10 +1742,12 @@ if __name__ == '__main__':
                 if typ != TYPE_ANY and typ not in POST_TYPES:
                     parser.error("{}: invalid post type '{}'".format(option_string, typ))
                 for typ in POST_TYPES if typ == TYPE_ANY else (typ,):
-                    if parts:
-                        request[typ] = request.get(typ, set()).union(parts)
-                    else:
-                        request[typ] = {TAG_ANY}
+                    if not parts:
+                        request[typ] = [TAG_ANY]
+                        continue
+                    if typ not in request:
+                        request[typ] = []
+                    request[typ].extend(parts)
             setattr(namespace, self.dest, request)
 
     class TagsCallback(RequestCallback):
@@ -1595,6 +1755,18 @@ if __name__ == '__main__':
             super(TagsCallback, self).__call__(
                 parser, namespace, TYPE_ANY + ':' + values.replace(',', ':'), option_string,
             )
+
+    class PeriodCallback(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            try:
+                pformat = {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[values]
+            except KeyError:
+                period = values.replace('-', '')
+                if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', period):
+                    parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
+            else:
+                period = time.strftime(pformat)
+            setattr(namespace, self.dest, set_period(period))
 
     parser = argparse.ArgumentParser(usage='%(prog)s [options] blog-name ...',
                                      description='Makes a local backup of Tumblr blogs.')
@@ -1623,7 +1795,8 @@ if __name__ == '__main__':
                              ' (useful for cron jobs)')
     parser.add_argument('-n', '--count', type=int, help='save only COUNT posts')
     parser.add_argument('-s', '--skip', type=int, default=0, help='skip the first SKIP posts')
-    parser.add_argument('-p', '--period', help="limit the backup to PERIOD ('y', 'm', 'd' or YYYY[MM[DD]])")
+    parser.add_argument('-p', '--period', action=PeriodCallback,
+                        help="limit the backup to PERIOD ('y', 'm', 'd' or YYYY[MM[DD]])")
     parser.add_argument('-N', '--posts-per-page', type=int, default=50, metavar='COUNT',
                         help='set the number of posts per monthly page, 0 for unlimited')
     parser.add_argument('-Q', '--request', action=RequestCallback,
@@ -1640,11 +1813,11 @@ if __name__ == '__main__':
     parser.add_argument('--no-reblog', action='store_true', help="don't save reblogged posts")
     parser.add_argument('-I', '--image-names', choices=('o', 'i', 'bi'), default='o', metavar='FMT',
                         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)")
-    parser.add_argument('-e', '--exif', action=CSVCallback, default=set(), metavar='KW',
+    parser.add_argument('-e', '--exif', action=CSVCallback, default=[], metavar='KW',
                         help='add EXIF keyword tags to each picture'
                              " (comma-separated values; '-' to remove all tags, '' to add no extra tags)")
     parser.add_argument('-S', '--no-ssl-verify', action='store_true', help='ignore SSL verification errors')
-    parser.add_argument('--prev-archives', action=CSVListCallback, default=[], metavar='DIRS',
+    parser.add_argument('--prev-archives', action=CSVCallback, default=[], metavar='DIRS',
                         help='comma-separated list of directories (one per blog) containing previous blog archives')
     parser.add_argument('--no-post-clobber', action='store_true', help='Do not re-download existing posts')
     parser.add_argument('-M', '--timestamping', action='store_true',
@@ -1658,27 +1831,21 @@ if __name__ == '__main__':
     parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
     parser.add_argument('--user-agent', help='User agent string to use with HTTP requests')
     parser.add_argument('--threads', type=int, default=20, help='number of threads to use for post retrieval')
+    parser.add_argument('--continue', action='store_true', dest='resume', help='Continue an incomplete first backup')
+    parser.add_argument('--continue=ignore', action='store_true', dest='ignore_resume',
+                        help='Force backup over an incomplete archive with different options')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
+    blogs = options.blogs or DEFAULT_BLOGS
+    del options.blogs
+    orig_options = vars(options).copy()
 
+    if not blogs:
+        parser.error('Missing blog-name')
+    if sum(1 for arg in ('resume', 'ignore_resume', 'incremental', 'auto') if getattr(options, arg) not in (None, False)) > 1:
+        parser.error('Only one of --continue, --continue=ignore, --incremental, or --auto may be given')
     if options.auto is not None and options.auto != time.localtime().tm_hour:
         options.incremental = True
-    if options.period:
-        try:
-            pformat = {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[options.period]
-            options.period = time.strftime(pformat)
-        except KeyError:
-            options.period = options.period.replace('-', '')
-            if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
-                parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
-        set_period()
-
-    wget_retrieve = WgetRetrieveWrapper(options, log)
-    setup_wget(not options.no_ssl_verify, options.user_agent)
-
-    blogs = options.blogs or DEFAULT_BLOGS
-    if not blogs:
-        parser.error("Missing blog-name")
     if options.count is not None and options.count < 0:
         parser.error('--count: count must not be negative')
     if options.count == 0 and (options.incremental or options.auto is not None):
@@ -1691,44 +1858,16 @@ if __name__ == '__main__':
         parser.error("-O can only be used for a single blog-name")
     if options.dirs and options.tag_index:
         parser.error("-D cannot be used with --tag-index")
-    if options.exif:
-        if pyexiv2 is None:
-            parser.error("--exif: module 'pyexiv2' is not installed")
-        if not hasattr(pyexiv2, 'ImageMetadata'):
-            parser.error("--exif: module 'pyexiv2' is missing features, perhaps you need 'py3exiv2'?")
-    if options.save_video:
-        try:
-            import youtube_dl
-            from youtube_dl.utils import sanitize_filename
-        except ImportError:
-            parser.error("--save-video: module 'youtube_dl' is not installed")
-    if options.save_notes or options.copy_notes:
-        sys.modules['soupsieve'] = ()  # type: ignore[assignment]
-        try:
-            from bs4 import BeautifulSoup
-        except ImportError:
-            parser.error("--{}: module 'bs4' is not installed".format(
-                'save-notes' if options.save_notes else 'copy-notes'
-            ))
     if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
         parser.error('--cookiefile: file cannot be read')
-    if options.save_notes:
-        import note_scraper
-    if options.copy_notes:
-        if not options.prev_archives:
-            parser.error('--copy-notes requires --prev-archives')
+    if options.copy_notes and not options.prev_archives:
+        parser.error('--copy-notes requires --prev-archives')
     if options.notes_limit is not None:
         if not options.save_notes:
             parser.error('--notes-limit requires --save-notes')
         if options.notes_limit < 1:
             parser.error('--notes-limit: Value must be at least 1')
-    if options.filter is not None:
-        if pyjq is None:
-            parser.error("--filter: module 'pyjq' is not installed")
-        options.filter = pyjq.compile(options.filter)
     if options.prev_archives:
-        if scandir is None:
-            parser.error("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
         if len(options.prev_archives) != len(blogs):
             parser.error('--prev-archives: expected {} directories, got {}'.format(
                 len(blogs), len(options.prev_archives),
@@ -1746,11 +1885,16 @@ if __name__ == '__main__':
     if options.threads < 1:
         parser.error('--threads: must use at least one thread')
 
+    check_optional_modules()
+
     if not API_KEY:
         sys.stderr.write('''\
 Missing API_KEY; please get your own API key at
 https://www.tumblr.com/oauth/apps\n''')
         sys.exit(1)
+
+    wget_retrieve = WgetRetrieveWrapper(options, log)
+    setup_wget(not options.no_ssl_verify, options.user_agent)
 
     ApiParser.setup()
     tb = TumblrBackup()
