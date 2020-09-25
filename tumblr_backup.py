@@ -585,6 +585,7 @@ class TumblrBackup:
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
             i = options.skip
+            last_next_before = None
             while True:
                 # find the upper bound
                 log(account, "Getting posts %d to %d (of %d expected)\r" % (i, i + MAX_POSTS - 1, count_estimate))
@@ -596,9 +597,19 @@ class TumblrBackup:
                     continue
 
                 posts = _get_content(soup)
-                # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
-                if not posts or not _backup(posts):
-                    log(account, "Backing up posts found empty set of posts, finishing\r")
+                if not posts:
+                    log(account, "Found empty set of posts, finishing\r")
+                    break
+
+                next_before = soup['response']['_links']['next']['query_params'].get('before')
+                if next_before is not None:
+                    if next_before == last_next_before:
+                        log(account, "Found same API response twice, finishing\r")
+                        break
+                    last_next_before = next_before
+
+                if not _backup(posts):
+                    log(account, "Found last requested post, finishing\r")
                     break
 
                 i += MAX_POSTS
