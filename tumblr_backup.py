@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from glob import glob
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
@@ -327,7 +327,7 @@ def apiparse(base, prev_resps, count, start=0, before=None):
     params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
     if before:
         params['before'] = before
-    if start > 0:
+    if start > 0 and not options.likes:
         params['offset'] = start
     url = base + '?' + urlencode(params)
 
@@ -714,6 +714,16 @@ class TumblrBackup(object):
         f += '</nav></footer>\n'
         return f
 
+    @staticmethod
+    def get_post_timestamps(posts):
+        for post in posts:
+            with io.open(post, encoding=FILE_ENCODING) as pf:
+                soup = BeautifulSoup(pf, 'lxml')
+            postdate = soup.find('time')['datetime']
+            del soup
+            # No datetime.fromisoformat or datetime.timestamp on Python 2
+            yield (datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ') - datetime(1970, 1, 1)) // timedelta(seconds=1)
+
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
 
@@ -744,16 +754,22 @@ class TumblrBackup(object):
         # get the highest post id already saved
         ident_max = None
         if options.incremental:
-            try:
-                ident_max = max(
-                    long(splitext(split(f)[1])[0])
-                    for f in glob(path_to(post_dir, '*' + post_ext))
-                )
-                log.status('Backing up posts after {}\r'.format(ident_max))
-            except ValueError:  # max() arg is an empty sequence
-                pass
-        else:
-            log.status('Getting basic information\r')
+            filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
+            post_glob = glob(path_to(post_dir, filter_))
+            if not post_glob:
+                pass  # No posts to read
+            elif options.likes:
+                # Read every post to find the newest timestamp we've saved.
+                if BeautifulSoup is None:
+                    raise RuntimeError("Incremental likes backup: module 'bs4' is not installed")
+                log('Finding newest liked post (may take a while)\n', account=True)
+                ident_max = max(self.get_post_timestamps(post_glob))
+            else:
+                ident_max = max(long(splitext(split(f)[1])[0]) for f in post_glob)
+            if ident_max is not None:
+                log('Backing up posts after {}\n'.format(ident_max), account=True)
+
+        log.status('Getting basic information\r')
 
         prev_resps, resp = initial_apiparse(base, prev_archive)
         if not resp:
@@ -762,6 +778,10 @@ class TumblrBackup(object):
 
         # collect all the meta information
         if options.likes:
+            if not resp.get('blog', {}).get('share_likes', True):
+                print('{} does not have public likes\n'.format(account))
+                self.errors = True
+                return
             posts_key = 'liked_posts'
             blog = {}
             count_estimate = resp['liked_count']
@@ -785,7 +805,9 @@ class TumblrBackup(object):
                                   key=lambda x: x[0]['id'], reverse=True)
             for p, prf in sorted_posts:
                 post = post_class(p, account, prf, prev_archive)
-                if ident_max and long(post.ident) <= ident_max:
+                if ident_max is None:
+                    pass  # No limit
+                elif (p['liked_timestamp'] if options.likes else long(post.ident)) <= ident_max:
                     return False
                 if options.count and self.post_count >= options.count:
                     return False
@@ -843,6 +865,8 @@ class TumblrBackup(object):
                     log('Backup complete: Found empty set of posts\n', account=True)
                     break
 
+                if options.likes:
+                    before = resp['_links']['next']['query_params']['before']
                 i += MAX_POSTS
         except:
             # ensure proper thread pool termination
