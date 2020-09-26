@@ -979,6 +979,32 @@ class TumblrBackup(object):
         self.title = escape(blog.get('title', account))
         self.subtitle = blog.get('description', '')
 
+        def build_index():
+            log.status('Getting avatar and style\r')
+            get_avatar(prev_archive)
+            get_style(prev_archive)
+            if not have_custom_css:
+                save_style()
+            log.status('Building index\r')
+            ix = Indices(self)
+            ix.build_index()
+            ix.save_index()
+
+            if not os.path.exists(path_to('.complete')):
+                # Make .complete file
+                sf = opendir(save_folder, os.O_RDONLY)
+                try:
+                    os.fdatasync(sf)
+                    with io.open(open_file(lambda f: f, ('.complete',)), 'wb') as f:
+                        os.fsync(f)  # type: ignore
+                    os.fdatasync(sf)
+                finally:
+                    os.close(sf)
+
+        if options.count == 0:
+            build_index()
+            return
+
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
 
@@ -1096,27 +1122,8 @@ class TumblrBackup(object):
             raise
 
         # postprocessing
-        if not options.blosxom and (self.post_count or options.count == 0):
-            log.status('Getting avatar and style\r')
-            get_avatar(prev_archive)
-            get_style(prev_archive)
-            if not have_custom_css:
-                save_style()
-            log.status('Building index\r')
-            ix = Indices(self)
-            ix.build_index()
-            ix.save_index()
-
-        if not os.path.exists(path_to('.complete')):
-            # Make .complete file
-            sf = opendir(save_folder, os.O_RDONLY)
-            try:
-                os.fdatasync(sf)
-                with io.open(open_file(lambda f: f, ('.complete',)), 'wb') as f:
-                    os.fsync(f)  # type: ignore
-                os.fdatasync(sf)
-            finally:
-                os.close(sf)
+        if not options.blosxom and self.post_count:
+            build_index()
 
         log.status(None)
         skipped_msg = (', {} did not match filter'.format(self.filter_skipped)) if self.filter_skipped else ''
