@@ -497,6 +497,8 @@ def get_avatar(prev_archive):
             cpy_res = maybe_copy_media(prev_archive, path_parts)
             if cpy_res:
                 return  # We got the avatar
+        if options.no_get:
+            return  # We don't care if we don't have it
 
     url = 'https://api.tumblr.com/v2/blog/%s/avatar' % blog_name
     avatar_dest = avatar_fpath = open_file(lambda f: f, (theme_dir, avatar_base))
@@ -532,8 +534,8 @@ def get_style(prev_archive):
         # Copy old style, if present
         path_parts = (theme_dir, 'style.css')
         cpy_res = maybe_copy_media(prev_archive, path_parts)
-        if cpy_res:
-            return  # We got the style
+        if cpy_res or options.no_get:
+            return  # We got the style or we don't care
 
     url = 'https://%s/' % blog_name
     try:
@@ -1436,7 +1438,8 @@ class TumblrPost(object):
             path_parts.insert(1, hostdir)
 
         cpy_res = maybe_copy_media(self.prev_archive, path_parts)
-        if not cpy_res:
+        if not cpy_res and not options.no_get:
+            # We don't have the media and we want it
             try:
                 wget_retrieve(url, open_file(lambda f: f, path_parts))
             except WGError as e:
@@ -1841,6 +1844,7 @@ if __name__ == '__main__':
     parser.add_argument('--continue', action='store_true', dest='resume', help='Continue an incomplete first backup')
     parser.add_argument('--continue=ignore', action='store_true', dest='ignore_resume',
                         help='Force backup over an incomplete archive with different options')
+    parser.add_argument('--no-get', action='store_true', help="Don't retrieve files not found in --prev-archives")
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
     blogs = options.blogs or DEFAULT_BLOGS
@@ -1891,6 +1895,10 @@ if __name__ == '__main__':
         options.mtime_postfix = True
     if options.threads < 1:
         parser.error('--threads: must use at least one thread')
+    if options.no_get and not options.prev_archives:
+        parser.error('--no-get requires --prev-archives')
+    if options.no_get and options.save_notes:
+        print('Warning: --save-notes uses HTTP regardless of --no-get')
 
     check_optional_modules()
 
