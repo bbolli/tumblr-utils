@@ -22,6 +22,7 @@ from collections import defaultdict
 from datetime import datetime
 from glob import glob
 from os.path import join, split, splitext
+from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from xml.sax.saxutils import escape
 
 from util import ConnectionFile, HAVE_SSL_CTX, HTTP_TIMEOUT, LockedQueue, PY3, nullcontext, to_bytes, to_unicode
@@ -137,7 +138,7 @@ json_dir = 'json'
 media_dir = 'media'
 archive_dir = 'archive'
 theme_dir = 'theme'
-save_dir = '../'
+save_dir = '..'
 backup_css = 'backup.css'
 custom_css = 'custom.css'
 avatar_base = 'avatar'
@@ -539,8 +540,8 @@ class Index(object):
         with open_text(index_dir, dir_index) as idx:
             idx.write(self.blog.header(title, self.body_class, subtitle, avatar=True))
             if options.tag_index and self.body_class == 'index':
-                idx.write('<p><a href=%s/%s>Tag index</a></p>\n' % (
-                    tag_index_dir, dir_index
+                idx.write('<p><a href={}>Tag index</a></p>\n'.format(
+                    urlpathjoin(tag_index_dir, dir_index)
                 ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, archives, index_dir, year)
@@ -553,9 +554,8 @@ class Index(object):
         for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
             tm = time.localtime(time.mktime((year, month, 3, 0, 0, 0, 0, 0, -1)))
             month_name = self.save_month(archives, index_dir, year, month, tm)
-            idx.write(u'    <li><a href=%s/%s title="%d post(s)">%s</a></li>\n' % (
-                archive_dir, month_name, len(self.index[year][month]),
-                strftime('%B', tm)
+            idx.write(u'    <li><a href={} title="{} post(s)">{}</a></li>\n'.format(
+                urlpathjoin(archive_dir, month_name), len(self.index[year][month]), strftime('%B', tm)
             ))
         idx.write(u'</ul>\n\n')
 
@@ -575,7 +575,7 @@ class Index(object):
                 return archives[i]
             return 0, 0
 
-        FILE_FMT = '%d-%02d-p%s'
+        FILE_FMT = '%d-%02d-p%s%s'
         pages_month = pages_per_month(year, month)
         first_file = None  # type: Optional[str]
         for page, start in enumerate(xrange(0, posts_month, posts_page), start=1):
@@ -583,32 +583,29 @@ class Index(object):
             archive = [self.blog.header(strftime('%B %Y', tm), body_class='archive')]
             archive.extend(p.get_post(self.body_class == 'tag-archive') for p in posts[start:start + posts_page])
 
-            file_name = FILE_FMT % (year, month, page)
+            suffix = '/' if options.dirs else post_ext
+            file_name = FILE_FMT % (year, month, page, suffix)
             if options.dirs:
-                base = save_dir + archive_dir + '/'
-                suffix = '/'
+                base = urlpathjoin(save_dir, archive_dir)
                 arch = open_text(index_dir, archive_dir, file_name, dir_index)
-                file_name += suffix
             else:
                 base = ''
-                suffix = post_ext
-                file_name += suffix
                 arch = open_text(index_dir, archive_dir, file_name)
 
             if page > 1:
-                pp = FILE_FMT % (year, month, page - 1)
+                pp = FILE_FMT % (year, month, page - 1, suffix)
             else:
                 py, pm = next_month(-1)
-                pp = FILE_FMT % (py, pm, pages_per_month(py, pm)) if py else ''
+                pp = FILE_FMT % (py, pm, pages_per_month(py, pm), suffix) if py else ''
                 first_file = file_name
 
             if page < pages_month:
-                np = FILE_FMT % (year, month, page + 1)
+                np = FILE_FMT % (year, month, page + 1, suffix)
             else:
                 ny, nm = next_month(+1)
-                np = FILE_FMT % (ny, nm, 1) if ny else ''
+                np = FILE_FMT % (ny, nm, 1, suffix) if ny else ''
 
-            archive.append(self.blog.footer(base, pp, np, suffix))
+            archive.append(self.blog.footer(base, pp, np))
 
             arch.write('\n'.join(archive))
 
@@ -646,7 +643,7 @@ class Indices(object):
 
     def save_tag_index(self):
         global save_dir
-        save_dir = '../../../'
+        save_dir = '../../..'
         mkdir(path_to(tag_index_dir))
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, avatar=True), '<ul>']
         for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
@@ -654,8 +651,8 @@ class Indices(object):
             index.save_index(tag_index_dir + os.sep + digest,
                 u"Tag ‛%s’" % index.name
             )
-            tag_index.append(u'    <li><a href=%s/%s>%s</a></li>' % (
-                digest, dir_index, escape(index.name)
+            tag_index.append(u'    <li><a href={}>{}</a></li>'.format(
+                urlpathjoin(digest, dir_index), escape(index.name)
             ))
         tag_index.extend(['</ul>', ''])
         with open_text(tag_index_dir, dir_index) as f:
@@ -680,9 +677,9 @@ class TumblrBackup(object):
 
     def header(self, title='', body_class='', subtitle='', avatar=False):
         root_rel = {
-            'index': '', 'tag-index': '../', 'tag-archive': '../../'
+            'index': '', 'tag-index': '..', 'tag-archive': '../..'
         }.get(body_class, save_dir)
-        css_rel = root_rel + (custom_css if have_custom_css else backup_css)
+        css_rel = urlpathjoin(root_rel, custom_css if have_custom_css else backup_css)
         if body_class:
             body_class = ' class=' + body_class
         h = u'''<!DOCTYPE html>
@@ -698,7 +695,7 @@ class TumblrBackup(object):
         if avatar:
             f = glob(path_to(theme_dir, avatar_base + '.*'))
             if f:
-                h += '<img src=%s%s/%s alt=Avatar>\n' % (root_rel, theme_dir, split(f[0])[1])
+                h += '<img src={} alt=Avatar>\n'.format(urlpathjoin(root_rel, theme_dir, split(f[0])[1]))
         if title:
             h += u'<h1>%s</h1>\n' % title
         if subtitle:
@@ -707,13 +704,13 @@ class TumblrBackup(object):
         return h
 
     @staticmethod
-    def footer(base, previous_page, next_page, suffix):
+    def footer(base, previous_page, next_page):
         f = '<footer><nav>'
-        f += '<a href=%s%s rel=index>Index</a>\n' % (save_dir, dir_index)
+        f += '<a href={} rel=index>Index</a>\n'.format(urlpathjoin(save_dir, dir_index))
         if previous_page:
-            f += '| <a href=%s%s%s rel=prev>Previous</a>\n' % (base, previous_page, suffix)
+            f += '| <a href={} rel=prev>Previous</a>\n'.format(urlpathjoin(base, previous_page))
         if next_page:
-            f += '| <a href=%s%s%s rel=next>Next</a>\n' % (base, next_page, suffix)
+            f += '| <a href={} rel=next>Next</a>\n'.format(urlpathjoin(base, next_page))
         f += '</nav></footer>\n'
         return f
 
@@ -734,7 +731,7 @@ class TumblrBackup(object):
             media_folder = path_to(media_dir)
             if options.dirs:
                 post_ext = ''
-                save_dir = '../../'
+                save_dir = '../..'
                 mkdir(path_to(post_dir), recursive=True)
             else:
                 mkdir(save_folder, recursive=True)
@@ -907,7 +904,7 @@ class TumblrPost(object):
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
         self.llink = self.ident if options.dirs else self.file_name
         self.media_dir = join(post_dir, self.ident) if options.dirs else media_dir
-        self.media_url = save_dir + self.media_dir
+        self.media_url = urlpathjoin(save_dir, self.media_dir)
         self.media_folder = path_to(self.media_dir)
 
     def save_content(self):
@@ -1002,7 +999,7 @@ class TumblrPost(object):
                     if audio_url.startswith('https://a.tumblr.com/'):
                         src = self.get_media_url(audio_url, '.mp3')
                     elif audio_url.startswith('https://www.tumblr.com/audio_file/'):
-                        audio_url = u'https://a.tumblr.com/%so1.mp3' % audio_url.split('/')[-1]
+                        audio_url = u'https://a.tumblr.com/{}o1.mp3'.format(urlbasename(urlparse(audio_url).path))
                         src = self.get_media_url(audio_url, '.mp3')
                 elif post['audio_type'] == 'soundcloud':
                     src = self.get_media_url(audio_url, '.mp3')
@@ -1068,17 +1065,17 @@ class TumblrPost(object):
                 ydl.extract_info(youtube_url, download=True)
             except Exception:
                 return ''
-        return u'%s/%s' % (self.media_url, split(media_filename)[1])
+        return urlpathjoin(self.media_url, split(media_filename)[1])
 
     def get_media_url(self, media_url, extension):
         if not media_url:
             return ''
         media_filename = self.get_filename(media_url)
-        media_filename = os.path.splitext(media_filename)[0] + extension
+        media_filename = urlsplitext(media_filename)[0] + extension
         saved_name = self.download_media(media_url, media_filename)
         if saved_name is not None:
-            media_filename = u'%s/%s' % (self.media_url, saved_name)
-        return media_filename
+            return urlpathjoin(self.media_url, saved_name)
+        return media_url
 
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
@@ -1088,7 +1085,7 @@ class TumblrPost(object):
         if saved_name is not None:
             if options.exif and saved_name.endswith('.jpg'):
                 add_exif(join(self.media_folder, saved_name), set(self.tags))
-            image_url = u'%s/%s' % (self.media_url, saved_name)
+            return urlpathjoin(self.media_url, saved_name)
         return image_url
 
     @staticmethod
@@ -1143,11 +1140,12 @@ class TumblrPost(object):
 
     def get_filename(self, url, offset=''):
         """Determine the image file name depending on options.image_names"""
+        fname = urlbasename(urlparse(url).path)
+        ext = urlsplitext(fname)[1]
         if options.image_names == 'i':
-            return self.ident + offset
+            return self.ident + offset + ext
         if options.image_names == 'bi':
-            return self.backup_account + '_' + self.ident + offset
-        fname = url.split('/')[-1]
+            return self.backup_account + '_' + self.ident + offset + ext
         # delete characters not allowed under Windows
         return re.sub(r'[:<>"/\\|*?]', '', fname) if os.name == 'nt' else fname
 
@@ -1200,7 +1198,7 @@ class TumblrPost(object):
         if options.likes:
             post += u'<p><a href=\"https://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
         post += u'<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
-        post += u'<a class=llink href=%s%s/%s>¶</a>\n' % (save_dir, post_dir, self.llink)
+        post += u'<a class=llink href={}>¶</a>\n'.format(urlpathjoin(save_dir, post_dir, self.llink))
         post += u'<a href=%s>●</a>\n' % self.shorturl
         if self.reblogged_from and self.reblogged_from != self.reblogged_root:
             post += u'<a href=%s>⬀</a>\n' % self.reblogged_from
@@ -1318,8 +1316,7 @@ class TumblrPost(object):
             url = 'https:' + url
         if transform is not None:
             url = transform(url)
-        path = urlparse(url).path
-        filename = path.split('/')[-1]
+        filename = urlbasename(urlparse(url).path)
         return url, filename
 
 
@@ -1349,7 +1346,7 @@ class LocalPost(object):
                 self.tags = re.findall(r'<a.+?/tagged/(.+?)>#(.+?)</a>', post[footer_pos:])
         parts = post_file.split(os.sep)
         if parts[-1] == dir_index:  # .../<post_id>/index.html
-            self.file_name = os.sep.join(parts[-2:])
+            self.file_name = join(*parts[-2:])
             self.ident = parts[-2]
         else:
             self.file_name = parts[-1]
@@ -1369,8 +1366,8 @@ class LocalPost(object):
         post = '\n'.join(lines)
         if in_tag_index:
             # fixup all media links which now have to be two folders lower
-            shallow_media = '../' + media_dir
-            deep_media = save_dir + media_dir
+            shallow_media = urlpathjoin('..', media_dir)
+            deep_media = urlpathjoin(save_dir, media_dir)
             post = post.replace(shallow_media, deep_media)
         return post
 
