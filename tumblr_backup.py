@@ -1215,7 +1215,7 @@ if __name__ == '__main__':
     if options.dirs and options.tag_index:
         parser.error("-D cannot be used with --tag-index")
     if options.exif and not pyexiv2:
-        parser.error("--exif: module 'pyexif2' is not installed")
+        parser.error("--exif: module 'pyexiv2' is not installed")
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
 
