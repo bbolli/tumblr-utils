@@ -162,7 +162,9 @@ except locale.Error:
 FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
-MUST_MATCH_OPTIONS = ('dirs', 'likes', 'blosxom', 'hostdirs', 'image_names')
+PREV_MUST_MATCH_OPTIONS = ('likes', 'blosxom')
+MEDIA_PATH_OPTIONS = ('dirs', 'hostdirs', 'image_names')
+MUST_MATCH_OPTIONS = PREV_MUST_MATCH_OPTIONS + MEDIA_PATH_OPTIONS
 BACKUP_CHANGING_OPTIONS = (
     'save_images', 'save_video', 'save_video_tumblr', 'save_audio', 'save_notes', 'copy_notes', 'notes_limit', 'json',
     'count', 'skip', 'period', 'request', 'filter', 'no_reblog', 'exif', 'prev_archives')
@@ -555,11 +557,13 @@ def get_style(prev_archive):
 
 
 # Copy media file, if present in prev_archive
-def maybe_copy_media(prev_archive, path_parts):
+def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
     if prev_archive is None:
         return False  # Source does not exist
+    if pa_path_parts is None:
+        pa_path_parts = path_parts  # Default
 
-    srcpath = join(prev_archive, *path_parts)
+    srcpath = join(prev_archive, *pa_path_parts)
     dstpath = open_file(lambda f: f, path_parts)
 
     if PY3:
@@ -764,6 +768,7 @@ class TumblrBackup(object):
         self.filter_skipped = 0
         self.title = None  # type: Optional[Text]
         self.subtitle = None  # type: Optional[str]
+        self.pa_options = None  # type: Optional[JSONDict]
 
     def exit_code(self):
         if self.errors:
@@ -865,19 +870,20 @@ class TumblrBackup(object):
                                    'archive. Delete the old backup to start fresh, or skip this check with '
                                    '--continue=ignore.'.format(account, opts.this(backdiff), opts.first(backdiff)))
 
+        pa_options = None
         if prev_archive is not None:
             try:
                 with io.open(join(prev_archive, '.first_run_options'), encoding=FILE_ENCODING) as f:
-                    pa_first_run_options = json.load(f)
+                    pa_options = json.load(f)
             except EnvironmentError as e:
                 if getattr(e, 'errno', None) != errno.ENOENT:
                     raise
-                pa_first_run_options = None
+                pa_options = None
 
             # These options must always match
-            if pa_first_run_options is not None:
-                pa_opts = Options(pa_first_run_options)
-                mustmatchdiff = tuple(filter(pa_opts.differs, MUST_MATCH_OPTIONS))
+            if pa_options is not None:
+                pa_opts = Options(pa_options)
+                mustmatchdiff = tuple(filter(pa_opts.differs, PREV_MUST_MATCH_OPTIONS))
                 if mustmatchdiff:
                     raise RuntimeError('{}: The script was given {} but the previous archive was made with {}'.format(
                         account, pa_opts.this(mustmatchdiff), pa_opts.first(mustmatchdiff)))
@@ -904,7 +910,12 @@ class TumblrBackup(object):
                 with open_text('.first_run_options') as f:
                     f.write(to_unicode(json.dumps(orig_options)))
 
-        return oldest_tstamp
+        if pa_options is None and prev_archive is not None:
+            # Fallback assumptions
+            log('Warning: Unknown media path options for previous archive, assuming they match ours\n', account=True)
+            pa_options = {opt: getattr(options, opt) for opt in MEDIA_PATH_OPTIONS}
+
+        return oldest_tstamp, pa_options
 
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -933,7 +944,7 @@ class TumblrBackup(object):
         self.post_count = 0
         self.filter_skipped = 0
 
-        oldest_tstamp = self.process_existing_backup(account, prev_archive)
+        oldest_tstamp, self.pa_options = self.process_existing_backup(account, prev_archive)
         check_optional_modules()
 
         # get the highest post id already saved
@@ -1022,7 +1033,7 @@ class TumblrBackup(object):
             sorted_posts = sorted(zip(posts, post_respfiles), key=sort_key, reverse=True)
             for p, prf in sorted_posts:
                 no_internet.check()
-                post = post_class(p, account, prf, prev_archive)
+                post = post_class(p, account, prf, prev_archive, self.pa_options)
                 if ident_max is None:
                     pass  # No limit
                 elif (p['liked_timestamp'] if options.likes else long(post.ident)) <= ident_max:
@@ -1139,13 +1150,14 @@ class TumblrBackup(object):
 class TumblrPost(object):
     post_header = ''  # set by TumblrBackup.backup()
 
-    def __init__(self, post, backup_account, respfile, prev_archive):
-        # type: (JSONDict, str, Text, Text) -> None
+    def __init__(self, post, backup_account, respfile, prev_archive, pa_options):
+        # type: (JSONDict, str, Text, Text, Optional[JSONDict]) -> None
         self.content = ''
         self.post = post
         self.backup_account = backup_account
         self.respfile = respfile
         self.prev_archive = prev_archive
+        self.pa_options = pa_options
         self.creator = post.get('blog_name') or post['tumblelog']
         self.ident = str(post['id'])
         self.url = post['post_url']
@@ -1339,9 +1351,7 @@ class TumblrPost(object):
     def get_media_url(self, media_url, extension):
         if not media_url:
             return ''
-        media_filename = self.get_filename(media_url)
-        media_filename = urlsplitext(media_filename)[0] + extension
-        saved_name = self.download_media(media_url, media_filename)
+        saved_name = self.download_media(media_url, extension=extension)
         if saved_name is not None:
             return urlpathjoin(self.media_url, saved_name)
         return media_url
@@ -1349,8 +1359,7 @@ class TumblrPost(object):
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
         the original URL in case of download errors."""
-        image_filename = self.get_filename(image_url, '_o%s' % offset if offset else '')
-        saved_name = self.download_media(image_url, image_filename)
+        saved_name = self.download_media(image_url, offset='_o%s' % offset if offset else '')
         if saved_name is not None:
             if options.exif and saved_name.endswith('.jpg'):
                 add_exif(join(self.media_folder, saved_name), set(self.tags))
@@ -1370,7 +1379,7 @@ class TumblrPost(object):
         image_url, image_filename = self._parse_url_match(match, transform=self.maxsize_image_url)
         if not image_filename or not image_url.startswith('http'):
             return match.group(0)
-        saved_name = self.download_media(image_url, image_filename)
+        saved_name = self.download_media(image_url, filename=image_filename)
         if saved_name is None:
             return match.group(0)
         return u'%s%s/%s%s' % (match.group(1), self.media_url,
@@ -1383,7 +1392,7 @@ class TumblrPost(object):
         poster_url, poster_filename = self._parse_url_match(match)
         if not poster_filename or not poster_url.startswith('http'):
             return match.group(0)
-        saved_name = self.download_media(poster_url, poster_filename)
+        saved_name = self.download_media(poster_url, filename=poster_filename)
         if saved_name is None:
             return match.group(0)
         # get rid of autoplay and muted attributes to align with normal video
@@ -1407,9 +1416,9 @@ class TumblrPost(object):
             return match.group(0)
         return u'%s%s%s' % (match.group(1), saved_name, match.group(3))
 
-    def get_filename(self, url, offset=''):
+    def get_filename(self, url_path, image_names, offset=''):
         """Determine the image file name depending on options.image_names"""
-        fname = urlbasename(urlparse(url).path)
+        fname = urlbasename(url_path)
         ext = urlsplitext(fname)[1]
         if options.image_names == 'i':
             return self.ident + offset + ext
@@ -1418,7 +1427,7 @@ class TumblrPost(object):
         # delete characters not allowed under Windows
         return re.sub(r'[:<>"/\\|*?]', '', fname) if os.name == 'nt' else fname
 
-    def download_media(self, url, filename):
+    def download_media(self, url, filename=None, offset='', extension=None):
         parsed_url = urlparse(url, 'http')
         if parsed_url.scheme not in ('http', 'https') or not parsed_url.hostname:
             return None  # This URL does not follow our basic assumptions
@@ -1433,11 +1442,27 @@ class TumblrPost(object):
         if parsed_url.port not in (None, (80 if parsed_url.scheme == 'http' else 443)):
             hostdir += '{}{}'.format('+' if os.name == 'nt' else ':', parsed_url.port)
 
-        path_parts = [self.media_dir, filename]
-        if options.hostdirs:
-            path_parts.insert(1, hostdir)
+        def get_path(media_dir, image_names, hostdirs):
+            if filename is not None:
+                fname = filename
+            else:
+                fname = self.get_filename(parsed_url.path, image_names, offset)
+                if extension is not None:
+                    fname = splitext(fname)[0] + extension
+            parts = (media_dir,) + ((hostdir,) if hostdirs else ()) + (fname,)
+            return parts
 
-        cpy_res = maybe_copy_media(self.prev_archive, path_parts)
+        path_parts = get_path(self.media_dir, options.image_names, options.hostdirs)
+
+        if self.prev_archive is None:
+            cpy_res = False
+        else:
+            assert self.pa_options is not None
+            pa_path_parts = get_path(
+                join(post_dir, self.ident) if self.pa_options['dirs'] else media_dir,
+                self.pa_options['image_names'], self.pa_options['hostdirs'],
+            )
+            cpy_res = maybe_copy_media(self.prev_archive, path_parts, pa_path_parts)
         if not cpy_res and not options.no_get:
             # We don't have the media and we want it
             try:
@@ -1446,7 +1471,7 @@ class TumblrPost(object):
                 e.log()
                 return None
 
-        return filename
+        return path_parts[-1]
 
     def get_post(self):
         """returns this post in HTML"""
@@ -1898,7 +1923,7 @@ if __name__ == '__main__':
     if options.no_get and not options.prev_archives:
         parser.error('--no-get requires --prev-archives')
     if options.no_get and options.save_notes:
-        print('Warning: --save-notes uses HTTP regardless of --no-get')
+        print('Warning: --save-notes uses HTTP regardless of --no-get', file=sys.stderr)
 
     check_optional_modules()
 
