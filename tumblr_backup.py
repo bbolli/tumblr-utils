@@ -1219,6 +1219,12 @@ if __name__ == '__main__':
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
 
+    if not API_KEY:
+        sys.stderr.write('''\
+Missing API_KEY; please get your own API key at
+https://www.tumblr.com/oauth/apps\n''')
+        sys.exit(1)
+
     tb = TumblrBackup()
     try:
         for account in args:

@@ -20,7 +20,14 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
    or clone the Github repo from `git://github.com/bbolli/tumblr-utils.git`.
 2. Copy or symlink `tumblr_backup.py` to a directory on your `$PATH` like
    `~/bin` or `/usr/local/bin`.
-3. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
+3. Get your personal Tumblr API key. Before June 2020, the author's API key
+   was distributed with the source code, the then Tumblr denied access using
+   this key. Now, each user needs to get their own key at
+   <https://www.tumblr.com/oauth/apps>. Follow the instructions there; most
+   values entered don't matter. The API key must then be copied between the
+   single quotes in the source code at around line 105 (the line starts with
+   `API_KEY = `).
+4. Run `tumblr_backup.py` _blog-name_ as often as you like manually or from a
    cron job. The recommendation is to do a hourly incremental backup and a
    daily complete one.
 
