@@ -598,7 +598,7 @@ class TumblrBackup:
                 posts = _get_content(soup)
                 # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
                 if not posts or not _backup(posts):
-                    log(account, "Backing up posts found empty set of posts, finishing\r")
+                    log(account, "done\r")
                     break
 
                 i += MAX_POSTS
