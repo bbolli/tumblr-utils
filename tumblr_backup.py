@@ -823,15 +823,11 @@ class TumblrPost:
     def get_image_url(self, image_url, offset):
         """Saves an image if not saved yet. Returns the new URL or
         the original URL in case of download errors."""
-
-        def _addexif(fn):
-            if options.exif and fn.endswith('.jpg'):
-                add_exif(fn, set(self.tags))
-
         image_filename = self.get_filename(image_url, '_o%s' % offset if offset else '')
         saved_name = self.download_media(image_url, image_filename)
         if saved_name is not None:
-            _addexif(join(self.media_folder, saved_name))
+            if options.exif and saved_name.endswith('.jpg'):
+                add_exif(join(self.media_folder, saved_name), set(self.tags))
             image_url = u'%s/%s' % (self.media_url, saved_name)
         return image_url
 
