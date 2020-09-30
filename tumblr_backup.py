@@ -898,6 +898,7 @@ class TumblrBackup(object):
             if options.resume and post_glob:
                 log('Found incomplete backup. Finding oldest post (may take a while)\n', account=True)
                 oldest_tstamp = min(cls.get_post_timestamps(post_glob, 'continue incomplete backup'))
+                log('Backing up posts before timestamp={}\n'.format(oldest_tstamp), account=True)
 
         if first_run_options is not None and options.resume:
             # Load saved options, unless they were overridden with --ignore-diffopt
@@ -961,10 +962,10 @@ class TumblrBackup(object):
                 # Read every post to find the newest timestamp we've saved.
                 log('Finding newest liked post (may take a while)\n', account=True)
                 ident_max = max(self.get_post_timestamps(post_glob, 'backup likes incrementally'))
+                log('Backing up posts after timestamp={}\n'.format(ident_max), account=True)
             else:
                 ident_max = max(long(splitext(split(f)[1])[0]) for f in post_glob)
-            if ident_max is not None:
-                log('Backing up posts after {}\n'.format(ident_max), account=True)
+                log('Backing up posts after id={}\n'.format(ident_max), account=True)
 
         log.status('Getting basic information\r')
 
