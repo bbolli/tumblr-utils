@@ -241,8 +241,7 @@ def path_to(*parts):
 
 
 def open_file(open_fn, parts):
-    if len(parts) > 1:
-        mkdir(path_to(*parts[:-1]), (len(parts) > 2))
+    mkdir(path_to(*parts[:-1]), recursive=True)
     return open_fn(path_to(*parts))
 
 
@@ -895,7 +894,11 @@ class TumblrBackup(object):
             # Read every post to find the oldest timestamp we've saved.
             filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
             post_glob = glob(path_to(post_dir, filter_))
-            if options.resume and post_glob:
+            if not options.resume:
+                pass  # No timestamp needed but may want to know if posts are present
+            elif not post_glob:
+                raise RuntimeError('{}: Cannot continue empty backup'.format(account))
+            else:
                 log('Found incomplete backup. Finding oldest post (may take a while)\n', account=True)
                 oldest_tstamp = min(cls.get_post_timestamps(post_glob, 'continue incomplete backup'))
                 log('Backing up posts before timestamp={}\n'.format(oldest_tstamp), account=True)
@@ -939,9 +942,6 @@ class TumblrBackup(object):
             if options.dirs:
                 post_ext = ''
                 save_dir = '../..'
-                mkdir(path_to(post_dir), recursive=True)
-            else:
-                mkdir(save_folder, recursive=True)
             post_class = TumblrPost
             have_custom_css = os.access(path_to(custom_css), os.R_OK)
 
