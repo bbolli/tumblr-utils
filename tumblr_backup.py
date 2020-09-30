@@ -858,17 +858,19 @@ class TumblrBackup(object):
             backdiff = tuple(filter(opts.differs, BACKUP_CHANGING_OPTIONS))
             if options.resume:
                 backdiff_nondef = tuple(opt for opt in backdiff if orig_options[opt] != parser.get_default(opt))
-                if backdiff_nondef:
-                    raise RuntimeError('{}: The script was given {} but the existing backup was made with {}'.format(
-                        account, opts.this(backdiff_nondef), opts.first(backdiff_nondef)))
+                if backdiff_nondef and not options.ignore_diffopt:
+                    raise RuntimeError('{}: The script was given {} but the existing backup was made with {}. You may '
+                                       'skip this check with --ignore-diffopt.'.format(
+                                            account, opts.this(backdiff_nondef), opts.first(backdiff_nondef)))
             elif complete_backup:
                 pass  # Complete archives may be added to with different options
             elif not backdiff:
                 raise RuntimeError('{}: Found incomplete archive, try --continue'.format(account))
-            elif not options.ignore_resume:
+            elif not options.ignore_diffopt:
                 raise RuntimeError('{}: Refusing to make a different backup (with {} instead of {}) over an incomplete '
                                    'archive. Delete the old backup to start fresh, or skip this check with '
-                                   '--continue=ignore.'.format(account, opts.this(backdiff), opts.first(backdiff)))
+                                   '--ignore-diffopt (optionally with --continue).'.format(
+                                       account, opts.this(backdiff), opts.first(backdiff)))
 
         pa_options = None
         if prev_archive is not None:
@@ -898,9 +900,10 @@ class TumblrBackup(object):
                 oldest_tstamp = min(cls.get_post_timestamps(post_glob, 'continue incomplete backup'))
 
         if first_run_options is not None and options.resume:
-            # Load saved options
+            # Load saved options, unless they were overridden with --ignore-diffopt
             for opt in BACKUP_CHANGING_OPTIONS:
-                setattr(options, opt, first_run_options[opt])
+                if opt not in backdiff_nondef:
+                    setattr(options, opt, first_run_options[opt])
         else:
             # Load original options
             for opt in BACKUP_CHANGING_OPTIONS:
@@ -1867,7 +1870,7 @@ if __name__ == '__main__':
     parser.add_argument('--user-agent', help='User agent string to use with HTTP requests')
     parser.add_argument('--threads', type=int, default=20, help='number of threads to use for post retrieval')
     parser.add_argument('--continue', action='store_true', dest='resume', help='Continue an incomplete first backup')
-    parser.add_argument('--continue=ignore', action='store_true', dest='ignore_resume',
+    parser.add_argument('--ignore-diffopt', action='store_true',
                         help='Force backup over an incomplete archive with different options')
     parser.add_argument('--no-get', action='store_true', help="Don't retrieve files not found in --prev-archives")
     parser.add_argument('blogs', nargs='*')
@@ -1878,8 +1881,8 @@ if __name__ == '__main__':
 
     if not blogs:
         parser.error('Missing blog-name')
-    if sum(1 for arg in ('resume', 'ignore_resume', 'incremental', 'auto') if getattr(options, arg) not in (None, False)) > 1:
-        parser.error('Only one of --continue, --continue=ignore, --incremental, or --auto may be given')
+    if sum(1 for arg in ('resume', 'incremental', 'auto') if getattr(options, arg) not in (None, False)) > 1:
+        parser.error('Only one of --continue, --incremental, or --auto may be given')
     if options.auto is not None and options.auto != time.localtime().tm_hour:
         options.incremental = True
     if options.count is not None and options.count < 0:
