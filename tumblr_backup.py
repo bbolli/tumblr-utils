@@ -866,7 +866,11 @@ class TumblrBackup(object):
                     break
 
                 if options.likes:
-                    before = resp['_links']['next']['query_params']['before']
+                    next_ = resp['_links'].get('next')
+                    if next_ is None:
+                        log.status('Backing up posts found end of likes, finishing\r')
+                        break
+                    before = next_['query_params']['before']
                 i += MAX_POSTS
         except:
             # ensure proper thread pool termination
