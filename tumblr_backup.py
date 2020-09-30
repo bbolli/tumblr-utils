@@ -94,6 +94,11 @@ except ImportError:
         except ImportError:
             raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
 
+try:
+    from http import client as httplib
+except ImportError:
+    import httplib  # type: ignore
+
 # These builtins have new names in Python 3
 try:
     long, xrange  # type: ignore[has-type]
@@ -314,6 +319,7 @@ def set_period(period):
 
 
 class ApiParser(object):
+    TRY_LIMIT = 2
     session = None  # type: Optional[requests.Session]
 
     def __init__(self, base, account):
@@ -387,30 +393,33 @@ class ApiParser(object):
         if start > 0 and not options.likes:
             params['offset'] = start
 
-        sleep_dur = 30  # in seconds
-        while True:
-            doc = self._get_resp(base, params, headers)
-            if doc is None:
-                return None
-            status = doc['meta']['status']
-            if status != 429:
-                break
-            time.sleep(sleep_dur)
-            sleep_dur *= 2
-        if status != 200:
+        try:
+            doc, status, reason = self._get_resp(base, params, headers)
+        except (EnvironmentError, HTTPError) as e:
+            log('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
+            return None
+
+        if not 200 <= status < 300:
             # Detect dashboard-only blogs by the error codes
-            if self.dashboard_only_blog is None and status == 404:
+            if status == 404 and doc is not None and self.dashboard_only_blog is None:
                 errors = doc.get('errors', ())
                 if len(errors) == 1 and errors[0].get('code') == 4012:
                     self.dashboard_only_blog = True
                     log('Found dashboard-only blog, trying svc API\n', account=True)
                     return self.apiparse(count, start)  # Recurse once
-            log('API response has non-200 status:\n{}\n'.format(doc))
+            log('URL is {}?{}\n{} API repsonse: HTTP {} {}\n{}'.format(
+                base, urlencode(params),
+                'Error retrieving' if doc is None else 'Non-OK',
+                status, reason,
+                '' if doc is None else '{}\n'.format(doc),
+            ))
             if status == 401 and self.dashboard_only_blog:
                 log("This is a dashboard-only blog, so you probably don't have the right cookies.{}\n".format(
                     '' if options.cookiefile else ' Try --cookiefile.',
                 ))
             return None
+        if doc is None:
+            return None  # OK status but invalid JSON
         # If the first API request succeeds, it's a public blog
         if self.dashboard_only_blog is None:
             self.dashboard_only_blog = False
@@ -422,31 +431,78 @@ class ApiParser(object):
 
     def _get_resp(self, base, params, headers):
         assert self.session is not None
+        try_count = 0
         while True:
             try:
                 with self.session.get(base, params=params, headers=headers) as resp:
-                    if not (200 <= resp.status_code < 300 or 400 <= resp.status_code < 500):
-                        log('URL is {}?{}\nError retrieving API repsonse: HTTP {} {}\n'.format(
-                            base, urlencode(params), resp.status_code, resp.reason,
-                        ))
-                        return None
+                    try_count += 1
+                    doc = None
                     ctype = resp.headers.get('Content-Type')
-                    if ctype and ctype.split(';', 1)[0].strip() != 'application/json':
+                    if not (200 <= resp.status_code < 300 or 400 <= resp.status_code < 500):
+                        pass  # Server error, will not attempt to read body
+                    elif ctype and ctype.split(';', 1)[0].strip() != 'application/json':
                         log("Unexpected Content-Type: '{}'\n".format(ctype))
-                        return None
-                    try:
-                        return resp.json()
-                    except ValueError as e:
-                        log('{}: {}\n{} {} {}\n{!r}\n'.format(
-                            e.__class__.__name__, e, resp.status_code, resp.reason, ctype, resp.content.decode('utf-8'),
-                        ))
-                        return None
-            except (EnvironmentError, HTTPError) as e:
-                if isinstance(e, HTTPError) and not is_dns_working(timeout=5):
+                    else:
+                        try:
+                            doc = resp.json()
+                        except ValueError as e:
+                            log('{}: {}\n{} {} {}\n{!r}\n'.format(
+                                e.__class__.__name__, e, resp.status_code, resp.reason, ctype,
+                                resp.content.decode('utf-8'),
+                            ))
+                    status = resp.status_code if doc is None else doc['meta']['status']
+                    if status == 429 and try_count < self.TRY_LIMIT and self._ratelimit_sleep(resp.headers):
+                        continue
+                    return doc, status, resp.reason if doc is None else httplib.responses.get(status, '(unknown)')
+            except HTTPError:
+                if not is_dns_working(timeout=5):
                     no_internet.signal()
                     continue
-                log('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
-                return None
+                raise
+
+    @staticmethod
+    def _ratelimit_sleep(headers):
+        # Daily ratelimit
+        if headers.get('X-Ratelimit-Perday-Remaining') == '0':
+            reset = headers.get('X-Ratelimit-Perday-Reset')
+            try:
+                freset = float(reset)  # type: Optional[float]
+            except ValueError:
+                log("Expected numerical X-Ratelimit-Perday-Reset, got '{}'\n".format(reset))
+                freset = None
+            if freset is not None:
+                treset = datetime.now() + timedelta(seconds=freset)
+            raise RuntimeError('{}: Daily API ratelimit exceeded. Resume with --continue after reset {}.\n'.format(
+                log.backup_account, 'sometime tomorrow' if freset is None else 'at {}'.format(treset.ctime())
+            ))
+
+        # Hourly ratelimit
+        reset = headers.get('X-Ratelimit-Perhour-Reset')
+        if reset is None:
+            return False
+
+        try:
+            sleep_dur = float(reset)
+        except ValueError:
+            log("Expected numerical X-Ratelimit-Perhour-Reset, got '{}'\n".format(reset), account=True)
+            return False
+
+        hours, remainder = divmod(abs(sleep_dur), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        sleep_dur_str = ' '.join(str(int(t[0])) + t[1] for t in ((hours, 'h'), (minutes, 'm'), (seconds, 's')) if t[0])
+
+        if sleep_dur < 0:
+            log('Warning: X-Ratelimit-Perhour-Reset is {} in the past\n'.format(sleep_dur_str), account=True)
+            return True
+        if sleep_dur > 3600:
+            treset = datetime.now() + timedelta(seconds=sleep_dur)
+            raise RuntimeError('{}: Refusing to sleep for {}. Resume with --continue at {}.'.format(
+                log.backup_account, sleep_dur_str, treset.ctime(),
+            ))
+
+        log('Hit hourly ratelimit, sleeping for {} as requested\n'.format(sleep_dur_str), account=True)
+        time.sleep(sleep_dur + 1)  # +1 to be sure we're past the reset
+        return True
 
 
 def add_exif(image_name, tags):

@@ -110,27 +110,24 @@ class WebCrawler(object):
         )))
 
     def ratelimit_sleep(self, headers):
-        rlr = headers.get('X-Rate-Limit-Reset')
-        if rlr is None:
+        reset = headers.get('X-Rate-Limit-Reset')
+        if reset is None:
             return False
 
         try:
-            irlr = int(rlr)
+            sleep_dur = float(reset)
         except ValueError:
-            log(self.lasturl, "Expected integer X-Rate-Limit-Reset, got '{}'".format(rlr))
+            log(self.lasturl, "Expected numerical X-Rate-Limit-Reset, got '{}'".format(reset))
             return False
 
-        now = time.time()
-        if irlr < now:
-            log(self.lasturl, 'Warning: X-Rate-Limit-Reset is {} seconds in the past'.format(now - irlr))
+        if sleep_dur < 0:
+            log(self.lasturl, 'Warning: X-Rate-Limit-Reset is {} seconds in the past'.format(-sleep_dur))
             return True
-
-        sleep_dur = irlr - now
-        if sleep_dur > 20 * 60:
+        if sleep_dur > 3600:
             log(self.lasturl, 'Refusing to sleep for {} minutes, giving up'.format(round(sleep_dur / 60)))
             return False
 
-        log(self.lasturl, 'Rate limited, sleeping for {} seconds as requested'.format(round(sleep_dur)))
+        log(self.lasturl, 'Rate limited, sleeping for {} seconds as requested'.format(sleep_dur))
         time.sleep(sleep_dur)
         return True
 
