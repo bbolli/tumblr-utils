@@ -19,6 +19,7 @@ import signal
 import sys
 import threading
 import time
+import traceback
 from collections import defaultdict
 from datetime import datetime, timedelta
 from glob import glob
@@ -1075,7 +1076,7 @@ class TumblrBackup(object):
                         no_internet.check(release=True)
                         # All conditions false, wait for a change
                         multicond.wait((backup_pool.queue.not_full, no_internet.cond))
-                    backup_pool.add_work(post.save_content)
+                    backup_pool.add_work(post.save_post)
 
                 self.post_count += 1
                 if options.count and self.post_count >= options.count:
@@ -1138,6 +1139,9 @@ class TumblrBackup(object):
             backup_pool.cancel()  # ensure proper thread pool termination
             raise
 
+        if backup_pool.errors:
+            self.errors = True
+
         # postprocessing
         if not options.blosxom and self.post_count:
             build_index()
@@ -1156,7 +1160,6 @@ class TumblrPost(object):
 
     def __init__(self, post, backup_account, respfile, prev_archive, pa_options):
         # type: (JSONDict, str, Text, Text, Optional[JSONDict]) -> None
-        self.content = ''
         self.post = post
         self.backup_account = backup_account
         self.respfile = respfile
@@ -1187,7 +1190,7 @@ class TumblrPost(object):
         self.media_url = urlpathjoin(save_dir, self.media_dir)
         self.media_folder = path_to(self.media_dir)
 
-    def save_content(self):
+    def get_content(self):
         """generates the content for this post"""
         post = self.post
         content = []
@@ -1307,13 +1310,13 @@ class TumblrPost(object):
             log(u"Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
             append(escape(self.get_json_content()), u'<pre>%s</pre>')
 
-        self.content = '\n'.join(content)
+        content_str = '\n'.join(content)
 
         # fix wrongly nested HTML elements
-        for p in ('<p>(<(%s)>)', '(</(%s)>)</p>'):
-            self.content = re.sub(p % 'p|ol|iframe[^>]*', r'\1', self.content)
+        for p in ('<p>(<({})>)', '(</({})>)</p>'):
+            content_str = re.sub(p.format('p|ol|iframe[^>]*'), r'\1', content_str)
 
-        self.save_post()
+        return content_str
 
     def get_youtube_url(self, youtube_url):
         # determine the media file name
@@ -1494,7 +1497,7 @@ class TumblrPost(object):
         post += '</header>\n'
         if self.title:
             post += u'<h2>%s</h2>\n' % self.title
-        post += self.content
+        post += self.get_content()
         foot = []
         if self.tags:
             foot.append(u''.join(self.tag_link(t) for t in self.tags))
@@ -1592,13 +1595,19 @@ class TumblrPost(object):
 
     def save_post(self):
         """saves this post locally"""
-        path_parts = self.get_path()
-        with open_text(*path_parts) as f:
-            f.write(self.get_post())
-        os.utime(path_to(*path_parts), (self.date, self.date))
         if options.json:
             with open_text(json_dir, self.ident + '.json') as f:
                 f.write(self.get_json_content())
+        path_parts = self.get_path()
+        try:
+            with open_text(*path_parts) as f:
+                f.write(self.get_post())
+            os.utime(path_to(*path_parts), (self.date, self.date))
+        except Exception:
+            print('Caught exception while saving post {}:'.format(self.ident), file=sys.stderr)
+            traceback.print_exc()
+            return False
+        return True
 
     def get_json_content(self):
         if self.respfile is not None:
@@ -1626,7 +1635,7 @@ class BlosxomPost(TumblrPost):
         post = self.title + '\nmeta-id: p-' + self.ident + '\nmeta-url: ' + self.url
         if self.tags:
             post += '\nmeta-tags: ' + ' '.join(t.replace(' ', '+') for t in self.tags)
-        post += '\n\n' + self.content
+        post += '\n\n' + self.get_content()
         return post
 
 
@@ -1675,6 +1684,7 @@ class ThreadPool(object):
         self.quit = threading.Condition(main_thread_lock)
         self.quit_flag = False
         self.abort_flag = False
+        self.errors = False
         self.threads = [threading.Thread(target=self.handler) for _ in range(options.threads)]
         for t in self.threads:
             t.start()
@@ -1736,9 +1746,11 @@ class ThreadPool(object):
                     log.status('{} remaining posts to save\r'.format(qsize))
 
             try:
-                work()
+                success = work()
             finally:
                 self.queue.task_done()
+            if not success:
+                self.errors = True
 
 
 if __name__ == '__main__':
