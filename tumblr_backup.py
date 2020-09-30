@@ -802,7 +802,7 @@ class TumblrBackup(object):
         # returns whether any posts from this batch were saved
         def _backup(posts, post_respfiles):
             sorted_posts = sorted(zip(posts, post_respfiles),
-                                  key=lambda x: x[0]['id'], reverse=True)
+                                  key=lambda x: x[0]['liked_timestamp' if options.likes else 'id'], reverse=True)
             for p, prf in sorted_posts:
                 post = post_class(p, account, prf, prev_archive)
                 if ident_max is None:
@@ -916,7 +916,7 @@ class TumblrPost(object):
         self.url = post['post_url']
         self.shorturl = post['short_url']
         self.typ = str(post['type'])
-        self.date = post['timestamp']
+        self.date = post['liked_timestamp' if options.likes else 'timestamp']  # type: float
         self.isodate = datetime.utcfromtimestamp(self.date).isoformat() + 'Z'
         self.tm = time.localtime(self.date)
         self.title = u''
