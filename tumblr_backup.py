@@ -336,6 +336,11 @@ class ApiParser(object):
         )
 
     def read_archive(self, prev_archive):
+        if options.reuse_json:
+            prev_archive = save_folder
+        elif prev_archive is None:
+            return
+
         def read_resp(path):
             with io.open(path, encoding=FILE_ENCODING) as jf:
                 return json.load(jf)
@@ -1029,8 +1034,7 @@ class TumblrBackup(object):
         api_parser = ApiParser(base, account)
         api_thread = AsyncCallable(main_thread_lock, api_parser.apiparse, 'API Thread')
         with api_thread.response.mutex:
-            if prev_archive:
-                api_parser.read_archive(prev_archive)
+            api_parser.read_archive(prev_archive)
             api_thread.put(1)
             resp = api_thread.get()
         if not resp:
@@ -1651,7 +1655,7 @@ class TumblrPost(object):
 
     def save_post(self):
         """saves this post locally"""
-        if options.json:
+        if options.json and not options.reuse_json:
             with open_text(json_dir, self.ident + '.json') as f:
                 f.write(self.get_json_content())
         path_parts = self.get_path()
@@ -1942,6 +1946,7 @@ if __name__ == '__main__':
     parser.add_argument('--ignore-diffopt', action='store_true',
                         help='Force backup over an incomplete archive with different options')
     parser.add_argument('--no-get', action='store_true', help="Don't retrieve files not found in --prev-archives")
+    parser.add_argument('--reuse-json', action='store_true', help='Reuse the API responses saved with --json')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
     blogs = options.blogs or DEFAULT_BLOGS
@@ -1975,6 +1980,8 @@ if __name__ == '__main__':
             parser.error('--notes-limit requires --save-notes')
         if options.notes_limit < 1:
             parser.error('--notes-limit: Value must be at least 1')
+    if options.prev_archives and options.reuse_json:
+        parser.error('--prev-archives and --reuse-json are mutually exclusive')
     if options.prev_archives:
         if len(options.prev_archives) != len(blogs):
             parser.error('--prev-archives: expected {} directories, got {}'.format(
