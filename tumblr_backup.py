@@ -401,7 +401,7 @@ class ApiParser(object):
         try:
             doc, status, reason = self._get_resp(base, params, headers)
         except (EnvironmentError, HTTPError) as e:
-            log('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
+            log('URL is {}?{}\n[FATAL] Error retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
             return None
 
         if not 200 <= status < 300:
@@ -412,7 +412,7 @@ class ApiParser(object):
                     self.dashboard_only_blog = True
                     log('Found dashboard-only blog, trying svc API\n', account=True)
                     return self.apiparse(count, start)  # Recurse once
-            log('URL is {}?{}\n{} API repsonse: HTTP {} {}\n{}'.format(
+            log('URL is {}?{}\n[FATAL] {} API repsonse: HTTP {} {}\n{}'.format(
                 base, urlencode(params),
                 'Error retrieving' if doc is None else 'Non-OK',
                 status, reason,
