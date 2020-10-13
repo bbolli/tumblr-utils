@@ -824,6 +824,7 @@ class Indices(object):
 class TumblrBackup(object):
     def __init__(self):
         self.errors = False
+        self.fatal_errors = False
         self.total_count = 0
         self.post_count = 0
         self.filter_skipped = 0
@@ -1038,14 +1039,14 @@ class TumblrBackup(object):
             api_thread.put(1)
             resp = api_thread.get()
         if not resp:
-            self.errors = True
+            self.fatal_errors = self.errors = True
             return
 
         # collect all the meta information
         if options.likes:
             if not resp.get('blog', {}).get('share_likes', True):
                 print('{} does not have public likes\n'.format(account))
-                self.errors = True
+                self.fatal_errors = self.errors = True
                 return
             posts_key = 'liked_posts'
             blog = {}
@@ -1068,7 +1069,7 @@ class TumblrBackup(object):
             ix.build_index()
             ix.save_index()
 
-            if not os.path.exists(path_to('.complete')):
+            if not (self.fatal_errors or os.path.exists(path_to('.complete'))):
                 # Make .complete file
                 sf = opendir(save_folder, os.O_RDONLY)
                 try:
@@ -1170,7 +1171,7 @@ class TumblrBackup(object):
                     resp = api_thread.get(block=False)
 
                 if resp is None:
-                    self.errors = True
+                    self.fatal_errors = self.errors = True
                     break
 
                 posts = resp[posts_key]
