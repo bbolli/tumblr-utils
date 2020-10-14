@@ -16,12 +16,14 @@ from util import (URLLIB3_FROM_PIP, LogLevel, fdatasync, fsync, get_supported_en
                   no_internet, setup_urllib3_ssl)
 
 if URLLIB3_FROM_PIP:
-    from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Retry, Timeout
+    from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
+    from pip._vendor.urllib3 import Retry as Retry
     from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
     from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
     from pip._vendor.urllib3.util import make_headers
 else:
-    from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Retry, Timeout
+    from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
+    from urllib3 import Retry as Retry
     from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
     from urllib3.exceptions import HTTPError as HTTPError
     from urllib3.util import make_headers
@@ -29,7 +31,9 @@ else:
 setup_urllib3_ssl()
 
 HTTP_TIMEOUT = Timeout(90)
-HTTP_RETRY = Retry(3, connect=False)
+# Always retry on 503 or 504, but never on connect, which is handled specially
+HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))
 HTTP_CHUNK_SIZE = 1024 * 1024
 
 base_headers = make_headers(keep_alive=True, accept_encoding=list(get_supported_encodings()))

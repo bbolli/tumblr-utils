@@ -28,7 +28,7 @@ from xml.sax.saxutils import escape
 
 from util import (ConnectionFile, LockedQueue, LogLevel, is_dns_working, make_requests_session, no_internet,
                   to_bytes)
-from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
+from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
 JSONDict = Dict[str, Any]
 
@@ -127,6 +127,10 @@ TAG_ANY = '__all__'
 
 MAX_POSTS = 50
 REM_POST_INC = 10
+
+# Always retry on 503 or 504, but never on connect or 429, the latter handled specially
+HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))
 
 # get your own API key at https://www.tumblr.com/oauth/apps
 API_KEY = ''
