@@ -56,7 +56,9 @@ EXIT_SAFE_MODE = 2
 EXIT_NO_INTERNET = 3
 
 HTTP_TIMEOUT = Timeout(90)
-HTTP_RETRY = Retry(3, connect=False)
+# Always retry on 503 or 504, but never on connect or 429, the latter handled specially
+HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))
 
 # Globals
 post_url = None
