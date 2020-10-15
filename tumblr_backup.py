@@ -958,7 +958,7 @@ class TumblrBackup(object):
 
         oldest_tstamp = None
         if not complete_backup:
-            # Read every post to find the oldest timestamp we've saved.
+            # Read every post to find the oldest timestamp already saved
             filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
             post_glob = glob(path_to(post_dir, filter_))
             if not options.resume:
@@ -1021,21 +1021,26 @@ class TumblrBackup(object):
         oldest_tstamp, self.pa_options = self.process_existing_backup(account, prev_archive)
         check_optional_modules()
 
-        # get the highest post id already saved
-        ident_max = None
-        if options.incremental:
+        if options.incremental or options.resume:
             filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
             post_glob = glob(path_to(post_dir, filter_))
-            if not post_glob:
-                pass  # No posts to read
-            elif options.likes:
-                # Read every post to find the newest timestamp we've saved.
+
+        ident_max = None
+        if options.incremental and post_glob:
+            if options.likes:
+                # Read every post to find the newest timestamp already saved
                 log('Finding newest liked post (may take a while)\n', account=True)
                 ident_max = max(self.get_post_timestamps(post_glob, 'backup likes incrementally'))
                 log('Backing up posts after timestamp={} ({})\n'.format(ident_max, time.ctime(ident_max)), account=True)
             else:
+                # Get the highest post id already saved
                 ident_max = max(long(splitext(split(f)[1])[0]) for f in post_glob)
                 log('Backing up posts after id={}\n'.format(ident_max), account=True)
+
+        if options.resume:
+            # Update skip and count based on where we left off
+            options.skip = 0
+            options.count -= len(post_glob)
 
         log.status('Getting basic information\r')
 
