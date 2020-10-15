@@ -318,7 +318,8 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
             and hstat.remote_time not in (None, -1)
             and hstat.remote_time <= hstat.orig_file_tstamp
         ):
-            logger.log(url, 'If-Modified-Since was ignored (file not actually modified), not retrieving.')
+            if not urlsplit(url).netloc.endswith('.media.tumblr.com'):
+                logger.log(url, 'If-Modified-Since was ignored (file not actually modified), not retrieving.')
             return UErr.RETRUNNEEDED, doctype
         logger.log(url, 'Retrieving remote file because If-Modified-Since response indicates it was modified.')
 
