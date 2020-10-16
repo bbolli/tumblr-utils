@@ -973,6 +973,7 @@ class TumblrBackup(object):
                     account=True,
                 )
 
+        write_fro = False
         if first_run_options is not None and options.resume:
             # Load saved options, unless they were overridden with --ignore-diffopt
             for opt in BACKUP_CHANGING_OPTIONS:
@@ -984,15 +985,14 @@ class TumblrBackup(object):
                 setattr(options, opt, orig_options[opt])
             if first_run_options is None and not (complete_backup or post_glob):
                 # Presumably this is the initial backup of this blog
-                with open_text('.first_run_options') as f:
-                    f.write(to_unicode(json.dumps(orig_options)))
+                write_fro = True
 
         if pa_options is None and prev_archive is not None:
             # Fallback assumptions
             log('Warning: Unknown media path options for previous archive, assuming they match ours\n', account=True)
             pa_options = {opt: getattr(options, opt) for opt in MEDIA_PATH_OPTIONS}
 
-        return oldest_tstamp, pa_options
+        return oldest_tstamp, pa_options, write_fro
 
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -1018,7 +1018,7 @@ class TumblrBackup(object):
         self.post_count = 0
         self.filter_skipped = 0
 
-        oldest_tstamp, self.pa_options = self.process_existing_backup(account, prev_archive)
+        oldest_tstamp, self.pa_options, write_fro = self.process_existing_backup(account, prev_archive)
         check_optional_modules()
 
         if options.incremental or options.resume:
@@ -1069,6 +1069,11 @@ class TumblrBackup(object):
             count_estimate = blog.get('posts')
         self.title = escape(blog.get('title', account))
         self.subtitle = blog.get('description', '')
+
+        if write_fro:
+            # Blog directory gets created here
+            with open_text('.first_run_options') as f:
+                f.write(to_unicode(json.dumps(orig_options)))
 
         def build_index():
             log.status('Getting avatar and style\r')
