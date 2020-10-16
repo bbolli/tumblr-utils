@@ -808,14 +808,14 @@ class TumblrBackup(object):
                 if ident_max is None:
                     pass  # No limit
                 elif (p['liked_timestamp'] if options.likes else long(post.ident)) <= ident_max:
-                    return False
-                if options.count and self.post_count >= options.count:
+                    log('Stopping backup: Incremental backup complete\n', account=True)
                     return False
                 if options.period:
                     if post.date >= options.p_stop:
                         raise RuntimeError('Found post with date ({}) older than before param ({})'.format(
                             post.date, options.p_stop))
                     if post.date < options.p_start:
+                        log('Stopping backup: Reached end of period\n', account=True)
                         return False
                 if options.request:
                     if post.typ not in options.request:
@@ -837,6 +837,9 @@ class TumblrBackup(object):
 
                 backup_pool.add_work(post.save_content)
                 self.post_count += 1
+                if options.count and self.post_count >= options.count:
+                    log('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
+                    return False
             return True
 
         try:
@@ -856,19 +859,20 @@ class TumblrBackup(object):
                     break
 
                 posts = resp[posts_key]
+                if not posts:
+                    log('Backup complete: Found empty set of posts\n', account=True)
+                    break
+
                 post_respfiles = resp.get('post_respfiles')
                 if post_respfiles is None:
                     post_respfiles = [None for _ in posts]
-
-                # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
-                if not posts or not _backup(posts, post_respfiles):
-                    log('Backup complete: Found empty set of posts\n', account=True)
+                if not _backup(posts, post_respfiles):
                     break
 
                 if options.likes:
                     next_ = resp['_links'].get('next')
                     if next_ is None:
-                        log.status('Backing up posts found end of likes, finishing\r')
+                        log('Backup complete: Found end of likes\n', account=True)
                         break
                     before = next_['query_params']['before']
                 i += MAX_POSTS
