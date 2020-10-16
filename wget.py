@@ -324,7 +324,20 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
         logger.log(url, 'Retrieving remote file because If-Modified-Since response indicates it was modified.')
 
     if not (doctype & RETROKF):
-        raise WGWrongCodeError(logger, url, hstat.statcode, resp.reason, resp.headers)
+        e = WGWrongCodeError(logger, url, hstat.statcode, resp.reason, resp.headers)
+        # Cloudflare-specific errors
+        # 521 Web Server Is Down
+        # 522 Connection Timed Out
+        # 523 Origin Is Unreachable
+        # 525 SSL Handshake Failed
+        # 526 Invalid SSL Certificate
+        if resp.headers.get('Server') == 'cloudflare' and hstat.statcode in (521, 522, 523, 525, 526):
+            # Origin is unreachable - condemn it and don't retry
+            hostname = normalized_host_from_url(url)
+            unreachable_hosts.add(hostname)
+            msg = 'Error connecting to origin of host {}. From now on it will be ignored.'.format(hostname)
+            raise WGUnreachableHostError(logger, url, msg, e)
+        raise e
 
     shrunk = False
     if hstat.statcode == 416:
