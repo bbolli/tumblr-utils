@@ -1040,7 +1040,7 @@ class TumblrBackup(object):
         if options.resume:
             # Update skip and count based on where we left off
             options.skip = 0
-            options.count -= len(post_glob)
+            self.post_count = len(post_glob)
 
         log.status('Getting basic information\r')
 
@@ -1977,6 +1977,9 @@ if __name__ == '__main__':
         parser.error('Only one of --continue, --incremental, or --auto may be given')
     if options.auto is not None and options.auto != time.localtime().tm_hour:
         options.incremental = True
+    if options.resume:
+        # If resuming the initial backup, do not clobber or count posts that we already backed up
+        options.no_post_clobber = True
     if options.count is not None and options.count < 0:
         parser.error('--count: count must not be negative')
     if options.count == 0 and (options.incremental or options.auto is not None):
