@@ -429,9 +429,16 @@ class ApiParser(object):
             return None
         if doc is None:
             return None  # OK status but invalid JSON
-        # If the first API request succeeds, it's a public blog
-        if self.dashboard_only_blog is None:
+
+        if self.dashboard_only_blog:
+            with disablens_lock:
+                if self.account not in disable_note_scraper:
+                    disable_note_scraper.add(self.account)
+                    log('[Note Scraper] Dashboard-only blog - scraping disabled for {}\n'.format(self.account))
+        elif self.dashboard_only_blog is None:
+            # If the first API request succeeds, it's a public blog
             self.dashboard_only_blog = False
+
         resp = doc.get('response')
         if resp is not None and self.dashboard_only_blog:
             # svc API doesn't return blog info, steal it from the first post
