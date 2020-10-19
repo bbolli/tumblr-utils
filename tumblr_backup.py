@@ -1763,7 +1763,8 @@ class ThreadPool(object):
         self.quit_flag = False
         self.abort_flag = False
         self.errors = False
-        self.threads = [threading.Thread(target=self.handler) for _ in range(options.threads)]
+        self.stoplock = threading.Lock()
+        self.threads = [WorkerThread(self.stoplock, target=self.handler) for _ in range(options.threads)]
         for t in self.threads:
             t.start()
 
@@ -1791,9 +1792,16 @@ class ThreadPool(object):
             # The SIGTERM handler raises SystemExit to gracefully stop the worker
             # threads. Otherwise, we must wait for them to finish their posts.
             if hasattr(signal, 'pthread_kill'):
-                for t in self.threads:
-                    if t.ident is not None:
-                        signal.pthread_kill(t.ident, signal.SIGTERM)  # type: ignore[attr-defined]
+                for thread in self.threads:
+                    with self.stoplock:
+                        if thread.ident is None or not thread.alive:
+                            continue
+                        try:
+                            signal.pthread_kill(thread.ident, signal.SIGTERM)  # type: ignore[attr-defined]
+                        except EnvironmentError as e:
+                            if getattr(e, 'errno', None) == errno.ESRCH:
+                                continue  # Ignore ESRCH errors
+                            raise
 
             for i, t in enumerate(self.threads, start=1):
                 log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
@@ -1829,6 +1837,21 @@ class ThreadPool(object):
                 self.queue.task_done()
             if not success:
                 self.errors = True
+
+
+class WorkerThread(threading.Thread):
+    def __init__(self, stoplock, **kwargs):
+        super(WorkerThread, self).__init__(**kwargs)
+        self.stoplock = stoplock
+        self.alive = False
+
+    def run(self):
+        self.alive = True
+        try:
+            super(WorkerThread, self).run()
+        finally:
+            with self.stoplock:
+                self.alive = False
 
 
 if __name__ == '__main__':
