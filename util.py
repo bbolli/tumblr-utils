@@ -202,6 +202,16 @@ class WaitOnMainThread(object):
             self.flag = False
             self.cond.notify_all()
 
+    # Call on main thread to prevent threads from blocking in signal()
+    def destroy(self):
+        assert self.cond is not None
+        if self.flag is None:
+            return
+
+        with self.cond:
+            self.flag = None  # Cause all waiters to exit
+            self.cond.notify_all()
+
     def _do_wait(self):
         assert self.cond is not None
         if self.flag is None:
@@ -212,6 +222,7 @@ class WaitOnMainThread(object):
         except:
             with self.cond:
                 self.flag = None  # Waiting never completed
+                self.cond.notify_all()
             raise
 
     @staticmethod

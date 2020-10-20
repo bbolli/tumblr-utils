@@ -1426,6 +1426,7 @@ class ThreadPool(object):
 
     def cancel(self):
         self.abort.set()
+        no_internet.destroy()
         for i, t in enumerate(self.threads, start=1):
             log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
             t.join()
