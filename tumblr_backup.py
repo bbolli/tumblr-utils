@@ -1610,9 +1610,13 @@ if __name__ == '__main__':
             parser.error('--prev-archives: expected {} directories, got {}'.format(
                 len(blogs), len(options.prev_archives),
             ))
-        for d in options.prev_archives:
-            if not os.access(d, os.R_OK | os.X_OK):
-                parser.error("--prev-archives: directory '{}' cannot be read".format(d))
+        for blog, pa in zip(blogs, options.prev_archives):
+            if not os.access(pa, os.R_OK | os.X_OK):
+                parser.error("--prev-archives: directory '{}' cannot be read".format(pa))
+            blogdir = os.curdir if options.blosxom else (options.outdir or blog)
+            if os.path.realpath(pa) == os.path.realpath(blogdir):
+                parser.error("--prev-archives: Directory '{}' is also being written to. Use --reuse-json instead if "
+                             "you want this, or specify --outdir if you don't.".format(pa))
 
     if not API_KEY:
         sys.stderr.write('''\
