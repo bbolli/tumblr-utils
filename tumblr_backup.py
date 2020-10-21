@@ -1110,6 +1110,10 @@ class TumblrBackup(object):
         # start the thread pool
         backup_pool = ThreadPool()
 
+        before = options.period[1] if options.period else None
+        if oldest_tstamp is not None:
+            before = oldest_tstamp if before is None else min(before, oldest_tstamp)
+
         # returns whether any posts from this batch were saved
         def _backup(posts, post_respfiles):
             def sort_key(x): return x[0]['liked_timestamp'] if options.likes else long(x[0]['id'])
@@ -1117,18 +1121,17 @@ class TumblrBackup(object):
             for p, prf in sorted_posts:
                 no_internet.check()
                 post = post_class(p, account, prf, prev_archive, self.pa_options)
+                if before is not None and post.date >= before:
+                    raise RuntimeError('Found post with date ({}) newer than before param ({})'.format(
+                        post.date, before))
                 if ident_max is None:
                     pass  # No limit
                 elif (p['liked_timestamp'] if options.likes else long(post.ident)) <= ident_max:
                     log('Stopping backup: Incremental backup complete\n', account=True)
                     return False
-                if options.period:
-                    if post.date >= options.period[1]:
-                        raise RuntimeError('Found post with date ({}) older than before param ({})'.format(
-                            post.date, options.period[1]))
-                    if post.date < options.period[0]:
-                        log('Stopping backup: Reached end of period\n', account=True)
-                        return False
+                if options.period and post.date < options.period[0]:
+                    log('Stopping backup: Reached end of period\n', account=True)
+                    return False
                 if request_sets:
                     if post.typ not in request_sets:
                         continue
@@ -1166,9 +1169,6 @@ class TumblrBackup(object):
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
             i = options.skip
-            before = options.period[1] if options.period else None
-            if oldest_tstamp is not None:
-                before = oldest_tstamp if before is None else min(before, oldest_tstamp)
 
             while True:
                 # find the upper bound
@@ -2000,8 +2000,8 @@ if __name__ == '__main__':
         parser.error('Only one of --continue, --incremental, or --auto may be given')
     if options.auto is not None and options.auto != time.localtime().tm_hour:
         options.incremental = True
-    if options.resume:
-        # If resuming the initial backup, do not clobber or count posts that we already backed up
+    if options.resume or options.incremental:
+        # Do not clobber or count posts that were already backed up
         options.no_post_clobber = True
     if options.count is not None and options.count < 0:
         parser.error('--count: count must not be negative')
