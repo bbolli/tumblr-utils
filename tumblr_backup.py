@@ -34,7 +34,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from queue import Queue
-    from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Text, Tuple, Type
+    from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Text, Tuple, Type
 
     JSONDict = Dict[str, Any]
 
@@ -91,10 +91,10 @@ except ImportError:
     pyjq = None
 
 try:
-    from os import scandir  # type: ignore[attr-defined]
+    from os import DirEntry, scandir  # type: ignore[attr-defined]
 except ImportError:
     try:
-        from scandir import scandir  # type: ignore[no-redef]
+        from scandir import DirEntry, scandir  # type: ignore[no-redef]
     except ImportError:
         scandir = None  # type: ignore[assignment,no-redef]
 
@@ -317,9 +317,7 @@ def apiparse(base, prev_resps, count, start=0, before=None):
     # type: (...) -> Optional[JSONDict]
     if prev_resps is not None:
         # Reconstruct the API response
-        posts = []
-        post_respfiles = prev_resps[start:]
-        for prf in post_respfiles[:count]:
+        def read_post(prf):
             with io.open(prf, encoding=FILE_ENCODING) as f:
                 try:
                     post = json.load(f)
@@ -327,10 +325,17 @@ def apiparse(base, prev_resps, count, start=0, before=None):
                     f.seek(0)
                     log('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
                     return None
-            posts.append(post)
-        return {'posts': posts,
-                'post_respfiles': post_respfiles,
-                'blog': dict(posts[0]['blog'] if posts else {}, posts=len(prev_resps))}
+            return prf, post
+        posts = map(read_post, prev_resps)  # type: Iterable[Tuple[DirEntry[str], JSONDict]]
+        if before is not None:
+            posts = itertools.dropwhile(
+                lambda pp: pp[1]['liked_timestamp' if options.likes else 'timestamp'] >= before,
+                posts,
+            )
+        posts = list(itertools.islice(posts, start, start + count))
+        return {'posts': [post for prf, post in posts],
+                'post_respfiles': [prf for prf, post in posts],
+                'blog': dict(posts[0][1]['blog'] if posts else {}, posts=len(prev_resps))}
 
     params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
     if before:
