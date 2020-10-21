@@ -295,10 +295,18 @@ def set_period():
 def initial_apiparse(base, prev_archive):
     prev_resps = None
     if prev_archive:
+        def read_resp(path):
+            with io.open(path, encoding=FILE_ENCODING) as jf:
+                return json.load(jf)
+
+        if options.likes:
+            log('Reading liked timestamps from saved responses (may take a while)\n', account=True)
+
         prev_resps = tuple(
             e.path for e in sorted(
                 (e for e in scandir(join(prev_archive, 'json')) if (e.name.endswith('.json') and e.is_file())),
-                key=lambda e: e.name,
+                key=lambda e: read_resp(e)['liked_timestamp'] if options.likes else long(e.name[:-5]),
+                reverse=True,
             )
         )
 
