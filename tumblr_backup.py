@@ -693,7 +693,7 @@ class TumblrPost:
             url = get_try('link_url')
             is_photoset = len(post['photos']) > 1
             for offset, p in enumerate(post['photos'], start=1):
-                o = p['original_size']
+                o = p['alt_sizes'][0] if 'alt_sizes' in p else p['original_size']
                 src = o['url']
                 if options.save_images:
                     src = self.get_image_url(src, offset if is_photoset else 0)
