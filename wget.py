@@ -420,7 +420,7 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
     hstat.init_part_file()  # We're about to write to part_file, make sure it exists
 
     try:
-        for chunk in resp.stream(HTTP_CHUNK_SIZE):
+        for chunk in resp.stream(HTTP_CHUNK_SIZE, decode_content=True):
             hstat.bytes_read += resp.last_read_length
             if not chunk:  # May be possible if not resp.chunked due to implementation of _decode
                 continue
