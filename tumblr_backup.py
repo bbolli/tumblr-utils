@@ -844,7 +844,7 @@ class TumblrBackup(object):
                             continue
                     elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
                         continue
-                if os.path.exists(open_file(lambda f: f, post.get_path())) and options.no_post_clobber:
+                if os.path.exists(path_to(*post.get_path())) and options.no_post_clobber:
                     continue  # Post exists and no-clobber enabled
                 if options.filter and not options.filter.first(p):
                     self.filter_skipped += 1
