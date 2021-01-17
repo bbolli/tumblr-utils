@@ -621,7 +621,8 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
     except AttributeError:
         dest_dirname += os.path.sep  # Fallback, some systems don't support O_DIRECTORY
 
-    hstat.dest_dir = os.open(dest_dirname, flags)
+    if os.name == 'posix':  # Opening directories is a POSIX feature
+        hstat.dest_dir = os.open(dest_dirname, flags)
     hstat.set_part_file_supplier(functools.partial(
         lambda pfx, dir_: NamedTemporaryFile('wb', prefix=pfx, dir=dir_, delete=False),
         '.{}.'.format(dest_basename), dest_dirname,
@@ -737,7 +738,10 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
         pfname = hstat.part_file.name
 
         # NamedTemporaryFile is created 0600, set mode to the usual 0644
-        os.fchmod(hstat.part_file.fileno(), 0o644)
+        if os.name == 'posix':
+            os.fchmod(hstat.part_file.fileno(), 0o644)
+        else:
+            os.chmod(hstat.part_file.name, 0o644)
 
         # Set the timestamp
         if (options.use_server_timestamps
@@ -775,7 +779,8 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
                        src_dir_fd=hstat.dest_dir, dst_dir_fd=hstat.dest_dir)
 
         # Sync the directory and return
-        os.fdatasync(hstat.dest_dir)
+        if hstat.dest_dir is not None:
+            os.fdatasync(hstat.dest_dir)
         return
 
 
