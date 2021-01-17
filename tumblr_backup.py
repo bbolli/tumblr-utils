@@ -179,6 +179,7 @@ BACKUP_CHANGING_OPTIONS = (
     'save_images', 'save_video', 'save_video_tumblr', 'save_audio', 'save_notes', 'copy_notes', 'notes_limit', 'json',
     'count', 'skip', 'period', 'request', 'filter', 'no_reblog', 'exif', 'prev_archives')
 
+wget_retrieve = None  # type: Optional[WgetRetrieveWrapper]
 main_thread_lock = threading.RLock()
 multicond = MultiCondition(main_thread_lock)
 disable_note_scraper = set()  # type: Set[str]
@@ -597,6 +598,7 @@ def get_avatar(prev_archive):
         return avatar_fpath
 
     # Download the image
+    assert wget_retrieve is not None
     try:
         wget_retrieve(url, avatar_dest, adjust_basename=adj_bn)
     except WGError as e:
@@ -1566,6 +1568,7 @@ class TumblrPost(object):
             cpy_res = maybe_copy_media(self.prev_archive, path_parts, pa_path_parts)
         if not cpy_res and not options.no_get:
             # We don't have the media and we want it
+            assert wget_retrieve is not None
             try:
                 wget_retrieve(url, open_file(lambda f: f, path_parts))
             except WGError as e:
