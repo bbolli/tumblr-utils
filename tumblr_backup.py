@@ -96,6 +96,11 @@ try:
     import requests
 except ImportError:
     if not TYPE_CHECKING:
+        # Import pip._internal.download first to avoid a potential recursive import
+        try:
+            from pip._internal import download as _  # noqa: F401
+        except ImportError:
+            pass  # Not absolutely necessary
         try:
             from pip._vendor import requests  # type: ignore[no-redef]
         except ImportError:
