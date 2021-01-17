@@ -158,6 +158,7 @@ except locale.Error:
 FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
+wget_retrieve = None  # type: Optional[WgetRetrieveWrapper]
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
 prev_resps = None  # type: Optional[Tuple[str, ...]]
@@ -431,6 +432,7 @@ def get_avatar(prev_archive):
         return avatar_fpath
 
     # Download the image
+    assert wget_retrieve is not None
     try:
         wget_retrieve(url, avatar_dest, adjust_basename=adj_bn)
     except WGError as e:
@@ -1207,6 +1209,7 @@ class TumblrPost(object):
 
         cpy_res = maybe_copy_media(self.prev_archive, path_parts)
         if not cpy_res:
+            assert wget_retrieve is not None
             try:
                 wget_retrieve(url, open_file(lambda f: f, path_parts))
             except WGError as e:
