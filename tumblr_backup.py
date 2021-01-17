@@ -266,7 +266,10 @@ def open_text(*parts):
             yield f
 
         # NamedTemporaryFile is created 0600, set mode to the usual 0644
-        os.fchmod(partf.fileno(), 0o644)
+        if os.name == 'posix':
+            os.fchmod(partf.fileno(), 0o644)
+        else:
+            os.chmod(partf.name, 0o644)
 
         # Flush buffers and sync the inode
         partf.flush()
@@ -1095,14 +1098,20 @@ class TumblrBackup(object):
 
             if not (self.fatal_errors or os.path.exists(path_to('.complete'))):
                 # Make .complete file
-                sf = opendir(save_folder, os.O_RDONLY)
+                if os.name == 'posix':  # Opening directories and os.fdatasync are POSIX features
+                    sf = opendir(save_folder, os.O_RDONLY)  # type: Optional[int]
+                else:
+                    sf = None
                 try:
-                    os.fdatasync(sf)
+                    if sf is not None:
+                        os.fdatasync(sf)
                     with io.open(open_file(lambda f: f, ('.complete',)), 'wb') as f:
                         os.fsync(f)  # type: ignore
-                    os.fdatasync(sf)
+                    if sf is not None:
+                        os.fdatasync(sf)
                 finally:
-                    os.close(sf)
+                    if sf is not None:
+                        os.close(sf)
 
         if options.count == 0:
             build_index()
