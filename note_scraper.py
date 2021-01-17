@@ -10,11 +10,15 @@ import ssl
 import sys
 import time
 import traceback
-from typing import TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 
 from util import HAVE_SSL_CTX, HTTP_TIMEOUT, to_bytes, to_native_str
+
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from typing import List, Text

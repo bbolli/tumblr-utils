@@ -4,10 +4,14 @@ from __future__ import absolute_import, division, print_function, with_statement
 
 import sys
 import threading
-from typing import Generic, TYPE_CHECKING
+
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from typing import TypeVar
+    from typing import Generic, TypeVar
 
 try:
     import queue
