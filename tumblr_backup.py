@@ -28,9 +28,9 @@ from posixpath import basename as urlbasename, join as urlpathjoin, splitext as 
 from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
 
-from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, disable_unraisable_hook,
-                  is_dns_working, make_requests_session, no_internet, nullcontext, opendir, path_is_on_vfat, to_bytes,
-                  to_unicode, try_unlink)
+from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, is_dns_working,
+                  make_requests_session, no_internet, nullcontext, opendir, path_is_on_vfat, to_bytes, to_unicode,
+                  try_unlink)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, urlopen
 
 try:
@@ -1782,8 +1782,7 @@ class ThreadPool(object):
         self.quit_flag = False
         self.abort_flag = False
         self.errors = False
-        self.stoplock = threading.Lock()
-        self.threads = [WorkerThread(self.stoplock, target=self.handler) for _ in range(options.threads)]
+        self.threads = [threading.Thread(target=self.handler) for _ in range(options.threads)]
         for t in self.threads:
             t.start()
 
@@ -1806,25 +1805,9 @@ class ThreadPool(object):
             self.quit.notify_all()
             no_internet.destroy()
 
-        duh = disable_unraisable_hook() if hasattr(signal, 'pthread_kill') else nullcontext()  # type: Any
-        with duh:
-            # The SIGTERM handler raises SystemExit to gracefully stop the worker
-            # threads. Otherwise, we must wait for them to finish their posts.
-            if hasattr(signal, 'pthread_kill'):
-                for thread in self.threads:
-                    with self.stoplock:
-                        if thread.ident is None or not thread.alive:
-                            continue
-                        try:
-                            signal.pthread_kill(thread.ident, signal.SIGTERM)  # type: ignore[attr-defined]
-                        except EnvironmentError as e:
-                            if getattr(e, 'errno', None) == errno.ESRCH:
-                                continue  # Ignore ESRCH errors
-                            raise
-
-            for i, t in enumerate(self.threads, start=1):
-                log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
-                t.join()
+        for i, t in enumerate(self.threads, start=1):
+            log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
+            t.join()
 
         with main_thread_lock:
             self.queue.queue.clear()
@@ -1858,21 +1841,6 @@ class ThreadPool(object):
                 self.errors = True
 
 
-class WorkerThread(threading.Thread):
-    def __init__(self, stoplock, **kwargs):
-        super(WorkerThread, self).__init__(**kwargs)
-        self.stoplock = stoplock
-        self.alive = False
-
-    def run(self):
-        self.alive = True
-        try:
-            super(WorkerThread, self).run()
-        finally:
-            with self.stoplock:
-                self.alive = False
-
-
 if __name__ == '__main__':
     # The default of 'fork' can cause deadlocks, even on Linux
     # See https://bugs.python.org/issue40399
@@ -1885,11 +1853,7 @@ if __name__ == '__main__':
 
     # Raises SystemExit to terminate gracefully
     def handle_term_signal(signum, frame):
-        if sys.exc_info() != (None, None, None):
-            return  # Not a good time to exit
-        if not PY3:
-            pass  # No is_finalizing
-        elif sys.is_finalizing():
+        if PY3 and sys.is_finalizing():
             return  # Not a good time to exit
         sys.exit(1)
     signal.signal(signal.SIGTERM, handle_term_signal)
