@@ -119,10 +119,11 @@ TAGLINK_FMT = 'https://{domain}/tagged/{tag}'
 
 # exit codes
 EXIT_SUCCESS    = 0
-EXIT_NOPOSTS    = 1
+EXIT_FAILURE    = 1
 # EXIT_ARGPARSE = 2 -- returned by argparse
 EXIT_INTERRUPT  = 3
 EXIT_ERRORS     = 4
+EXIT_NOPOSTS    = 5
 
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
