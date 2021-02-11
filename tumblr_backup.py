@@ -97,7 +97,7 @@ except ImportError:
 try:
     from http import client as httplib
 except ImportError:
-    import httplib  # type: ignore
+    import httplib  # type: ignore[no-redef]
 
 # These builtins have new names in Python 3
 try:
@@ -274,7 +274,7 @@ def open_text(*parts):
 
         # Flush buffers and sync the inode
         partf.flush()
-        os.fsync(partf)  # type: ignore
+        os.fsync(partf)
 
         pfname = partf.name
 
@@ -1108,7 +1108,7 @@ class TumblrBackup(object):
                     if sf is not None:
                         os.fdatasync(sf)
                     with io.open(open_file(lambda f: f, ('.complete',)), 'wb') as f:
-                        os.fsync(f)  # type: ignore
+                        os.fsync(f)
                     if sf is not None:
                         os.fdatasync(sf)
                 finally:
