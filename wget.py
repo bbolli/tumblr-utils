@@ -24,12 +24,14 @@ except ImportError:
 if URLLIB3_FROM_PIP:
     from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from pip._vendor.urllib3 import Retry as Retry
+    from pip._vendor.urllib3._collections import HTTPHeaderDict
     from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
     from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
     from pip._vendor.urllib3.util import make_headers
 else:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from urllib3 import Retry as Retry
+    from urllib3._collections import HTTPHeaderDict
     from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
     from urllib3.exceptions import HTTPError as HTTPError
     from urllib3.util import make_headers
@@ -106,11 +108,25 @@ class WGHTTPResponse(HTTPResponse):
     def decoder(self, value):
         self._decoder = value
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, body="", headers=None, status=0, version=0, reason=None, strict=0, preload_content=True,
+                 decode_content=True, original_response=None, pool=None, connection=None, msg=None, retries=None,
+                 enforce_content_length=False, request_method=None, request_url=None, auto_close=True, **kwargs):
+        # Copy original Content-Length for _init_length
+        if not isinstance(headers, HTTPHeaderDict):
+            headers = HTTPHeaderDict(headers)
+        if 'Content-Length' not in headers and 'X-Archive-Orig-Content-Length' in headers:
+            headers['Content-Length'] = headers['X-Archive-Orig-Content-Length']
+
+        # Current URL for redirect tracking
         self.current_url = kwargs.pop('current_url')
+        assert not kwargs
+
         self.bytes_to_skip = 0
         self.last_read_length = 0
-        super(WGHTTPResponse, self).__init__(*args, **kwargs)
+        super(WGHTTPResponse, self).__init__(
+            body, headers, status, version, reason, strict, preload_content, decode_content, original_response, pool,
+            connection, msg, retries, enforce_content_length, request_method, request_url, auto_close,
+        )
 
     # Make _init_length publicly usable because its implementation is nice
     def get_content_length(self, meth):
@@ -262,7 +278,7 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
 
     hstat.last_modified = resp.headers.get('Last-Modified')
     if hstat.last_modified is None:
-        hstat.last_modified = resp.headers.get('X-Archive-Orig-last-modified')
+        hstat.last_modified = resp.headers.get('X-Archive-Orig-Last-Modified')
 
     if hstat.last_modified is None:
         hstat.remote_time = None
@@ -318,7 +334,7 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
             and hstat.remote_time not in (None, -1)
             and hstat.remote_time <= hstat.orig_file_tstamp
         ):
-            if not urlsplit(url).netloc.endswith('.media.tumblr.com'):
+            if not urlsplit(url).netloc.endswith('.tumblr.com'):
                 logger.log(url, 'If-Modified-Since was ignored (file not actually modified), not retrieving.')
             return UErr.RETRUNNEEDED, doctype
         logger.log(url, 'Retrieving remote file because If-Modified-Since response indicates it was modified.')
@@ -521,6 +537,8 @@ class WGWrongCodeError(WGBadResponseError):
             statcode, statmsg, '' if statcode in (403, 404) else '\nHeaders: {}'.format(headers),
         )
         super(WGWrongCodeError, self).__init__(logger, url, msg)
+        self.statcode = statcode
+        self.statmsg = statmsg
 
 
 class WGRangeError(WGBadResponseError):
@@ -623,6 +641,11 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
 
     # THE loop
 
+    using_internet_archive = False
+    ia_fallback_cause = None
+    orig_url = url
+    orig_doctype = doctype
+    orig_send_head_first = send_head_first
     retry_counter = RetryCounter(logger)
     while True:
         # Behave as if force_full_retrieve is always enabled
@@ -646,6 +669,32 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
             # Set the logger for unreachable host errors thrown from WGHTTP(S)ConnectionPool
             if e.logger is None:
                 e.logger = logger
+            raise
+        except WGWrongCodeError as e:
+            if (options.internet_archive
+                and not using_internet_archive
+                and hstat.statcode in (403, 404)
+                and urlsplit(orig_url).netloc.endswith('.tumblr.com')  # type: ignore[arg-type]
+            ):
+                using_internet_archive = True
+                ia_fallback_cause = (e.args[0], e.statcode, e.statmsg)
+                url = 'https://web.archive.org/web/0/{}'.format(orig_url)  # type: ignore[assignment,str-bytes-safe]
+                doctype = orig_doctype
+                send_head_first = orig_send_head_first
+                retry_counter.reset()
+                continue
+            if using_internet_archive and hstat.statcode == 404:
+                # Not available at the Internet Archive, report the original error
+                assert options.internet_archive
+                assert ia_fallback_cause is not None
+                msg, statcode, reason = ia_fallback_cause
+                oe = Exception.__new__(WGWrongCodeError)
+                Exception.__init__(oe, msg)
+                oe.logger = logger
+                oe.url = orig_url
+                oe.statcode = statcode
+                oe.reason = reason
+                raise oe
             raise
         finally:
             if hstat.current_url is not None:
@@ -700,6 +749,12 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
 
         # We shouldn't have read more than Content-Length bytes
         assert hstat.contlen in (None, hstat.bytes_read)
+
+        if using_internet_archive:
+            assert options.internet_archive
+            assert ia_fallback_cause is not None
+            _, statcode, reason = ia_fallback_cause
+            logger.log(orig_url, 'Downloaded from Internet Archive due to HTTP Error {} {}'.format(statcode, reason))
 
         # Normal return path - we wrote a local file
         pfname = hstat.part_file.name

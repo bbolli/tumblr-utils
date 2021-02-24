@@ -1971,6 +1971,8 @@ if __name__ == '__main__':
                         help='Force backup over an incomplete archive with different options')
     parser.add_argument('--no-get', action='store_true', help="Don't retrieve files not found in --prev-archives")
     parser.add_argument('--reuse-json', action='store_true', help='Reuse the API responses saved with --json')
+    parser.add_argument('--internet-archive', action='store_true',
+                        help='Fall back to the Internet Archive for Tumblr media 403 and 404 responses')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
     blogs = options.blogs or DEFAULT_BLOGS
