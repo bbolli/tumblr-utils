@@ -1520,12 +1520,12 @@ class TumblrPost(object):
         return u'%s%s%s' % (match.group(1), saved_name, match.group(3))
 
     def get_filename(self, url_path, image_names, offset=''):
-        """Determine the image file name depending on options.image_names"""
+        """Determine the image file name depending on image_names"""
         fname = urlbasename(url_path)
         ext = urlsplitext(fname)[1]
-        if options.image_names == 'i':
+        if image_names == 'i':
             return self.ident + offset + ext
-        if options.image_names == 'bi':
+        if image_names == 'bi':
             return self.backup_account + '_' + self.ident + offset + ext
         # delete characters not allowed under Windows
         return re.sub(r'[:<>"/\\|*?]', '', fname) if os.name == 'nt' else fname
