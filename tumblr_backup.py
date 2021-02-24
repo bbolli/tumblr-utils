@@ -1179,8 +1179,17 @@ class TumblrPost(object):
 
     def get_filename(self, url, offset=''):
         """Determine the image file name depending on options.image_names"""
-        fname = urlbasename(urlparse(url).path)
+        parsed_url = urlparse(url)
+        fname = urlbasename(parsed_url.path)
         ext = urlsplitext(fname)[1]
+        if parsed_url.query:
+            # Insert the query string to avoid ambiguity for certain URLs (e.g. SoundCloud embeds).
+            query_sep = '@' if os.name == 'nt' else '?'
+            if ext:
+                extwdot = '.{}'.format(ext)
+                fname = fname[:-len(extwdot)] + query_sep + parsed_url.query + extwdot
+            else:
+                fname = fname + query_sep + parsed_url.query
         if options.image_names == 'i':
             return self.ident + offset + ext
         if options.image_names == 'bi':
