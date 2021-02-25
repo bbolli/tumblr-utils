@@ -24,7 +24,7 @@ from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from xml.sax.saxutils import escape
 
-from util import ConnectionFile, LockedQueue, PY3, no_internet, nullcontext, path_is_on_vfat, to_bytes, to_unicode
+from util import ConnectionFile, LockedQueue, PY3, no_internet, nullcontext, to_bytes, to_unicode
 from wget import HTTPError, WGError, WgetRetrieveWrapper, set_ssl_verify, urlopen
 
 try:
@@ -416,13 +416,8 @@ def get_avatar(prev_archive):
     avatar_dest = avatar_fpath = open_file(lambda f: f, (theme_dir, avatar_base))
 
     # Remove old avatars
-    old_avatars = glob(join(theme_dir, avatar_base + '.*'))
-    if len(old_avatars) > 1:
-        for old_avatar in old_avatars:
-            os.unlink(old_avatar)
-    elif len(old_avatars) == 1:
-        # Use the old avatar for timestamping
-        avatar_dest, = old_avatars
+    if glob(join(theme_dir, avatar_base + '.*')):
+        return  # Do not clobber
 
     def adj_bn(old_bn, f):
         # Give it an extension
@@ -1217,7 +1212,7 @@ class TumblrPost(object):
             path_parts.insert(1, hostdir)
 
         cpy_res = maybe_copy_media(self.prev_archive, path_parts)
-        if not cpy_res:
+        if not (cpy_res or os.path.exists(path_to(*path_parts))):
             assert wget_retrieve is not None
             try:
                 wget_retrieve(url, open_file(lambda f: f, path_parts), post_timestamp=self.post['timestamp'])
@@ -1561,14 +1556,8 @@ if __name__ == '__main__':
     parser.add_argument('--prev-archives', action=CSVListCallback, default=[], metavar='DIRS',
                         help='comma-separated list of directories (one per blog) containing previous blog archives')
     parser.add_argument('--no-post-clobber', action='store_true', help='Do not re-download existing posts')
-    parser.add_argument('-M', '--timestamping', action='store_true',
-                        help="don't re-download files if the remote timestamp and size match the local file")
-    parser.add_argument('--no-if-modified-since', action='store_false', dest='if_modified_since',
-                        help="timestamping: don't send If-Modified-Since header")
     parser.add_argument('--no-server-timestamps', action='store_false', dest='use_server_timestamps',
                         help="don't set local timestamps from HTTP headers")
-    parser.add_argument('--mtime-postfix', action='store_true',
-                        help="timestamping: work around low-precision mtime on FAT filesystems")
     parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
@@ -1644,9 +1633,6 @@ if __name__ == '__main__':
             if os.path.realpath(pa) == os.path.realpath(blogdir):
                 parser.error("--prev-archives: Directory '{}' is also being written to. Use --reuse-json instead if "
                              "you want this, or specify --outdir if you don't.".format(pa))
-    if not options.mtime_postfix and path_is_on_vfat.works and path_is_on_vfat('.'):
-        print('Warning: FAT filesystem detected, enabling --mtime-postfix', file=sys.stderr)
-        options.mtime_postfix = True
 
     if not API_KEY:
         sys.stderr.write('''\
