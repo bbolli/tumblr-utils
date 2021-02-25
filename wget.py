@@ -16,6 +16,15 @@ from tempfile import NamedTemporaryFile
 from util import PY3, is_dns_working, no_internet
 
 try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from argparse import Namespace
+    from typing import Any, AnyStr, BinaryIO, Callable, Optional, Text
+
+try:
     from urllib.parse import urljoin, urlsplit
 except ImportError:
     from urlparse import urljoin, urlsplit  # type: ignore[no-redef]
@@ -104,20 +113,20 @@ class UErr(object):
 
 class HttpStat(object):
     def __init__(self):
-        self.current_url = None        # the most recent redirect, otherwise the initial url
+        self.current_url = None        # type: Optional[Any] # the most recent redirect, otherwise the initial url
         self.bytes_read = 0            # received length
         self.bytes_written = 0         # written length
-        self.contlen = None            # expected length
+        self.contlen = None            # type: Optional[int] # expected length
         self.restval = 0               # the restart value
-        self.last_modified = None      # Last-Modified header
-        self.remote_time = None        # remote time-stamp
+        self.last_modified = None      # type: Optional[str] # Last-Modified header
+        self.remote_time = None        # type: Optional[int] # remote time-stamp
         self.statcode = 0              # status code
-        self.dest_dir = None           # handle to the directory containing part_file
-        self.part_file = None          # handle to local file used to store in-progress download
-        self.remote_encoding = None    # the encoding of the remote file
-        self.enc_is_identity = None    # whether the remote encoding is identity
-        self.decoder = None            # saved decoder from the HTTPResponse
-        self._make_part_file = None    # part_file supplier
+        self.dest_dir = None           # type: Optional[int] # handle to the directory containing part_file
+        self.part_file = None          # type: Optional[BinaryIO] # handle to local file used for in-progress download
+        self.remote_encoding = None    # type: Optional[str] # the encoding of the remote file
+        self.enc_is_identity = None    # type: Optional[bool] # whether the remote encoding is identity
+        self.decoder = None            # type: Optional[object] # saved decoder from the HTTPResponse
+        self._make_part_file = None    # type: Optional[Callable[[], BinaryIO]] # part_file supplier
 
     def set_part_file_supplier(self, value):
         self._make_part_file = value
@@ -580,12 +589,13 @@ def normalized_host(scheme, host, port):
 
 
 def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, options, log):
+    # type: (HttpStat, AnyStr, AnyStr, Optional[float], Optional[Callable[[AnyStr, BinaryIO], AnyStr]], Namespace, Callable[[Text], None]) -> None  # noqa: E501
     if PY3 and (isinstance(url, bytes) or isinstance(dest_file, bytes)):
         raise ValueError('This function does not support bytes arguments on Python 3')
 
     logger = Logger(url, log)
 
-    if urlsplit(url, 'http').scheme not in ('http', 'https'):
+    if urlsplit(url).scheme not in ('http', 'https'):
         raise WGBadProtocolError(logger, url, 'Non-HTTP(S) protocols are not implemented.')
 
     hostname = normalized_host_from_url(url)
@@ -599,13 +609,14 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
     try:
         flags |= os.O_DIRECTORY
     except AttributeError:
-        dest_dirname += os.path.sep  # Fallback, some systems don't support O_DIRECTORY
+        # Fallback, some systems don't support O_DIRECTORY
+        dest_dirname += os.path.sep  # type: ignore[operator]
 
     if os.name == 'posix':  # Opening directories is a POSIX feature
         hstat.dest_dir = os.open(dest_dirname, flags)
     hstat.set_part_file_supplier(functools.partial(
         lambda pfx, dir_: NamedTemporaryFile('wb', prefix=pfx, dir=dir_, delete=False),
-        '.{}.'.format(dest_basename), dest_dirname,
+        '.{}.'.format(dest_basename), dest_dirname,  # type: ignore[str-bytes-safe]
     ))
 
     # THE loop
@@ -653,6 +664,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
         assert hstat.contlen in (None, hstat.bytes_read)
 
         # Normal return path - we wrote a local file
+        assert hstat.part_file is not None
         pfname = hstat.part_file.name
 
         # NamedTemporaryFile is created 0600, set mode to the usual 0644
@@ -685,7 +697,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
         else:
             # Give adjust_basename a read-only file handle
             pf = io.open(hstat.part_file.fileno(), 'rb', closefd=False)
-            new_dest_basename = adjust_basename(dest_basename, pf)
+            new_dest_basename = adjust_basename(dest_basename, pf)  # type: ignore[arg-type]
 
         # Flush buffers and sync the inode
         hstat.part_file.flush()
