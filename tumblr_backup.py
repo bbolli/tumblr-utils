@@ -1220,7 +1220,7 @@ class TumblrPost(object):
         if not cpy_res:
             assert wget_retrieve is not None
             try:
-                wget_retrieve(url, open_file(lambda f: f, path_parts))
+                wget_retrieve(url, open_file(lambda f: f, path_parts), post_timestamp=self.post['timestamp'])
             except WGError as e:
                 e.log()
                 return None

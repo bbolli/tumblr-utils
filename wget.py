@@ -309,7 +309,7 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
         hstat.remote_time = None
     else:
         lmtuple = parsedate_tz(hstat.last_modified)
-        hstat.remote_time = -1 if lmtuple is None else mktime_tz(lmtuple)
+        hstat.remote_time = None if lmtuple is None else mktime_tz(lmtuple)
 
     remote_encoding = resp.headers.get('Content-Encoding')
 
@@ -356,7 +356,7 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
             return UErr.RETRUNNEEDED, doctype
         if (hstat.statcode == 200
             and contlen in (None, hstat.orig_file_size)
-            and hstat.remote_time not in (None, -1)
+            and hstat.remote_time is not None
             and hstat.remote_time <= hstat.orig_file_tstamp
         ):
             logger.log(url, 'If-Modified-Since was ignored (file not actually modified), not retrieving.')
@@ -611,7 +611,7 @@ def normalized_host(scheme, host, port):
     return '{}:{}'.format(host, port)
 
 
-def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
+def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, options, log):
     if PY3 and (isinstance(url, bytes) or isinstance(dest_file, bytes)):
         raise ValueError('This function does not support bytes arguments on Python 3')
 
@@ -713,13 +713,13 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
         if not got_head:
             got_head = True  # no more time-stamping
 
-            if (options.timestamping or options.use_server_timestamps) and hstat.remote_time in (None, -1):
+            if (options.timestamping or options.use_server_timestamps) and hstat.remote_time is None:
                 logger.log(url, 'Warning: Last-Modified header is {}'
-                           .format('missing' if hstat.remote_time is None
+                           .format('missing' if hstat.last_modified is None
                                    else 'invalid: {}'.format(hstat.last_modified)))
 
             if send_head_first:
-                if hstat.orig_file_exists and hstat.remote_time not in (None, -1):
+                if hstat.orig_file_exists and hstat.remote_time is not None:
                     # Now time-stamping can be used validly. Time-stamping means that if the sizes of the local and
                     # remote file match, and local file is newer than the remote file, it will not be retrieved.
                     # Otherwise, the normal download procedure is resumed.
@@ -758,10 +758,16 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
 
         # Set the timestamp
         if (options.use_server_timestamps
-            and hstat.remote_time not in (None, -1)
+            and (hstat.remote_time is not None or post_timestamp is not None)
             and hstat.contlen in (None, hstat.bytes_read)
         ):
-            touch(pfname, hstat.remote_time, dir_fd=hstat.dest_dir)
+            if hstat.remote_time is None:
+                tstamp = post_timestamp
+            elif post_timestamp is None:
+                tstamp = hstat.remote_time
+            else:
+                tstamp = min(hstat.remote_time, post_timestamp)
+            touch(pfname, tstamp, dir_fd=hstat.dest_dir)
 
         # Adjust the new name
         if adjust_basename is None:
@@ -834,10 +840,10 @@ class WgetRetrieveWrapper(object):
         self.options = options
         self.log = log
 
-    def __call__(self, url, file, adjust_basename=None):
+    def __call__(self, url, file, post_timestamp=None, adjust_basename=None):
         hstat = HttpStat()
         try:
-            _retrieve_loop(hstat, url, file, adjust_basename, self.options, self.log)
+            _retrieve_loop(hstat, url, file, post_timestamp, adjust_basename, self.options, self.log)
         finally:
             if hstat.dest_dir is not None:
                 os.close(hstat.dest_dir)
