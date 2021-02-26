@@ -25,7 +25,7 @@ from posixpath import basename as urlbasename, join as urlpathjoin, splitext as 
 from xml.sax.saxutils import escape
 
 from util import ConnectionFile, LockedQueue, PY3, no_internet, nullcontext, to_bytes, to_unicode
-from wget import HTTPError, WGError, WgetRetrieveWrapper, set_ssl_verify, urlopen
+from wget import HTTPError, WGError, WgetRetrieveWrapper, set_ssl_verify, touch, urlopen
 
 try:
     from typing import TYPE_CHECKING
@@ -512,6 +512,24 @@ def maybe_copy_media(prev_archive, path_parts):
             shutil.copystat(src, dstpath)  # type: ignore[arg-type]
 
         return True  # Either we copied it or we didn't need to
+
+
+def naturaldelta(delta):
+    """Format a duration of at least one day approximately."""
+    days = delta.days
+    years, days = divmod(days, 365)
+    months = int(days // 30.436875)
+
+    def pl(s, n):
+        return s if n == 1 else '{}s'.format(s)
+
+    mstr = '{} {}'.format(months, pl('month', months)) if months else None  # N months
+
+    if years:
+        msg = '{} {}'.format(years, pl('year', years))  # N years
+        return '{}, {}'.format(msg, mstr) if mstr else msg
+
+    return mstr if mstr else '{} {}'.format(days, pl('day', days))  # N days
 
 
 class Index(object):
@@ -1212,13 +1230,29 @@ class TumblrPost(object):
             path_parts.insert(1, hostdir)
 
         cpy_res = maybe_copy_media(self.prev_archive, path_parts)
-        if not (cpy_res or os.path.exists(path_to(*path_parts))):
+        file_exists = os.path.exists(path_to(*path_parts))
+        if not (cpy_res or file_exists):
             assert wget_retrieve is not None
             try:
                 wget_retrieve(url, open_file(lambda f: f, path_parts), post_timestamp=self.post['timestamp'])
             except WGError as e:
                 e.log()
                 return None
+        if file_exists:
+            try:
+                st = os.stat(path_to(*path_parts))
+            except EnvironmentError as e:
+                if getattr(e, 'errno', None) != errno.ENOENT:
+                    raise
+                # Ignore ENOENT
+            else:
+                if st.st_mtime > self.post['timestamp']:
+                    if st.st_mtime > self.post['timestamp'] + timedelta(days=1).total_seconds():
+                        log('Rolling back media timestamp by {}\n'.format(
+                            naturaldelta(datetime.fromtimestamp(st.st_mtime) -
+                                         datetime.fromtimestamp(self.post['timestamp']))
+                        ))
+                    touch(path_to(*path_parts), self.post['timestamp'])
 
         return filename
 
