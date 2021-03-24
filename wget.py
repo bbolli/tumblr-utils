@@ -678,6 +678,9 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
                        .format('missing' if hstat.last_modified is None
                                else 'invalid: {}'.format(hstat.last_modified)))
 
+        # Flush the userspace buffer so mtime isn't updated
+        hstat.part_file.flush()
+
         # Set the timestamp on the local file
         if (options.use_server_timestamps
             and (hstat.remote_time is not None or post_timestamp is not None)
@@ -699,8 +702,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
             pf = io.open(hstat.part_file.fileno(), 'rb', closefd=False)
             new_dest_basename = adjust_basename(dest_basename, pf)  # type: ignore[arg-type]
 
-        # Flush buffers and sync the inode
-        hstat.part_file.flush()
+        # Sync the inode
         os.fsync(hstat.part_file)
         try:
             hstat.part_file.close()
