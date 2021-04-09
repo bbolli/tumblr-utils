@@ -8,6 +8,7 @@ import socket
 import sys
 import threading
 import time
+import warnings
 
 try:
     from typing import TYPE_CHECKING
@@ -21,6 +22,11 @@ try:
     import queue
 except ImportError:
     import Queue as queue  # type: ignore[no-redef]
+
+try:
+    from http.cookiejar import MozillaCookieJar
+except ImportError:
+    from cookielib import MozillaCookieJar  # type: ignore[no-redef]
 
 _PATH_IS_ON_VFAT_WORKS = True
 
@@ -37,6 +43,17 @@ if os.name == 'nt':
         _getvolumepathname = None  # type: ignore[no-redef]
         _PATH_IS_ON_VFAT_WORKS = False
 
+try:
+    from urllib3.exceptions import DependencyWarning
+    URLLIB3_FROM_PIP = False
+except ImportError:
+    try:
+        # pip includes urllib3
+        from pip._vendor.urllib3.exceptions import DependencyWarning
+        URLLIB3_FROM_PIP = True
+    except ImportError:
+        raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
+
 # This builtin has a new name in Python 3
 try:
     raw_input  # type: ignore[has-type]
@@ -44,6 +61,11 @@ except NameError:
     raw_input = input
 
 PY3 = sys.version_info[0] >= 3
+
+try:
+    from ssl import HAS_SNI as SSL_HAS_SNI
+except ImportError:
+    SSL_HAS_SNI = False
 
 
 def to_unicode(string, encoding='utf-8', errors='strict'):
@@ -245,3 +267,77 @@ class NoInternet(WaitOnMainThread):
 
 
 no_internet = NoInternet()
+
+
+# Set up ssl for urllib3. This should be called before using urllib3 or importing requests.
+def setup_urllib3_ssl():
+    # Don't complain about missing SOCKS dependencies
+    warnings.filterwarnings('ignore', category=DependencyWarning)
+
+    try:
+        import ssl
+    except ImportError:
+        return
+
+    # Inject SecureTransport on macOS if the linked OpenSSL is too old to handle TLSv1.2
+    if sys.platform == 'darwin' and ssl.OPENSSL_VERSION_NUMBER < 0x1000100F:
+        try:
+            if URLLIB3_FROM_PIP:
+                from pip._vendor.urllib3.contrib import securetransport
+            else:
+                from urllib3.contrib import securetransport
+        except (ImportError, EnvironmentError):
+            pass
+        else:
+            securetransport.inject_into_urllib3()
+
+    # Inject PyOpenSSL if the linked OpenSSL has no SNI
+    if not SSL_HAS_SNI:
+        try:
+            if URLLIB3_FROM_PIP:
+                from pip._vendor.urllib3.contrib import pyopenssl
+            else:
+                from urllib3.contrib import pyopenssl
+        except ImportError:
+            pass
+        else:
+            pyopenssl.inject_into_urllib3()
+
+
+def get_supported_encodings():
+    encodings = ['deflate', 'gzip']
+    try:
+        from brotli import brotli
+    except ImportError:
+        pass
+    else:
+        encodings.insert(0, 'br')  # brotli takes priority if available
+    return encodings
+
+
+def make_requests_session(session_type, retry, timeout, verify, user_agent, cookiefile):
+    class SessionWithTimeout(session_type):  # type: ignore[misc,valid-type]
+        def request(self, method, url, **kwargs):
+            kwargs.setdefault('timeout', timeout)
+            return super(SessionWithTimeout, self).request(method, url, **kwargs)
+
+    session = SessionWithTimeout()
+    session.verify = verify
+    session.headers['Accept-Encoding'] = ', '.join(get_supported_encodings())
+    if user_agent is not None:
+        session.headers['User-Agent'] = user_agent
+    for adapter in session.adapters.values():
+        adapter.max_retries = retry
+    if cookiefile is not None:
+        cookies = MozillaCookieJar(cookiefile)
+        cookies.load()
+
+        # Session cookies are denoted by either `expires` field set to an empty string or 0. MozillaCookieJar only
+        # recognizes the former (see https://bugs.python.org/issue17164).
+        for cookie in cookies:
+            if cookie.expires == 0:
+                cookie.expires = None
+                cookie.discard = True
+
+        session.cookies = cookies  # type: ignore[assignment]
+    return session
