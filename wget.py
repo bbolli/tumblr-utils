@@ -11,9 +11,17 @@ import time
 import warnings
 from email.utils import mktime_tz, parsedate_tz
 from tempfile import NamedTemporaryFile
-from wsgiref.handlers import format_date_time
 
 from util import PY3, URLLIB3_FROM_PIP, get_supported_encodings, is_dns_working, no_internet, setup_urllib3_ssl
+
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from argparse import Namespace
+    from typing import Any, AnyStr, BinaryIO, Callable, Optional, Text
 
 try:
     from urllib.parse import urljoin, urlsplit
@@ -48,8 +56,6 @@ base_headers = make_headers(keep_alive=True, accept_encoding=list(get_supported_
 
 # Document type flags
 RETROKF = 0x2             # retrieval was OK
-HEAD_ONLY = 0x4           # only send the HEAD request
-IF_MODIFIED_SINCE = 0x80  # use If-Modified-Since header
 
 
 # Error statuses
@@ -57,28 +63,24 @@ class UErr(object):
     RETRUNNEEDED = 0
     RETRINCOMPLETE = 1  # Not part of wget
     RETRFINISHED = 2
-    HEADUNSUPPORTED = 3
 
 
 class HttpStat(object):
     def __init__(self):
-        self.current_url = None        # the most recent redirect, otherwise the initial url
+        self.current_url = None        # type: Optional[Any] # the most recent redirect, otherwise the initial url
         self.bytes_read = 0            # received length
         self.bytes_written = 0         # written length
-        self.contlen = None            # expected length
+        self.contlen = None            # type: Optional[int] # expected length
         self.restval = 0               # the restart value
-        self.last_modified = None      # Last-Modified header
-        self.remote_time = None        # remote time-stamp
+        self.last_modified = None      # type: Optional[str] # Last-Modified header
+        self.remote_time = None        # type: Optional[int] # remote time-stamp
         self.statcode = 0              # status code
-        self.dest_dir = None           # handle to the directory containing part_file
-        self.part_file = None          # handle to local file used to store in-progress download
-        self.orig_file_exists = False  # if there is a local file to compare for time-stamping
-        self.orig_file_size = 0        # size of file to compare for time-stamping
-        self.orig_file_tstamp = 0      # time-stamp of file to compare for time-stamping
-        self.remote_encoding = None    # the encoding of the remote file
-        self.enc_is_identity = None    # whether the remote encoding is identity
-        self.decoder = None            # saved decoder from the HTTPResponse
-        self._make_part_file = None    # part_file supplier
+        self.dest_dir = None           # type: Optional[int] # handle to the directory containing part_file
+        self.part_file = None          # type: Optional[BinaryIO] # handle to local file used for in-progress download
+        self.remote_encoding = None    # type: Optional[str] # the encoding of the remote file
+        self.enc_is_identity = None    # type: Optional[bool] # whether the remote encoding is identity
+        self.decoder = None            # type: Optional[object] # saved decoder from the HTTPResponse
+        self._make_part_file = None    # type: Optional[Callable[[], BinaryIO]] # part_file supplier
 
     def set_part_file_supplier(self, value):
         self._make_part_file = value
@@ -215,36 +217,31 @@ def gethttp(url, hstat, doctype, options, logger, retry_counter):
     hstat.remote_time = None
 
     # Initialize the request
-    meth = 'GET'
-    if doctype & HEAD_ONLY:
-        meth = 'HEAD'
     request_headers = {}
-    if doctype & IF_MODIFIED_SINCE:
-        request_headers['If-Modified-Since'] = format_date_time(hstat.orig_file_tstamp)
     if hstat.restval:
         request_headers['Range'] = 'bytes={}-'.format(hstat.restval)
 
     doctype &= ~RETROKF
 
-    resp = urlopen(url, method=meth, headers=request_headers, preload_content=False, enforce_content_length=False)
+    resp = urlopen(url, headers=request_headers, preload_content=False, enforce_content_length=False)
     url = hstat.current_url = urljoin(url, resp.current_url)
 
     try:
-        err, doctype = process_response(url, hstat, doctype, options, logger, retry_counter, meth, resp)
+        err, doctype = process_response(url, hstat, doctype, options, logger, retry_counter, resp)
     finally:
         resp.release_conn()
 
     return err, doctype
 
 
-def process_response(url, hstat, doctype, options, logger, retry_counter, meth, resp):
+def process_response(url, hstat, doctype, options, logger, retry_counter, resp):
     # RFC 7233 section 4.1 paragraph 6:
     # "A server MUST NOT generate a multipart response to a request for a single range [...]"
     conttype = resp.headers.get('Content-Type')
     if conttype is not None and conttype.lower().split(';', 1)[0].strip() == 'multipart/byteranges':
         raise WGBadResponseError(logger, url, 'Sever sent multipart response, but multiple ranges were not requested')
 
-    contlen = resp.get_content_length(meth)
+    contlen = resp.get_content_length('GET')
 
     crange_header = resp.headers.get('Content-Range')
     crange_parsed = parse_content_range(crange_header)
@@ -263,7 +260,7 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
         hstat.remote_time = None
     else:
         lmtuple = parsedate_tz(hstat.last_modified)
-        hstat.remote_time = -1 if lmtuple is None else mktime_tz(lmtuple)
+        hstat.remote_time = None if lmtuple is None else mktime_tz(lmtuple)
 
     remote_encoding = resp.headers.get('Content-Encoding')
 
@@ -287,11 +284,6 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
     except ValueError:
         hstat.statcode = 0
 
-    # HTTP 500 Internal Server Error
-    # HTTP 501 Not Implemented
-    if hstat.statcode in (500, 501) and (doctype & HEAD_ONLY):
-        return UErr.HEADUNSUPPORTED, doctype
-
     # HTTP 20X
     # HTTP 207 Multi-Status
     if 200 <= hstat.statcode < 300 and hstat.statcode != 207:
@@ -301,21 +293,6 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
     if hstat.statcode == 204:
         hstat.bytes_read = hstat.restval = 0
         return UErr.RETRFINISHED, doctype
-
-    if doctype & IF_MODIFIED_SINCE:
-        # HTTP 304 Not Modified
-        if hstat.statcode == 304:
-            # File not modified on server according to If-Modified-Since, not retrieving.
-            doctype |= RETROKF
-            return UErr.RETRUNNEEDED, doctype
-        if (hstat.statcode == 200
-            and contlen in (None, hstat.orig_file_size)
-            and hstat.remote_time not in (None, -1)
-            and hstat.remote_time <= hstat.orig_file_tstamp
-        ):
-            logger.log(url, 'If-Modified-Since was ignored (file not actually modified), not retrieving.')
-            return UErr.RETRUNNEEDED, doctype
-        logger.log(url, 'Retrieving remote file because If-Modified-Since response indicates it was modified.')
 
     if not (doctype & RETROKF):
         e = WGWrongCodeError(logger, url, hstat.statcode, resp.reason, resp.headers)
@@ -336,8 +313,8 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
     shrunk = False
     if hstat.statcode == 416:
         shrunk = True  # HTTP 416 Range Not Satisfiable
-    elif hstat.statcode != 200 or options.timestamping or contlen == 0:
-        pass  # Only verify contlen if 200 OK (NOT 206 Partial Contents), not timestamping, and contlen is nonzero
+    elif hstat.statcode != 200 or contlen == 0:
+        pass  # Only verify contlen if 200 OK (NOT 206 Partial Contents) and contlen is nonzero
     elif contlen is not None and contrange == 0 and hstat.restval >= contlen:
         shrunk = True  # Got the whole content but it is known to be shorter than the restart point
 
@@ -368,7 +345,7 @@ def process_response(url, hstat, doctype, options, logger, retry_counter, meth, 
     if hstat.contlen is not None:
         hstat.contlen += contrange
 
-    if (doctype & HEAD_ONLY) or not (doctype & RETROKF):
+    if not (doctype & RETROKF):
         hstat.bytes_read = hstat.restval = 0
         return UErr.RETRFINISHED, doctype
 
@@ -565,13 +542,14 @@ def normalized_host(scheme, host, port):
     return '{}:{}'.format(host, port)
 
 
-def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
+def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, options, log):
+    # type: (HttpStat, AnyStr, AnyStr, Optional[float], Optional[Callable[[AnyStr, BinaryIO], AnyStr]], Namespace, Callable[[Text], None]) -> None  # noqa: E501
     if PY3 and (isinstance(url, bytes) or isinstance(dest_file, bytes)):
         raise ValueError('This function does not support bytes arguments on Python 3')
 
     logger = Logger(url, log)
 
-    if urlsplit(url, 'http').scheme not in ('http', 'https'):
+    if urlsplit(url).scheme not in ('http', 'https'):
         raise WGBadProtocolError(logger, url, 'Non-HTTP(S) protocols are not implemented.')
 
     hostname = normalized_host_from_url(url)
@@ -579,47 +557,21 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
         raise WGUnreachableHostError(logger, url, 'Host {} is ignored.'.format(hostname))
 
     doctype = 0
-    got_head = False  # used for time-stamping
     dest_dirname, dest_basename = os.path.split(dest_file)
 
     flags = os.O_RDONLY
     try:
         flags |= os.O_DIRECTORY
     except AttributeError:
-        dest_dirname += os.path.sep  # Fallback, some systems don't support O_DIRECTORY
+        # Fallback, some systems don't support O_DIRECTORY
+        dest_dirname += os.path.sep  # type: ignore[operator]
 
     if os.name == 'posix':  # Opening directories is a POSIX feature
         hstat.dest_dir = os.open(dest_dirname, flags)
     hstat.set_part_file_supplier(functools.partial(
         lambda pfx, dir_: NamedTemporaryFile('wb', prefix=pfx, dir=dir_, delete=False),
-        '.{}.'.format(dest_basename), dest_dirname,
+        '.{}.'.format(dest_basename), dest_dirname,  # type: ignore[str-bytes-safe]
     ))
-    send_head_first = False
-
-    if options.timestamping:
-        st = None
-        try:
-            if PY3 and os.stat in os.supports_dir_fd:
-                st = os.stat(dest_basename, dir_fd=hstat.dest_dir)
-            else:
-                st = os.stat(dest_file)
-        except EnvironmentError as e:
-            if getattr(e, 'errno', None) != errno.ENOENT:
-                raise  # Not unusual
-
-        if st is not None:
-            # Timestamping is enabled and the local file exists
-            hstat.orig_file_exists = True
-            hstat.orig_file_size = st.st_size
-            hstat.orig_file_tstamp = int(st.st_mtime)
-            if options.mtime_postfix:
-                hstat.orig_file_tstamp += 1
-
-            if options.if_modified_since:
-                doctype |= IF_MODIFIED_SINCE  # Send a conditional GET request
-            else:
-                send_head_first = True  # Send a preliminary HEAD request
-                doctype |= HEAD_ONLY
 
     # THE loop
 
@@ -655,43 +607,7 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
             continue  # Non-fatal error, try again
         if err == UErr.RETRUNNEEDED:
             return
-        if err == UErr.HEADUNSUPPORTED:
-            # Fall back to GET if HEAD is unsupported.
-            send_head_first = False
-            doctype &= ~HEAD_ONLY
-            retry_counter.reset()
-            continue
         assert err == UErr.RETRFINISHED
-
-        # Did we get the time-stamp?
-        if not got_head:
-            got_head = True  # no more time-stamping
-
-            if (options.timestamping or options.use_server_timestamps) and hstat.remote_time in (None, -1):
-                logger.log(url, 'Warning: Last-Modified header is {}'
-                           .format('missing' if hstat.remote_time is None
-                                   else 'invalid: {}'.format(hstat.last_modified)))
-
-            if send_head_first:
-                if hstat.orig_file_exists and hstat.remote_time not in (None, -1):
-                    # Now time-stamping can be used validly. Time-stamping means that if the sizes of the local and
-                    # remote file match, and local file is newer than the remote file, it will not be retrieved.
-                    # Otherwise, the normal download procedure is resumed.
-                    if hstat.remote_time > hstat.orig_file_tstamp:
-                        logger.log(url, 'Retrieving remote file because its mtime ({}) is newer than what we have ({}).'
-                                   .format(format_date_time(hstat.remote_time),
-                                           format_date_time(hstat.orig_file_tstamp)))
-                    elif hstat.enc_is_identity and hstat.contlen not in (None, hstat.orig_file_size):
-                        logger.log(url,
-                                   'Retrieving remote file because its size ({}) is does not match what we have ({}).'
-                                   .format(hstat.contlen, hstat.orig_file_size))
-                    else:
-                        # Remote file is no newer and has the same size, not retrieving.
-                        return
-
-                doctype &= ~HEAD_ONLY
-                retry_counter.reset()
-                continue
 
         if hstat.contlen is not None and hstat.bytes_read < hstat.contlen:
             # We lost the connection too soon
@@ -702,6 +618,7 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
         assert hstat.contlen in (None, hstat.bytes_read)
 
         # Normal return path - we wrote a local file
+        assert hstat.part_file is not None
         pfname = hstat.part_file.name
 
         # NamedTemporaryFile is created 0600, set mode to the usual 0644
@@ -710,12 +627,26 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
         else:
             os.chmod(hstat.part_file.name, 0o644)
 
-        # Set the timestamp
+        if options.use_server_timestamps and hstat.remote_time is None:
+            logger.log(url, 'Warning: Last-Modified header is {}'
+                       .format('missing' if hstat.last_modified is None
+                               else 'invalid: {}'.format(hstat.last_modified)))
+
+        # Flush the userspace buffer so mtime isn't updated
+        hstat.part_file.flush()
+
+        # Set the timestamp on the local file
         if (options.use_server_timestamps
-            and hstat.remote_time not in (None, -1)
+            and (hstat.remote_time is not None or post_timestamp is not None)
             and hstat.contlen in (None, hstat.bytes_read)
         ):
-            touch(pfname, hstat.remote_time, dir_fd=hstat.dest_dir)
+            if hstat.remote_time is None:
+                tstamp = post_timestamp
+            elif post_timestamp is None:
+                tstamp = hstat.remote_time
+            else:
+                tstamp = min(hstat.remote_time, post_timestamp)
+            touch(pfname, tstamp, dir_fd=hstat.dest_dir)
 
         # Adjust the new name
         if adjust_basename is None:
@@ -723,10 +654,9 @@ def _retrieve_loop(hstat, url, dest_file, adjust_basename, options, log):
         else:
             # Give adjust_basename a read-only file handle
             pf = io.open(hstat.part_file.fileno(), 'rb', closefd=False)
-            new_dest_basename = adjust_basename(dest_basename, pf)
+            new_dest_basename = adjust_basename(dest_basename, pf)  # type: ignore[arg-type]
 
-        # Flush buffers and sync the inode
-        hstat.part_file.flush()
+        # Sync the inode
         os.fsync(hstat.part_file)
         try:
             hstat.part_file.close()
@@ -790,10 +720,10 @@ class WgetRetrieveWrapper(object):
         self.options = options
         self.log = log
 
-    def __call__(self, url, file, adjust_basename=None):
+    def __call__(self, url, file, post_timestamp=None, adjust_basename=None):
         hstat = HttpStat()
         try:
-            _retrieve_loop(hstat, url, file, adjust_basename, self.options, self.log)
+            _retrieve_loop(hstat, url, file, post_timestamp, adjust_basename, self.options, self.log)
         finally:
             if hstat.dest_dir is not None:
                 os.close(hstat.dest_dir)

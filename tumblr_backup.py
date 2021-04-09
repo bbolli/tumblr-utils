@@ -25,8 +25,8 @@ from posixpath import basename as urlbasename, join as urlpathjoin, splitext as 
 from xml.sax.saxutils import escape
 
 from util import (ConnectionFile, LockedQueue, PY3, is_dns_working, make_requests_session, no_internet, nullcontext,
-                  path_is_on_vfat, to_bytes, to_unicode)
-from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, urlopen
+                  to_bytes, to_unicode)
+from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
 try:
     from typing import TYPE_CHECKING
@@ -175,6 +175,7 @@ except locale.Error:
 FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
+wget_retrieve = None  # type: Optional[WgetRetrieveWrapper]
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
 prev_resps = None  # type: Optional[Tuple[str, ...]]
@@ -482,13 +483,8 @@ def get_avatar(prev_archive):
     avatar_dest = avatar_fpath = open_file(lambda f: f, (theme_dir, avatar_base))
 
     # Remove old avatars
-    old_avatars = glob(join(theme_dir, avatar_base + '.*'))
-    if len(old_avatars) > 1:
-        for old_avatar in old_avatars:
-            os.unlink(old_avatar)
-    elif len(old_avatars) == 1:
-        # Use the old avatar for timestamping
-        avatar_dest, = old_avatars
+    if glob(join(theme_dir, avatar_base + '.*')):
+        return  # Do not clobber
 
     def adj_bn(old_bn, f):
         # Give it an extension
@@ -498,6 +494,7 @@ def get_avatar(prev_archive):
         return avatar_fpath
 
     # Download the image
+    assert wget_retrieve is not None
     try:
         wget_retrieve(url, avatar_dest, adjust_basename=adj_bn)
     except WGError as e:
@@ -582,6 +579,24 @@ def maybe_copy_media(prev_archive, path_parts):
             shutil.copystat(src, dstpath)  # type: ignore[arg-type]
 
         return True  # Either we copied it or we didn't need to
+
+
+def naturaldelta(delta):
+    """Format a duration of at least one day approximately."""
+    days = delta.days
+    years, days = divmod(days, 365)
+    months = int(days // 30.436875)
+
+    def pl(s, n):
+        return s if n == 1 else '{}s'.format(s)
+
+    mstr = '{} {}'.format(months, pl('month', months)) if months else None  # N months
+
+    if years:
+        msg = '{} {}'.format(years, pl('year', years))  # N years
+        return '{}, {}'.format(msg, mstr) if mstr else msg
+
+    return mstr if mstr else '{} {}'.format(days, pl('day', days))  # N days
 
 
 class Index(object):
@@ -1251,8 +1266,17 @@ class TumblrPost(object):
 
     def get_filename(self, url, offset=''):
         """Determine the image file name depending on options.image_names"""
-        fname = urlbasename(urlparse(url).path)
+        parsed_url = urlparse(url)
+        fname = urlbasename(parsed_url.path)
         ext = urlsplitext(fname)[1]
+        if parsed_url.query:
+            # Insert the query string to avoid ambiguity for certain URLs (e.g. SoundCloud embeds).
+            query_sep = '@' if os.name == 'nt' else '?'
+            if ext:
+                extwdot = '.{}'.format(ext)
+                fname = fname[:-len(extwdot)] + query_sep + parsed_url.query + extwdot
+            else:
+                fname = fname + query_sep + parsed_url.query
         if options.image_names == 'i':
             return self.ident + offset + ext
         if options.image_names == 'bi':
@@ -1280,12 +1304,29 @@ class TumblrPost(object):
             path_parts.insert(1, hostdir)
 
         cpy_res = maybe_copy_media(self.prev_archive, path_parts)
-        if not cpy_res:
+        file_exists = os.path.exists(path_to(*path_parts))
+        if not (cpy_res or file_exists):
+            assert wget_retrieve is not None
             try:
-                wget_retrieve(url, open_file(lambda f: f, path_parts))
+                wget_retrieve(url, open_file(lambda f: f, path_parts), post_timestamp=self.post['timestamp'])
             except WGError as e:
                 e.log()
                 return None
+        if file_exists:
+            try:
+                st = os.stat(path_to(*path_parts))
+            except EnvironmentError as e:
+                if getattr(e, 'errno', None) != errno.ENOENT:
+                    raise
+                # Ignore ENOENT
+            else:
+                if st.st_mtime > self.post['timestamp']:
+                    if st.st_mtime > self.post['timestamp'] + timedelta(days=1).total_seconds():
+                        log('Rolling back media timestamp by {}\n'.format(
+                            naturaldelta(datetime.fromtimestamp(st.st_mtime) -
+                                         datetime.fromtimestamp(self.post['timestamp']))
+                        ))
+                    touch(path_to(*path_parts), self.post['timestamp'])
 
         return filename
 
@@ -1622,14 +1663,8 @@ if __name__ == '__main__':
     parser.add_argument('--prev-archives', action=CSVListCallback, default=[], metavar='DIRS',
                         help='comma-separated list of directories (one per blog) containing previous blog archives')
     parser.add_argument('--no-post-clobber', action='store_true', help='Do not re-download existing posts')
-    parser.add_argument('-M', '--timestamping', action='store_true',
-                        help="don't re-download files if the remote timestamp and size match the local file")
-    parser.add_argument('--no-if-modified-since', action='store_false', dest='if_modified_since',
-                        help="timestamping: don't send If-Modified-Since header")
     parser.add_argument('--no-server-timestamps', action='store_false', dest='use_server_timestamps',
                         help="don't set local timestamps from HTTP headers")
-    parser.add_argument('--mtime-postfix', action='store_true',
-                        help="timestamping: work around low-precision mtime on FAT filesystems")
     parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
     parser.add_argument('--user-agent', help='User agent string to use with HTTP requests')
     parser.add_argument('blogs', nargs='*')
@@ -1706,9 +1741,6 @@ if __name__ == '__main__':
             if os.path.realpath(pa) == os.path.realpath(blogdir):
                 parser.error("--prev-archives: Directory '{}' is also being written to. Use --reuse-json instead if "
                              "you want this, or specify --outdir if you don't.".format(pa))
-    if not options.mtime_postfix and path_is_on_vfat.works and path_is_on_vfat('.'):
-        print('Warning: FAT filesystem detected, enabling --mtime-postfix', file=sys.stderr)
-        options.mtime_postfix = True
 
     if not API_KEY:
         sys.stderr.write('''\
