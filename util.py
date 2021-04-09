@@ -165,33 +165,6 @@ def is_dns_working(timeout=None):
     return True
 
 
-def rstrip_slashes(path):
-    return path.rstrip(b'\\/' if isinstance(path, bytes) else u'\\/')
-
-
-class _Path_Is_On_VFat(object):
-    works = _PATH_IS_ON_VFAT_WORKS
-
-    def __call__(self, path):
-        if not self.works:
-            raise RuntimeError('This function must not be called unless PATH_IS_ON_VFAT_WORKS is True')
-
-        if os.name == 'nt':
-            # Compare normalized absolute path of volume
-            getdev = rstrip_slashes
-            path_dev = rstrip_slashes(_getvolumepathname(path))
-        else:
-            # Compare device ID
-            def getdev(mount): return os.stat(mount).st_dev
-            path_dev = getdev(path)
-
-        return any(part.fstype == 'vfat' and getdev(part.mountpoint) == path_dev
-                   for part in psutil.disk_partitions(all=True))
-
-
-path_is_on_vfat = _Path_Is_On_VFat()
-
-
 class WaitOnMainThread(object):
     def __init__(self):
         self.cond = None  # type: Optional[threading.Condition]
