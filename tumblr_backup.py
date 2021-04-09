@@ -14,7 +14,6 @@ import multiprocessing
 import os
 import re
 import shutil
-import ssl
 import sys
 import threading
 import time
@@ -25,7 +24,8 @@ from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from xml.sax.saxutils import escape
 
-from util import ConnectionFile, HAVE_SSL_CTX, HTTP_TIMEOUT, LockedQueue, PY3, nullcontext, to_bytes, to_unicode
+from util import ConnectionFile, LockedQueue, PY3, no_internet, nullcontext, path_is_on_vfat, to_bytes, to_unicode
+from wget import HTTPError, WGError, WgetRetrieveWrapper, set_ssl_verify, urlopen
 
 try:
     from typing import TYPE_CHECKING
@@ -39,11 +39,6 @@ if TYPE_CHECKING:
     JSONDict = Dict[str, Any]
 
 try:
-    from http.client import HTTPException
-except ImportError:
-    from httplib import HTTPException  # type: ignore[no-redef]
-
-try:
     import json
 except ImportError:
     import simplejson as json  # type: ignore[no-redef]
@@ -55,13 +50,9 @@ except ImportError:
 
 try:
     from urllib.parse import quote, urlencode, urlparse
-    from urllib.request import urlopen
-    NEW_URLLIB = True
 except ImportError:
     from urllib import quote, urlencode  # type: ignore[attr-defined,no-redef]
-    from urllib2 import urlopen  # type: ignore[no-redef]
     from urlparse import urlparse  # type: ignore[no-redef]
-    NEW_URLLIB = False
 
 try:
     from settings import DEFAULT_BLOGS
@@ -156,8 +147,6 @@ TAG_ANY = '__all__'
 MAX_POSTS = 50
 REM_POST_INC = 10
 
-HTTP_CHUNK_SIZE = 1024 * 1024
-
 # get your own API key at https://www.tumblr.com/oauth/apps
 API_KEY = ''
 
@@ -168,15 +157,6 @@ except locale.Error:
     pass
 FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
-
-
-if HAVE_SSL_CTX:
-    ssl_ctx = ssl.create_default_context()
-    def tb_urlopen(url):
-        return urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
-else:
-    def tb_urlopen(url):
-        return urlopen(url, timeout=HTTP_TIMEOUT)
 
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
@@ -248,10 +228,6 @@ def open_text(*parts):
     return open_file(
         lambda f: io.open(f, 'w', encoding=FILE_ENCODING, errors='xmlcharrefreplace'), parts
     )
-
-
-def open_media(*parts):
-    return open_file(lambda f: io.open(f, 'wb'), parts)
 
 
 def strftime(fmt, t=None):
@@ -342,28 +318,28 @@ def apiparse(base, prev_resps, count, start=0, before=None):
         params['before'] = before
     if start > 0 and not options.likes:
         params['offset'] = start
-    url = base + '?' + urlencode(params)
 
     def get_resp():
-        for _ in range(10):
-            try:
-                resp = tb_urlopen(url)
-                data = resp.read()
-            except (EnvironmentError, HTTPException) as e:
-                log('URL is {}\nError retrieving API repsonse: {}\n'.format(url, e))
-                continue
-            info = resp.info()
-            if (info.get_content_type() if NEW_URLLIB else info.gettype()) == 'application/json':
-                break
-            log("Unexpected Content-Type: '{}'\n".format(resp.info().gettype()))
+        try:
+            resp = urlopen(base, fields=params)
+        except (EnvironmentError, HTTPError) as e:
+            log('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
             return None
-        else:
+        if not (200 <= resp.status < 300 or 400 <= resp.status < 500):
+            log('URL is {}?{}\nError retrieving API repsonse: HTTP {} {}\n'.format(
+                base, urlencode(params), resp.status, resp.reason,
+            ))
             return None
+        ctype = resp.headers.get('Content-Type')
+        if ctype and ctype.split(';', 1)[0].strip() != 'application/json':
+            log("Unexpected Content-Type: '{}'\n".format(ctype))
+            return None
+        data = resp.data.decode('utf-8')
         try:
             doc = json.loads(data)
         except ValueError as e:
             log('{}: {}\n{} {} {}\n{!r}\n'.format(
-                e.__class__.__name__, e, resp.getcode(), resp.msg, resp.info().gettype(), data,
+                e.__class__.__name__, e, resp.status, resp.reason, ctype, data,
             ))
             return None
         return doc
@@ -425,28 +401,40 @@ footer, article footer a { font-size: small; color: #999; }
 
 
 def get_avatar(prev_archive):
-    path_parts = (theme_dir, avatar_base)
     if prev_archive is not None:
         # Copy old avatar, if present
-        cpy_res = maybe_copy_media(prev_archive, path_parts, known_extension=False)
-        if cpy_res:
-            return  # We got the avatar
+        avatar_glob = glob(join(prev_archive, theme_dir, avatar_base + '.*'))
+        if avatar_glob:
+            src = avatar_glob[0]
+            path_parts = (theme_dir, split(src)[-1])
+            cpy_res = maybe_copy_media(prev_archive, path_parts)
+            if cpy_res:
+                return  # We got the avatar
 
-    try:
-        resp = tb_urlopen('https://api.tumblr.com/v2/blog/%s/avatar' % blog_name)
-        avatar_data = resp.read()
-    except (EnvironmentError, HTTPException):
-        return
-    avatar_file = avatar_base
-    ext = imghdr.what(None, avatar_data[:32])
-    if ext is not None:
-        avatar_file += '.' + ext
-    # Remove avatars with a different extension
-    for old_avatar in glob(join(theme_dir, avatar_base + '.*')):
-        if split(old_avatar)[-1] != avatar_file:
+    url = 'https://api.tumblr.com/v2/blog/%s/avatar' % blog_name
+    avatar_dest = avatar_fpath = open_file(lambda f: f, (theme_dir, avatar_base))
+
+    # Remove old avatars
+    old_avatars = glob(join(theme_dir, avatar_base + '.*'))
+    if len(old_avatars) > 1:
+        for old_avatar in old_avatars:
             os.unlink(old_avatar)
-    with open_media(theme_dir, avatar_file) as f:
-        f.write(avatar_data)
+    elif len(old_avatars) == 1:
+        # Use the old avatar for timestamping
+        avatar_dest, = old_avatars
+
+    def adj_bn(old_bn, f):
+        # Give it an extension
+        image_type = imghdr.what(f)
+        if image_type:
+            return avatar_fpath + '.' + image_type
+        return avatar_fpath
+
+    # Download the image
+    try:
+        wget_retrieve(url, avatar_dest, adjust_basename=adj_bn)
+    except WGError as e:
+        e.log()
 
 
 def get_style(prev_archive):
@@ -456,14 +444,16 @@ def get_style(prev_archive):
     if prev_archive is not None:
         # Copy old style, if present
         path_parts = (theme_dir, 'style.css')
-        cpy_res = maybe_copy_media(prev_archive, path_parts, known_extension=False)
+        cpy_res = maybe_copy_media(prev_archive, path_parts)
         if cpy_res:
             return  # We got the style
 
+    url = 'https://%s/' % blog_name
     try:
-        resp = tb_urlopen('https://%s/' % blog_name)
-        page_data = resp.read()
-    except (EnvironmentError, HTTPException):
+        resp = urlopen(url)
+        page_data = resp.data
+    except HTTPError as e:
+        log('URL is {}\nError retrieving style: {}\n'.format(url, e))
         return
     for match in re.findall(br'(?s)<style type=.text/css.>(.*?)</style>', page_data):
         css = match.strip().decode('utf-8', errors='replace')
@@ -476,18 +466,11 @@ def get_style(prev_archive):
 
 
 # Copy media file, if present in prev_archive
-def maybe_copy_media(prev_archive, path_parts, known_extension):
+def maybe_copy_media(prev_archive, path_parts):
     if prev_archive is None:
         return False  # Source does not exist
 
-    if known_extension:
-        srcpath = join(prev_archive, *path_parts)
-    else:
-        image_glob = glob(join(*itertools.chain((prev_archive,), path_parts[:-1], ('{}.*'.format(path_parts[-1]),))))
-        if not image_glob:
-            return False  # Source does not exist
-        srcpath = image_glob[0]
-        path_parts = tuple(itertools.chain(path_parts[:-1], (split(srcpath)[-1],)))
+    srcpath = join(prev_archive, *path_parts)
     dstpath = open_file(lambda f: f, path_parts)
 
     if PY3:
@@ -532,7 +515,6 @@ def maybe_copy_media(prev_archive, path_parts, known_extension):
             shutil.copystat(src, dstpath)  # type: ignore[arg-type]
 
         return True  # Either we copied it or we didn't need to
-
 
 
 class Index(object):
@@ -817,6 +799,7 @@ class TumblrBackup(object):
             sorted_posts = sorted(zip(posts, post_respfiles),
                                   key=lambda x: x[0]['liked_timestamp' if options.likes else 'id'], reverse=True)
             for p, prf in sorted_posts:
+                no_internet.check()
                 post = post_class(p, account, prf, prev_archive)
                 if ident_max is None:
                     pass  # No limit
@@ -850,7 +833,14 @@ class TumblrBackup(object):
                     self.filter_skipped += 1
                     continue
 
-                backup_pool.add_work(post.save_content)
+                while True:
+                    try:
+                        backup_pool.add_work(post.save_content, timeout=0.1)
+                        break
+                    except queue.Full:
+                        pass
+                    no_internet.check()
+
                 self.post_count += 1
                 if options.count and self.post_count >= options.count:
                     log('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
@@ -1197,44 +1187,32 @@ class TumblrPost(object):
         return re.sub(r'[:<>"/\\|*?]', '', fname) if os.name == 'nt' else fname
 
     def download_media(self, url, filename):
-        # check if a file with this name already exists
-        known_extension = '.' in filename[-5:]
-        image_glob = glob(path_to(self.media_dir,
-            filename + ('' if known_extension else '.*')
-        ))
-        if image_glob:
-            return split(image_glob[0])[1]
+        parsed_url = urlparse(url, 'http')
+        if parsed_url.scheme not in ('http', 'https') or not parsed_url.hostname:
+            return None  # This URL does not follow our basic assumptions
 
-        path_parts = (self.media_dir, filename)
+        # Make a sane directory to represent the host
+        try:
+            hostdir = parsed_url.hostname.encode('idna').decode('ascii')
+        except UnicodeError:
+            hostdir = parsed_url.hostname
+        if hostdir in ('.', '..'):
+            hostdir = hostdir.replace('.', '%2E')
+        if parsed_url.port not in (None, (80 if parsed_url.scheme == 'http' else 443)):
+            hostdir += '{}{}'.format('+' if os.name == 'nt' else ':', parsed_url.port)
 
-        cpy_res = maybe_copy_media(self.prev_archive, path_parts, known_extension)
+        path_parts = [self.media_dir, filename]
+        if options.hostdirs:
+            path_parts.insert(1, hostdir)
+
+        cpy_res = maybe_copy_media(self.prev_archive, path_parts)
         if not cpy_res:
-            # download the media data
             try:
-                resp = tb_urlopen(url)
-                with open_media(*path_parts) as dest:
-                    data = resp.read(HTTP_CHUNK_SIZE)
-                    hdr = data[:32]     # save the first few bytes
-                    while data:
-                        dest.write(data)
-                        data = resp.read(HTTP_CHUNK_SIZE)
-            except (EnvironmentError, ValueError, HTTPException) as e:
-                sys.stderr.write('%s downloading %s\n' % (e, url))
-
-                try:
-                    os.unlink(path_to(self.media_dir, filename))
-                except EnvironmentError as ee:
-                    if getattr(ee, 'errno', None) != errno.ENOENT:
-                        raise
-
+                wget_retrieve(url, open_file(lambda f: f, path_parts))
+            except WGError as e:
+                e.log()
                 return None
-            # determine the file type if it's unknown
-            if not known_extension:
-                image_type = imghdr.what(None, hdr)
-                if image_type:
-                    oldname = path_to(self.media_dir, filename)
-                    filename += '.' + image_type.replace('jpeg', 'jpg')
-                    os.rename(oldname, path_to(self.media_dir, filename))
+
         return filename
 
     def get_post(self):
@@ -1275,46 +1253,51 @@ class TumblrPost(object):
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
             # Scrape and save notes
-            ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
-            ns_msg_rd, ns_msg_wr = multiprocessing.Pipe(duplex=False)
-            try:
-                args = (ns_stdout_wr, ns_msg_wr, self.url, self.ident,
-                        options.no_ssl_verify, options.notes_limit,
-                        options.cookiefile)
-                process = multiprocessing.Process(target=note_scraper.main, args=args)
-                process.start()
-            except:
-                ns_stdout_rd.close()
-                ns_msg_rd.close()
-                raise
-            finally:
-                ns_stdout_wr.close()
-                ns_msg_wr.close()
+            while True:
+                ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
+                ns_msg_rd, ns_msg_wr = multiprocessing.Pipe(duplex=False)
+                try:
+                    args = (ns_stdout_wr, ns_msg_wr, self.url, self.ident,
+                            options.no_ssl_verify, options.notes_limit,
+                            options.cookiefile)
+                    process = multiprocessing.Process(target=note_scraper.main, args=args)
+                    process.start()
+                except:
+                    ns_stdout_rd.close()
+                    ns_msg_rd.close()
+                    raise
+                finally:
+                    ns_stdout_wr.close()
+                    ns_msg_wr.close()
 
-            try:
-                with ConnectionFile(ns_msg_rd) as msg_pipe:
-                    for line in msg_pipe:
-                        log(line)
+                try:
+                    with ConnectionFile(ns_msg_rd) as msg_pipe:
+                        for line in msg_pipe:
+                            log(line)
 
-                with ConnectionFile(ns_stdout_rd) as stdout:
-                    notes_html = stdout.read()
+                    with ConnectionFile(ns_stdout_rd) as stdout:
+                        notes_html = stdout.read()
 
-                process.join()
-            except:
-                process.terminate()
-                process.join()
-                raise
+                    process.join()
+                except:
+                    process.terminate()
+                    process.join()
+                    raise
 
-            if process.exitcode == 2:  # EXIT_SAFE_MODE
-                # Safe mode is blocking us, disable note scraping for this blog
-                notes_html = u''
-                with disablens_lock:
-                    # Check if another thread already set this
-                    if self.backup_account not in disable_note_scraper:
-                        disable_note_scraper.add(self.backup_account)
-                        log('[Note Scraper] Blocked by safe mode - scraping disabled for {}\n'.format(
-                            self.backup_account
-                        ))
+                if process.exitcode == 2:  # EXIT_SAFE_MODE
+                    # Safe mode is blocking us, disable note scraping for this blog
+                    notes_html = u''
+                    with disablens_lock:
+                        # Check if another thread already set this
+                        if self.backup_account not in disable_note_scraper:
+                            disable_note_scraper.add(self.backup_account)
+                            log('[Note Scraper] Blocked by safe mode - scraping disabled for {}\n'.format(
+                                self.backup_account
+                            ))
+                elif process.exitcode == 3:  # EXIT_NO_INTERNET
+                    no_internet.signal()
+                    continue
+                break
 
         notes_str = u'{} note{}'.format(self.note_count, 's'[self.note_count == 1:])
         if notes_html.strip():
@@ -1434,10 +1417,16 @@ class ThreadPool(object):
     def wait(self):
         log.status('{} remaining posts to save\r'.format(self.queue.qsize()))
         self.quit.set()
-        self.queue.join()
+        while True:
+            with self.queue.all_tasks_done:
+                if not self.queue.unfinished_tasks:
+                    break
+                self.queue.all_tasks_done.wait(timeout=0.1)
+            no_internet.check()
 
     def cancel(self):
         self.abort.set()
+        no_internet.destroy()
         for i, t in enumerate(self.threads, start=1):
             log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
             t.join()
@@ -1475,6 +1464,8 @@ if __name__ == '__main__':
         multiprocessing.set_start_method('forkserver')  # Fastest safe option, if supported
     else:
         multiprocessing.set_start_method('spawn')  # Slow but safe
+
+    no_internet.setup()
 
     import argparse
 
@@ -1558,6 +1549,15 @@ if __name__ == '__main__':
     parser.add_argument('--prev-archives', action=CSVListCallback, default=[], metavar='DIRS',
                         help='comma-separated list of directories (one per blog) containing previous blog archives')
     parser.add_argument('--no-post-clobber', action='store_true', help='Do not re-download existing posts')
+    parser.add_argument('-M', '--timestamping', action='store_true',
+                        help="don't re-download files if the remote timestamp and size match the local file")
+    parser.add_argument('--no-if-modified-since', action='store_false', dest='if_modified_since',
+                        help="timestamping: don't send If-Modified-Since header")
+    parser.add_argument('--no-server-timestamps', action='store_false', dest='use_server_timestamps',
+                        help="don't set local timestamps from HTTP headers")
+    parser.add_argument('--mtime-postfix', action='store_true',
+                        help="timestamping: work around low-precision mtime on FAT filesystems")
+    parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
 
@@ -1572,10 +1572,9 @@ if __name__ == '__main__':
             if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
-    if HAVE_SSL_CTX and options.no_ssl_verify:
-        ssl_ctx = ssl._create_unverified_context()
-        # Otherwise, it's an old Python version without SSL verification,
-        # so this is the default.
+
+    wget_retrieve = WgetRetrieveWrapper(options, log)
+    set_ssl_verify(not options.no_ssl_verify)
 
     blogs = options.blogs or DEFAULT_BLOGS
     if not blogs:
@@ -1633,6 +1632,9 @@ if __name__ == '__main__':
             if os.path.realpath(pa) == os.path.realpath(blogdir):
                 parser.error("--prev-archives: Directory '{}' is also being written to. Use --reuse-json instead if "
                              "you want this, or specify --outdir if you don't.".format(pa))
+    if not options.mtime_postfix and path_is_on_vfat.works and path_is_on_vfat('.'):
+        print('Warning: FAT filesystem detected, enabling --mtime-postfix', file=sys.stderr)
+        options.mtime_postfix = True
 
     if not API_KEY:
         sys.stderr.write('''\
