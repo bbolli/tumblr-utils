@@ -2055,8 +2055,8 @@ if __name__ == '__main__':
                              "you want this, or specify --outdir if you don't.".format(pa))
     if options.threads < 1:
         parser.error('--threads: must use at least one thread')
-    if options.no_get and not options.prev_archives:
-        parser.error('--no-get requires --prev-archives')
+    if options.no_get and not (options.prev_archives or options.reuse_json):
+        parser.error('--no-get makes no sense without --prev-archives or --reuse-json')
     if options.no_get and options.save_notes:
         print('Warning: --save-notes uses HTTP regardless of --no-get', file=sys.stderr)
 
