@@ -56,28 +56,32 @@ try:
 except ImportError:
     ssl = None  # type: ignore[assignment,no-redef]
 
-# Inject SecureTransport on macOS if the linked OpenSSL is too old to handle TLSv1.2
-if ssl is not None and sys.platform == 'darwin' and ssl.OPENSSL_VERSION_NUMBER < 0x1000100F:
+HAVE_SNI = getattr(ssl, 'HAS_SNI', False)
+
+# Inject SecureTransport on macOS if the linked OpenSSL is too old to handle TLSv1.2 or doesn't support SNI
+if ssl is not None and sys.platform == 'darwin' and (ssl.OPENSSL_VERSION_NUMBER < 0x1000100F or not HAVE_SNI):
     try:
         if URLLIB3_FROM_PIP:
             from pip._vendor.urllib3.contrib import securetransport
         else:
             from urllib3.contrib import securetransport
-    except (ImportError, EnvironmentError):
-        pass
+    except (ImportError, EnvironmentError) as e:
+        print('Warning: Failed to inject SecureTransport: {}'.format(e), file=sys.stderr)
     else:
         securetransport.inject_into_urllib3()
+        HAVE_SNI = True  # SNI always works
 
-if ssl is not None and not getattr(ssl, 'HAS_SNI', False):
+if ssl is not None and not HAVE_SNI:
     try:
         if URLLIB3_FROM_PIP:
             from pip._vendor.urllib3.contrib import pyopenssl
         else:
             from urllib3.contrib import pyopenssl
-    except ImportError:
-        pass
+    except ImportError as e:
+        print('Warning: Failed to inject pyOpenSSL: {}'.format(e), file=sys.stderr)
     else:
         pyopenssl.inject_into_urllib3()
+        HAVE_SNI = True  # SNI always works
 
 # long is int in Python 3
 try:
