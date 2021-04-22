@@ -1,5 +1,16 @@
 # tumblr-utils
 
+### About this fork
+
+This fork is focused on tumblr_backup.py. It adds Python 3 compatibility,
+various bug fixes, a few enhancements to normal operation, support for
+dashboard-only blogs, and several other features - see the output of
+`tumblr_backup.py --help` for the full list of options. Check out the
+"experimental" branch if you want to try out some less stable extra
+functionality.
+
+---
+
 This is a collection of utilities dealing with Tumblr blogs.
 
 - `tumble.py` creates new posts from RSS or Atom feeds
@@ -11,7 +22,9 @@ These scripts are or have been useful to me over the years.
 More documentation can be found in each script's docstring or in
 [tumblr_backup.md](https://github.com/bbolli/tumblr-utils/blob/master/tumblr_backup.md).
 
-The utilities run under Python 2.7.
+The utilities run under Python 2.7, though Python 3 is supported and preferred
+for tumblr_backup.py, which has been tested on Python 3.8 but should also run
+fine on Python 3.9.3 and later.
 
 ### Notice
 
