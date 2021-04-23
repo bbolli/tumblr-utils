@@ -77,10 +77,10 @@ if ssl is not None and not HAVE_SNI:
             from pip._vendor.urllib3.contrib import pyopenssl
         else:
             from urllib3.contrib import pyopenssl
+        pyopenssl.inject_into_urllib3()
     except ImportError as e:
         print('Warning: Failed to inject pyOpenSSL: {}'.format(e), file=sys.stderr)
     else:
-        pyopenssl.inject_into_urllib3()
         HAVE_SNI = True  # SNI always works
 
 # long is int in Python 3
