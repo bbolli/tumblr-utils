@@ -256,7 +256,7 @@ def setup_urllib3_ssl():
     except ImportError:
         return  # Can't do anything without this module
 
-    have_sni = ssl.HAS_SNI
+    have_sni = getattr(ssl, 'HAS_SNI', False)
 
     # Inject SecureTransport on macOS if the linked OpenSSL is too old to handle TLSv1.2 or doesn't support SNI
     if sys.platform == 'darwin' and (ssl.OPENSSL_VERSION_NUMBER < 0x1000100F or not have_sni):
@@ -278,10 +278,10 @@ def setup_urllib3_ssl():
                 from pip._vendor.urllib3.contrib import pyopenssl
             else:
                 from urllib3.contrib import pyopenssl
+            pyopenssl.inject_into_urllib3()
         except ImportError as e:
             print('Warning: Failed to inject pyOpenSSL: {}'.format(e), file=sys.stderr)
         else:
-            pyopenssl.inject_into_urllib3()
             have_sni = True  # SNI always works
 
 
