@@ -1215,6 +1215,10 @@ if __name__ == '__main__':
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
 
+    try:
+        from settings import API_KEY
+    except ImportError:
+        pass
     if not API_KEY:
         sys.stderr.write('''\
 Missing API_KEY; please get your own API key at
