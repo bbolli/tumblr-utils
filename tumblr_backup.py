@@ -28,7 +28,7 @@ from posixpath import basename as urlbasename, join as urlpathjoin, splitext as 
 from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
 
-from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, is_dns_working,
+from util import (AsyncCallable, ConnectionFile, LockedQueue, MultiCondition, PY3, copyfile, is_dns_working,
                   make_requests_session, no_internet, nullcontext, opendir, to_bytes, to_unicode, try_unlink)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
@@ -675,7 +675,7 @@ def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
             or dst_st.st_size != src_st.st_size
         ):
             # dup src because open() takes ownership and closes it
-            shutil.copyfile(dup(src), dstpath)
+            copyfile(dup(src), dstpath)
             shutil.copystat(src, dstpath)  # type: ignore[arg-type]
 
         return True  # Either we copied it or we didn't need to

@@ -6,6 +6,7 @@ import collections
 import errno
 import io
 import os
+import shutil
 import socket
 import sys
 import threading
@@ -487,3 +488,31 @@ def try_unlink(path):
     except EnvironmentError as e:
         if getattr(e, 'errno', None) != errno.ENOENT:
             raise
+
+
+def _copy_file_range(src, dst):
+    if not PY3 or not hasattr(os, 'copy_file_range'):
+        return False
+
+    with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
+        infd, outfd = fsrc.fileno(), fdst.fileno()
+        blocksize = max(os.fstat(infd).st_size, 2 ** 23)  # min 8MiB
+        if sys.maxsize < 2 ** 32:  # 32-bit architecture
+            blocksize = min(blocksize, 2 ** 30)  # max 1GiB
+
+        try:
+            while True:
+                bytes_copied = os.copy_file_range(infd, outfd, blocksize)  # type: ignore[attr-defined]
+                if not bytes_copied:
+                    return True  # EOF
+        except OSError as e:
+            if e.errno == errno.EXDEV:
+                return False  # Different devices (pre Linux 5.3)
+            e.filename, e.filename2 = src, dst
+            raise e
+
+
+def copyfile(src, dst):
+    if _copy_file_range(src, dst):
+        return dst
+    return shutil.copyfile(src, dst)
