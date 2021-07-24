@@ -205,7 +205,7 @@ def apiparse(base, count, start=0):
             resp = urlopen(url)
             data = resp.read()
         except (EnvironmentError, HTTPException) as e:
-            if e.code == 429:
+            if getattr(e, 'code', None) == 429:
                 delay = int(e.headers['X-Ratelimit-Perhour-Reset'])
                 sys.stderr.write("Hitting rate limit; sleeping for %d seconds...\n" % delay)
                 time.sleep(delay + 2)
