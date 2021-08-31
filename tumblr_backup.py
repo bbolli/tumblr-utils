@@ -259,6 +259,8 @@ def get_api_url(account):
     """construct the tumblr API URL"""
     global blog_name
     blog_name = account
+    if any(c in account for c in '/\\') or account in ('.', '..'):
+        raise ValueError('Invalid blog name: {!r}'.format(account))
     if '.' not in account:
         blog_name += '.tumblr.com'
     return 'https://api.tumblr.com/v2/blog/%s/%s' % (
