@@ -574,8 +574,8 @@ def get_avatar(prev_archive):
             cpy_res = maybe_copy_media(prev_archive, path_parts)
             if cpy_res:
                 return  # We got the avatar
-        if options.no_get:
-            return  # We don't care if we don't have it
+    if options.no_get:
+        return  # Don't download the avatar
 
     url = 'https://api.tumblr.com/v2/blog/%s/avatar' % blog_name
     avatar_dest = avatar_fpath = open_file(lambda f: f, (theme_dir, avatar_base))
@@ -607,8 +607,10 @@ def get_style(prev_archive):
         # Copy old style, if present
         path_parts = (theme_dir, 'style.css')
         cpy_res = maybe_copy_media(prev_archive, path_parts)
-        if cpy_res or options.no_get:
-            return  # We got the style or we don't care
+        if cpy_res:
+            return  # We got the style
+    if options.no_get:
+        return  # Don't download the style
 
     url = 'https://%s/' % blog_name
     try:
