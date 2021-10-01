@@ -90,6 +90,7 @@ class WebCrawler(object):
         self.session = make_requests_session(
             requests.Session, HTTP_RETRY, HTTP_TIMEOUT, not noverify, user_agent, cookiefile,
         )
+        self.original_post_seen = False
 
     @classmethod
     def quote_unsafe(cls, string):
@@ -175,16 +176,21 @@ class WebCrawler(object):
             path = '/' + path
         return base + path
 
-    @staticmethod
-    def append_notes(soup, notes_list, notes_url):
+    def append_notes(self, soup, notes_list, notes_url):
         notes = soup.find('ol', class_='notes')
         if notes is None:
             log(notes_url, 'Response HTML does not have a notes list')
             return False
         notes = notes.find_all('li')
-        for n in reversed(notes):
-            if 'more_notes_link_container' not in n.get('class', []):
-                notes_list.append(n.prettify())
+        for note in reversed(notes):
+            classes = note.get('class', [])
+            if 'more_notes_link_container' in classes:
+                continue  # skip more notes link
+            if 'original_post' in classes:
+                if self.original_post_seen:
+                    continue  # only show original post once
+                self.original_post_seen = True
+            notes_list.append(note.prettify())
         return True
 
     def get_notes(self, post_url):
