@@ -634,13 +634,13 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
                 # Not available at the Internet Archive, report the original error
                 assert options.internet_archive
                 assert ia_fallback_cause is not None
-                msg, statcode, reason = ia_fallback_cause
+                msg, statcode, statmsg = ia_fallback_cause
                 oe = Exception.__new__(WGWrongCodeError)
                 Exception.__init__(oe, msg)
                 oe.logger = logger
                 oe.url = orig_url
                 oe.statcode = statcode
-                oe.reason = reason
+                oe.statmsg = statmsg
                 raise oe
             raise
         finally:
@@ -664,8 +664,8 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
         if using_internet_archive:
             assert options.internet_archive
             assert ia_fallback_cause is not None
-            _, statcode, reason = ia_fallback_cause
-            logger.log(orig_url, 'Downloaded from Internet Archive due to HTTP Error {} {}'.format(statcode, reason))
+            _, statcode, statmsg = ia_fallback_cause
+            logger.log(orig_url, 'Downloaded from Internet Archive due to HTTP Error {} {}'.format(statcode, statmsg))
 
         # Normal return path - we wrote a local file
         assert hstat.part_file is not None
