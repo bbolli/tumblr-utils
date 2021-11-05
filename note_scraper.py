@@ -11,8 +11,8 @@ import warnings
 
 from bs4 import BeautifulSoup
 
-from util import (ConnectionFile, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl, to_bytes,
-                  to_native_str)
+from util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
+                  to_bytes, to_native_str)
 
 try:
     from typing import TYPE_CHECKING
@@ -20,7 +20,8 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from typing import List, Text
+    from multiprocessing.queues import SimpleQueue
+    from typing import List, Optional, Text, Tuple
 
 try:
     from urllib.parse import quote, urlparse, urlsplit, urlunsplit
@@ -61,12 +62,13 @@ HTTP_RETRY = Retry(3, connect=False)
 # Globals
 post_url = None
 ident = None
-msg_pipe = None
+msg_queue = None  # type: Optional[SimpleQueue[Tuple[int, str]]]
 
 
-def log(url, msg):
+def log(level, url, msg):
+    assert msg_queue is not None
     url_msg = ", URL '{}'".format(url) if url != post_url else ''
-    print('[Note Scraper] Post {}{}: {}'.format(ident, url_msg, msg), file=msg_pipe)
+    msg_queue.put((level, '[Note Scraper] Post {}{}: {}\n'.format(ident, url_msg, msg)))
 
 
 class WebCrawler(object):
@@ -118,17 +120,18 @@ class WebCrawler(object):
         try:
             sleep_dur = float(reset)
         except ValueError:
-            log(self.lasturl, "Expected numerical X-Rate-Limit-Reset, got '{}'".format(reset))
+            log(LogLevel.ERROR, self.lasturl, "Expected numerical X-Rate-Limit-Reset, got '{}'".format(reset))
             return False
 
         if sleep_dur < 0:
-            log(self.lasturl, 'Warning: X-Rate-Limit-Reset is {} seconds in the past'.format(-sleep_dur))
+            log(LogLevel.WARN, self.lasturl, 'Warning: X-Rate-Limit-Reset is {} seconds in the past'.format(-sleep_dur))
             return True
         if sleep_dur > 3600:
-            log(self.lasturl, 'Refusing to sleep for {} minutes, giving up'.format(round(sleep_dur / 60)))
+            log(LogLevel.ERROR, self.lasturl,
+                'Refusing to sleep for {} minutes, giving up'.format(round(sleep_dur / 60)))
             return False
 
-        log(self.lasturl, 'Rate limited, sleeping for {} seconds as requested'.format(sleep_dur))
+        log(LogLevel.WARN, self.lasturl, 'Rate limited, sleeping for {} seconds as requested'.format(sleep_dur))
         time.sleep(sleep_dur)
         return True
 
@@ -149,7 +152,7 @@ class WebCrawler(object):
                     continue
                 if 200 <= resp.status_code < 300:
                     return resp.content.decode('utf-8', errors='ignore')
-                log(iri, 'Unexpected response status: HTTP {} {}{}'.format(
+                log(LogLevel.WARN, iri, 'Unexpected response status: HTTP {} {}{}'.format(
                     resp.status_code, resp.reason,
                     '' if resp.status_code == 404 else '\nHeaders: {}'.format(resp.headers),
                 ))
@@ -163,11 +166,11 @@ class WebCrawler(object):
             return None
         onclick = element.get_attribute_list('onclick')[0]
         if not onclick:
-            log(notes_url, 'No onclick attribute, probably a dashboard-only blog')
+            log(LogLevel.WARN, notes_url, 'No onclick attribute, probably a dashboard-only blog')
             return None
         match = re.search(r";tumblrReq\.open\('GET','([^']+)'", onclick)
         if not match:
-            log(notes_url, 'tumblrReq regex failed, did Tumblr update?')
+            log(LogLevel.ERROR, notes_url, 'tumblrReq regex failed, did Tumblr update?')
             return None
         path = match.group(1)
         if not path.startswith('/'):
@@ -177,7 +180,7 @@ class WebCrawler(object):
     def append_notes(self, soup, notes_list, notes_url):
         notes = soup.find('ol', class_='notes')
         if notes is None:
-            log(notes_url, 'Response HTML does not have a notes list')
+            log(LogLevel.WARN, notes_url, 'Response HTML does not have a notes list')
             return False
         notes = notes.find_all('li')
         for note in reversed(notes):
@@ -214,23 +217,26 @@ class WebCrawler(object):
 
             if len(notes_list) > (notes_10k + 1) * 10000:
                 notes_10k += 1
-                log(notes_url, 'Note: {} notes retrieved so far'.format(notes_10k * 10000))
+                log(LogLevel.INFO, notes_url, 'Note: {} notes retrieved so far'.format(notes_10k * 10000))
             if self.notes_limit is not None and len(notes_list) > self.notes_limit:
-                log(notes_url, 'Warning: Reached notes limit, stopping early.')
+                log(LogLevel.WARN, notes_url, 'Warning: Reached notes limit, stopping early.')
                 break
 
         return u''.join(notes_list)
 
 
-def main(stdout_conn, msg_conn, post_url_, ident_, noverify, user_agent, cookiefile, notes_limit):
-    global post_url, ident, msg_pipe
-    post_url, ident = post_url_, ident_
+def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cookiefile, notes_limit):
+    global post_url, ident, msg_queue
+    msg_queue, post_url, ident = msg_queue_, post_url_, ident_
+
+    assert msg_queue is not None
+    msg_queue._reader.close()  # type: ignore[attr-defined]
 
     if noverify:
         # Hide the InsecureRequestWarning from urllib3
         warnings.filterwarnings('ignore', category=InsecureRequestWarning)
 
-    with ConnectionFile(msg_conn, 'w') as msg_pipe:
+    try:
         crawler = WebCrawler(noverify, user_agent, cookiefile, notes_limit)
 
         try:
@@ -240,12 +246,13 @@ def main(stdout_conn, msg_conn, post_url_, ident_, noverify, user_agent, cookief
         except HTTPError as e:
             if not is_dns_working(timeout=5):
                 sys.exit(EXIT_NO_INTERNET)
-            log(crawler.lasturl, e)
+            log(LogLevel.ERROR, crawler.lasturl, e)
             sys.exit()
         except Exception:
-            log(crawler.lasturl, 'Caught an exception')
-            traceback.print_exc(file=msg_pipe)
+            log(LogLevel.ERROR, crawler.lasturl, 'Caught an exception\n{}'.format(traceback.format_exc()))
             sys.exit()
+    finally:
+        msg_queue._writer.close()  # type: ignore[attr-defined]
 
     with ConnectionFile(stdout_conn, 'w') as stdout:
         print(notes, end=u'', file=stdout)

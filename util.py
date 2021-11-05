@@ -313,3 +313,9 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
 
         session.cookies = cookies  # type: ignore[assignment]
     return session
+
+
+class LogLevel(object):
+    INFO = 0
+    WARN = 1
+    ERROR = 2

@@ -12,7 +12,8 @@ import warnings
 from email.utils import mktime_tz, parsedate_tz
 from tempfile import NamedTemporaryFile
 
-from util import PY3, URLLIB3_FROM_PIP, get_supported_encodings, is_dns_working, no_internet, setup_urllib3_ssl
+from util import (PY3, URLLIB3_FROM_PIP, LogLevel, get_supported_encodings, is_dns_working, no_internet,
+                  setup_urllib3_ssl)
 
 try:
     from typing import TYPE_CHECKING
@@ -196,7 +197,7 @@ class Logger(object):
         self.log_cb = log
         self.prev_log_url = None
 
-    def log(self, url, msg):
+    def log(self, level, url, msg):
         qmsg = u''
         if self.prev_log_url is None:
             qmsg += u'[wget] {}URL is {}\n'.format('' if url == self.original_url else 'Original ', self.original_url)
@@ -205,7 +206,16 @@ class Logger(object):
             qmsg += u'[wget] Current redirect URL is {}\n'.format(url)
             self.prev_log_url = url
         qmsg += u'[wget] {}\n'.format(msg)
-        self.log_cb(qmsg)
+        self.log_cb(level, qmsg)
+
+    def info(self, url, msg):
+        self.log(LogLevel.INFO, url, msg)
+
+    def warn(self, url, msg):
+        self.log(LogLevel.WARN, url, msg)
+
+    def error(self, url, msg):
+        self.log(LogLevel.ERROR, url, msg)
 
 
 def gethttp(url, hstat, doctype, logger, retry_counter):
@@ -374,7 +384,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
     except (HTTPError, EnvironmentError) as e:
         is_read_error = isinstance(e, HTTPError)
         length_known = hstat.contlen is not None and (is_read_error or hstat.enc_is_identity)
-        logger.log(url, '{} error at byte {}{}'.format(
+        logger.warn(url, '{} error at byte {}{}'.format(
             'Read' if is_read_error else 'Write',
             hstat.bytes_read if is_read_error else hstat.bytes_written,
             '/{}'.format(hstat.contlen) if length_known else '',
@@ -467,7 +477,7 @@ class WGError(Exception):
         self.url = url
 
     def log(self):
-        self.logger.log(self.url, self)
+        self.logger.warn(self.url, self)
 
 
 class WGMaxRetryError(WGError):
@@ -520,10 +530,10 @@ class RetryCounter(object):
         status = 'incomplete' if hstat.bytes_read > hstat.restval else 'failed'
         msg = 'because of {} retrieval: {}'.format(status, cause)
         if not self.should_retry():
-            self.logger.log(url, 'Gave up {}'.format(msg))
+            self.logger.warn(url, 'Gave up {}'.format(msg))
             raise WGMaxRetryError(self.logger, url, 'Retrieval failed after {} tries.'.format(self.TRY_LIMIT), cause)
         trylim = '' if self.TRY_LIMIT is None else '/{}'.format(self.TRY_LIMIT)
-        self.logger.log(url, 'Retrying ({}{}) {}'.format(self.count, trylim, msg))
+        self.logger.info(url, 'Retrying ({}{}) {}'.format(self.count, trylim, msg))
         time.sleep(min(self.count, self.MAX_RETRY_WAIT))
 
 
@@ -628,7 +638,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
             os.chmod(hstat.part_file.name, 0o644)
 
         if options.use_server_timestamps and hstat.remote_time is None:
-            logger.log(url, 'Warning: Last-Modified header is {}'
+            logger.warn(url, 'Warning: Last-Modified header is {}'
                        .format('missing' if hstat.last_modified is None
                                else 'invalid: {}'.format(hstat.last_modified)))
 

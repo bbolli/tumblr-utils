@@ -20,12 +20,13 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from glob import glob
+from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from xml.sax.saxutils import escape
 
-from util import (ConnectionFile, LockedQueue, PY3, is_dns_working, make_requests_session, no_internet, nullcontext,
-                  to_bytes, to_unicode)
+from util import (ConnectionFile, LockedQueue, LogLevel, PY3, is_dns_working, make_requests_session, no_internet,
+                  nullcontext, to_bytes, to_unicode)
 from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
 try:
@@ -186,7 +187,9 @@ class Logger(object):
         self.backup_account = None  # type: Optional[str]
         self.status_msg = None  # type: Optional[str]
 
-    def __call__(self, msg, account=False):
+    def log(self, level, msg, account=False):
+        if options.quiet and level < LogLevel.WARN:
+            return
         with self.lock:
             for line in msg.splitlines(True):
                 self._print(line, account)
@@ -194,13 +197,20 @@ class Logger(object):
                 self._print(self.status_msg, account=True)
             sys.stdout.flush()
 
+    def info(self, msg, account=False):
+        self.log(LogLevel.INFO, msg, account)
+
+    def warn(self, msg, account=False):
+        self.log(LogLevel.WARN, msg, account)
+
+    def error(self, msg, account=False):
+        self.log(LogLevel.ERROR, msg, account)
+
     def status(self, msg):
         self.status_msg = msg
-        self('')
+        self.log(LogLevel.INFO, '')
 
     def _print(self, msg, account=False):
-        if options.quiet:
-            return
         if account:  # Optional account prefix
             msg = '{}: {}'.format(self.backup_account, msg)
 
@@ -216,7 +226,7 @@ class Logger(object):
         print(msg + pad + term, end='')
 
 
-log = Logger()
+logger = Logger()
 
 
 def mkdir(dir, recursive=False):
@@ -311,7 +321,7 @@ class ApiParser(object):
                 return json.load(jf)
 
         if options.likes:
-            log('Reading liked timestamps from saved responses (may take a while)\n', account=True)
+            logger.warn('Reading liked timestamps from saved responses (may take a while)\n', account=True)
 
         self.prev_resps = tuple(
             e.path for e in sorted(
@@ -332,7 +342,7 @@ class ApiParser(object):
                         post = json.load(f)
                     except ValueError as e:
                         f.seek(0)
-                        log('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
+                        logger.error('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
                         return None
                 return prf, post
             posts = map(read_post, self.prev_resps)  # type: Iterable[Tuple[DirEntry[str], JSONDict]]
@@ -379,11 +389,11 @@ class ApiParser(object):
                 errors = doc.get('errors', ())
                 if len(errors) == 1 and errors[0].get('code') == 4012:
                     self.dashboard_only_blog = True
-                    log('Found dashboard-only blog, trying svc API\n', account=True)
+                    logger.info('Found dashboard-only blog, trying svc API\n', account=True)
                     return self.apiparse(count, start)  # Recurse once
-            log('API response has non-200 status:\n{}\n'.format(doc))
+            logger.error('API response has non-200 status:\n{}\n'.format(doc))
             if status == 401 and self.dashboard_only_blog:
-                log("This is a dashboard-only blog, so you probably don't have the right cookies.{}\n".format(
+                logger.error("This is a dashboard-only blog, so you probably don't have the right cookies.{}\n".format(
                     '' if options.cookiefile else ' Try --cookiefile.',
                 ))
             return None
@@ -391,7 +401,7 @@ class ApiParser(object):
             with disablens_lock:
                 if self.account not in disable_note_scraper:
                     disable_note_scraper.add(self.account)
-                    log('[Note Scraper] Dashboard-only blog - scraping disabled for {}\n'.format(self.account))
+                    logger.warn('[Note Scraper] Dashboard-only blog - scraping disabled for {}\n'.format(self.account))
         elif self.dashboard_only_blog is None:
             # If the first API request succeeds, it's a public blog
             self.dashboard_only_blog = False
@@ -408,18 +418,18 @@ class ApiParser(object):
             try:
                 with self.session.get(base, params=params, headers=headers) as resp:
                     if not (200 <= resp.status_code < 300 or 400 <= resp.status_code < 500):
-                        log('URL is {}?{}\nError retrieving API repsonse: HTTP {} {}\n'.format(
+                        logger.error('URL is {}?{}\nError retrieving API repsonse: HTTP {} {}\n'.format(
                             base, urlencode(params), resp.status_code, resp.reason,
                         ))
                         return None
                     ctype = resp.headers.get('Content-Type')
                     if ctype and ctype.split(';', 1)[0].strip() != 'application/json':
-                        log("Unexpected Content-Type: '{}'\n".format(ctype))
+                        logger.error("Unexpected Content-Type: '{}'\n".format(ctype))
                         return None
                     try:
                         return resp.json()
                     except ValueError as e:
-                        log('{}: {}\n{} {} {}\n{!r}\n'.format(
+                        logger.error('{}: {}\n{} {} {}\n{!r}\n'.format(
                             e.__class__.__name__, e, resp.status_code, resp.reason, ctype, resp.content.decode('utf-8'),
                         ))
                         return None
@@ -427,7 +437,7 @@ class ApiParser(object):
                 if isinstance(e, HTTPError) and not is_dns_working(timeout=5):
                     no_internet.signal()
                     continue
-                log('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
+                logger.error('URL is {}?{}\nError retrieving API repsonse: {}\n'.format(base, urlencode(params), e))
                 return None
 
 
@@ -437,7 +447,7 @@ def add_exif(image_name, tags):
         metadata = pyexiv2.ImageMetadata(image_name)
         metadata.read()
     except EnvironmentError:
-        log('Error reading metadata for image {}\n'.format(image_name))
+        logger.error('Error reading metadata for image {}\n'.format(image_name))
         return
     KW_KEY = 'Iptc.Application2.Keywords'
     if '-' in options.exif:  # remove all tags
@@ -451,7 +461,7 @@ def add_exif(image_name, tags):
     try:
         metadata.write()
     except EnvironmentError:
-        log('Writing metadata failed for tags: {} in: {}\n'.format(tags, image_name))
+        logger.error('Writing metadata failed for tags: {} in: {}\n'.format(tags, image_name))
 
 
 def save_style():
@@ -521,7 +531,7 @@ def get_style(prev_archive):
         resp = urlopen(url)
         page_data = resp.data
     except HTTPError as e:
-        log('URL is {}\nError retrieving style: {}\n'.format(url, e))
+        logger.error('URL is {}\nError retrieving style: {}\n'.format(url, e))
         return
     for match in re.findall(br'(?s)<style type=.text/css.>(.*?)</style>', page_data):
         css = match.strip().decode('utf-8', errors='replace')
@@ -843,14 +853,14 @@ class TumblrBackup(object):
                 # Read every post to find the newest timestamp we've saved.
                 if BeautifulSoup is None:
                     raise RuntimeError("Incremental likes backup: module 'bs4' is not installed")
-                log('Finding newest liked post (may take a while)\n', account=True)
+                logger.warn('Finding newest liked post (may take a while)\n', account=True)
                 ident_max = max(self.get_post_timestamps(post_glob))
             else:
                 ident_max = max(long(splitext(split(f)[1])[0]) for f in post_glob)
             if ident_max is not None:
-                log('Backing up posts after {}\n'.format(ident_max), account=True)
+                logger.info('Backing up posts after {}\n'.format(ident_max), account=True)
 
-        log.status('Getting basic information\r')
+        logger.status('Getting basic information\r')
 
         api_parser = ApiParser(base, account)
         if prev_archive:
@@ -863,7 +873,7 @@ class TumblrBackup(object):
         # collect all the meta information
         if options.likes:
             if not resp.get('blog', {}).get('share_likes', True):
-                print('{} does not have public likes\n'.format(account))
+                logger.error('{} does not have public likes\n'.format(account))
                 self.errors = True
                 return
             posts_key = 'liked_posts'
@@ -892,14 +902,14 @@ class TumblrBackup(object):
                 if ident_max is None:
                     pass  # No limit
                 elif (p['liked_timestamp'] if options.likes else long(post.ident)) <= ident_max:
-                    log('Stopping backup: Incremental backup complete\n', account=True)
+                    logger.info('Stopping backup: Incremental backup complete\n', account=True)
                     return False
                 if options.period:
                     if post.date >= options.p_stop:
                         raise RuntimeError('Found post with date ({}) older than before param ({})'.format(
                             post.date, options.p_stop))
                     if post.date < options.p_start:
-                        log('Stopping backup: Reached end of period\n', account=True)
+                        logger.info('Stopping backup: Reached end of period\n', account=True)
                         return False
                 if options.request:
                     if post.typ not in options.request:
@@ -931,7 +941,7 @@ class TumblrBackup(object):
 
                 self.post_count += 1
                 if options.count and self.post_count >= options.count:
-                    log('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
+                    logger.info('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
                     return False
             return True
 
@@ -942,7 +952,7 @@ class TumblrBackup(object):
             before = options.p_stop if options.period else None
             while True:
                 # find the upper bound
-                log.status('Getting {}posts {} to {}{}\r'.format(
+                logger.status('Getting {}posts {} to {}{}\r'.format(
                     'liked ' if options.likes else '', i, i + MAX_POSTS - 1,
                     '' if count_estimate is None else ' (of {} expected)'.format(count_estimate),
                 ))
@@ -954,7 +964,7 @@ class TumblrBackup(object):
 
                 posts = resp[posts_key]
                 if not posts:
-                    log('Backup complete: Found empty set of posts\n', account=True)
+                    logger.info('Backup complete: Found empty set of posts\n', account=True)
                     break
 
                 post_respfiles = resp.get('post_respfiles')
@@ -966,7 +976,7 @@ class TumblrBackup(object):
                 if options.likes:
                     next_ = resp['_links'].get('next')
                     if next_ is None:
-                        log('Backup complete: Found end of likes\n', account=True)
+                        logger.info('Backup complete: Found end of likes\n', account=True)
                         break
                     before = next_['query_params']['before']
                 i += MAX_POSTS
@@ -980,19 +990,19 @@ class TumblrBackup(object):
 
         # postprocessing
         if not options.blosxom and (self.post_count or options.count == 0):
-            log.status('Getting avatar and style\r')
+            logger.status('Getting avatar and style\r')
             get_avatar(prev_archive)
             get_style(prev_archive)
             if not have_custom_css:
                 save_style()
-            log.status('Building index\r')
+            logger.status('Building index\r')
             ix = Indices(self)
             ix.build_index()
             ix.save_index()
 
-        log.status(None)
+        logger.status(None)
         skipped_msg = (', {} did not match filter'.format(self.filter_skipped)) if self.filter_skipped else ''
-        log(
+        logger.warn(
             '{} {}posts backed up{}\n'.format(self.post_count, 'liked ' if options.likes else '', skipped_msg),
             account=True,
         )
@@ -1103,7 +1113,7 @@ class TumblrPost(object):
             elif options.save_video:
                 src = self.get_youtube_url(self.url)
                 if not src:
-                    log('Unable to download video in post #{}\n'.format(self.ident))
+                    logger.warn('Unable to download video in post #{}\n'.format(self.ident))
             if src:
                 append(u'<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
                     src, "Your browser does not support the video element.", src, "Video file"
@@ -1154,7 +1164,7 @@ class TumblrPost(object):
             )
 
         else:
-            log(u"Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
+            logger.warn(u"Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
             append(escape(self.get_json_content()), u'<pre>%s</pre>')
 
         self.content = '\n'.join(content)
@@ -1326,7 +1336,7 @@ class TumblrPost(object):
             else:
                 if st.st_mtime > self.post['timestamp']:
                     if st.st_mtime > self.post['timestamp'] + timedelta(days=1).total_seconds():
-                        log('Rolling back media timestamp by {}\n'.format(
+                        logger.info('Rolling back media timestamp by {}\n'.format(
                             naturaldelta(datetime.fromtimestamp(st.st_mtime) -
                                          datetime.fromtimestamp(self.post['timestamp']))
                         ))
@@ -1374,24 +1384,32 @@ class TumblrPost(object):
             # Scrape and save notes
             while True:
                 ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
-                ns_msg_rd, ns_msg_wr = multiprocessing.Pipe(duplex=False)
+                if PY3:
+                    ns_msg_queue = multiprocessing.SimpleQueue()  # type: SimpleQueue[Tuple[int, str]]
+                else:
+                    ns_msg_queue = SimpleQueue()
                 try:
-                    args = (ns_stdout_wr, ns_msg_wr, self.url, self.ident,
+                    args = (ns_stdout_wr, ns_msg_queue, self.url, self.ident,
                             options.no_ssl_verify, options.user_agent, options.cookiefile, options.notes_limit)
                     process = multiprocessing.Process(target=note_scraper.main, args=args)
                     process.start()
                 except:
                     ns_stdout_rd.close()
-                    ns_msg_rd.close()
+                    ns_msg_queue._reader.close()  # type: ignore[attr-defined]
                     raise
                 finally:
                     ns_stdout_wr.close()
-                    ns_msg_wr.close()
+                    ns_msg_queue._writer.close()  # type: ignore[attr-defined]
 
                 try:
-                    with ConnectionFile(ns_msg_rd) as msg_pipe:
-                        for line in msg_pipe:
-                            log(line)
+                    try:
+                        while True:
+                            level, msg = ns_msg_queue.get()
+                            logger.log(level, msg)
+                    except EOFError:
+                        pass  # Exit loop
+                    finally:
+                        ns_msg_queue.close()  # type: ignore[attr-defined]
 
                     with ConnectionFile(ns_stdout_rd) as stdout:
                         notes_html = stdout.read()
@@ -1409,7 +1427,7 @@ class TumblrPost(object):
                         # Check if another thread already set this
                         if self.backup_account not in disable_note_scraper:
                             disable_note_scraper.add(self.backup_account)
-                            log('[Note Scraper] Blocked by safe mode - scraping disabled for {}\n'.format(
+                            logger.warn('[Note Scraper] Blocked by safe mode - scraping disabled for {}\n'.format(
                                 self.backup_account
                             ))
                 elif process.exitcode == 3:  # EXIT_NO_INTERNET
@@ -1533,7 +1551,7 @@ class ThreadPool(object):
         self.queue.put(*args, **kwargs)
 
     def wait(self):
-        log.status('{} remaining posts to save\r'.format(self.queue.qsize()))
+        logger.status('{} remaining posts to save\r'.format(self.queue.qsize()))
         self.quit.set()
         while True:
             with self.queue.all_tasks_done:
@@ -1546,7 +1564,7 @@ class ThreadPool(object):
         self.abort.set()
         no_internet.destroy()
         for i, t in enumerate(self.threads, start=1):
-            log.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
+            logger.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
             t.join()
 
         with self.queue.mutex:
@@ -1565,7 +1583,7 @@ class ThreadPool(object):
                 qsize = self.queue.qsize()
 
             if self.quit.is_set() and qsize % REM_POST_INC == 0:
-                log.status('{} remaining posts to save\r'.format(qsize))
+                logger.status('{} remaining posts to save\r'.format(qsize))
 
             try:
                 work()
@@ -1686,7 +1704,7 @@ if __name__ == '__main__':
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
 
-    wget_retrieve = WgetRetrieveWrapper(options, log)
+    wget_retrieve = WgetRetrieveWrapper(options, logger)
     setup_wget(not options.no_ssl_verify, options.user_agent)
 
     blogs = options.blogs or DEFAULT_BLOGS
@@ -1756,7 +1774,7 @@ https://www.tumblr.com/oauth/apps\n''')
     tb = TumblrBackup()
     try:
         for i, account in enumerate(blogs):
-            log.backup_account = account
+            logger.backup_account = account
             tb.backup(account, options.prev_archives[i] if options.prev_archives else None)
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
