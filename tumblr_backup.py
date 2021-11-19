@@ -1767,8 +1767,7 @@ class TumblrPost(object):
                 f.write(self.get_post())
             os.utime(path_to(*path_parts), (self.date, self.date))
         except Exception:
-            print('Caught exception while saving post {}:'.format(self.ident), file=sys.stderr)
-            traceback.print_exc()
+            logger.error('Caught exception while saving post {}:\n{}'.format(self.ident, traceback.format_exc()))
             return False
         return True
 
@@ -2088,7 +2087,7 @@ if __name__ == '__main__':
     if options.no_get and not (options.prev_archives or options.reuse_json):
         parser.error('--no-get makes no sense without --prev-archives or --reuse-json')
     if options.no_get and options.save_notes:
-        print('Warning: --save-notes uses HTTP regardless of --no-get', file=sys.stderr)
+        logger.warn('Warning: --save-notes uses HTTP regardless of --no-get\n')
 
     check_optional_modules()
 
