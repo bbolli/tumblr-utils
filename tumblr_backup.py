@@ -1650,9 +1650,10 @@ class TumblrPost(object):
         if self.reblogged_root:
             post += u'<a href=%s>⬈</a>\n' % self.reblogged_root
         post += '</header>\n'
+        content = self.get_content()
         if self.title:
             post += u'<h2>%s</h2>\n' % self.title
-        post += self.get_content()
+        post += content
         foot = []
         if self.tags:
             foot.append(u''.join(self.tag_link(t) for t in self.tags))
