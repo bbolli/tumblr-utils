@@ -1172,7 +1172,7 @@ class TumblrBackup(object):
                     if sf is not None:
                         os.close(sf)
 
-        if options.count == 0:
+        if not options.blosxom and options.count == 0:
             build_index()
             return
 
