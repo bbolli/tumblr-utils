@@ -752,7 +752,7 @@ class Indices(object):
 
 class TumblrBackup(object):
     def __init__(self):
-        self.errors = False
+        self.failed_blogs = []
         self.total_count = 0
         self.post_count = 0
         self.filter_skipped = 0
@@ -760,7 +760,7 @@ class TumblrBackup(object):
         self.subtitle = None  # type: Optional[str]
 
     def exit_code(self):
-        if self.errors:
+        if self.failed_blogs:
             return EXIT_ERRORS
         if self.total_count == 0:
             return EXIT_NOPOSTS
@@ -867,14 +867,14 @@ class TumblrBackup(object):
             api_parser.read_archive(prev_archive)
         resp = api_parser.apiparse(1)
         if not resp:
-            self.errors = True
+            self.failed_blogs.append(account)
             return
 
         # collect all the meta information
         if options.likes:
             if not resp.get('blog', {}).get('share_likes', True):
                 logger.error('{} does not have public likes\n'.format(account))
-                self.errors = True
+                self.failed_blogs.append(account)
                 return
             posts_key = 'liked_posts'
             blog = {}
@@ -959,7 +959,7 @@ class TumblrBackup(object):
 
                 resp = api_parser.apiparse(MAX_POSTS, i, before)
                 if resp is None:
-                    self.errors = True
+                    self.failed_blogs.append(account)
                     break
 
                 posts = resp[posts_key]
@@ -1779,4 +1779,6 @@ https://www.tumblr.com/oauth/apps\n''')
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
 
+    if tb.failed_blogs:
+        logger.warn('Failed to back up {}'.format(', '.join(tb.failed_blogs)))
     sys.exit(tb.exit_code())
