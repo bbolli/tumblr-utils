@@ -707,6 +707,8 @@ def check_optional_modules():
         raise RuntimeError("--filter: module 'jq' is not installed")
     if options.prev_archives and scandir is None:
         raise RuntimeError("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
+    if options.save_notes or options.copy_notes:
+        load_bs4('save notes' if options.save_notes else 'copy notes')
 
 
 def naturaldelta(delta):
