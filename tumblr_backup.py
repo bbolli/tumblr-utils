@@ -29,8 +29,9 @@ from posixpath import basename as urlbasename, join as urlpathjoin, splitext as 
 from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
 
-from util import (AsyncCallable, ConnectionFile, LockedQueue, LogLevel, MultiCondition, PY3, copyfile, is_dns_working,
-                  make_requests_session, no_internet, nullcontext, opendir, to_bytes, to_unicode, try_unlink)
+from util import (AsyncCallable, ConnectionFile, LockedQueue, LogLevel, MultiCondition, PY3, copyfile, have_module,
+                  is_dns_working, make_requests_session, no_internet, nullcontext, opendir, to_bytes, to_unicode,
+                  try_unlink)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
 try:
@@ -39,6 +40,7 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
+    from types import ModuleType
     from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Text, Tuple, Type
 
     JSONDict = Dict[str, Any]
@@ -98,6 +100,9 @@ try:
     from http import client as httplib
 except ImportError:
     import httplib  # type: ignore[no-redef]
+
+# Imported later if needed
+youtube_dl = None  # type: Optional[ModuleType]
 
 # These builtins have new names in Python 3
 try:
@@ -709,6 +714,26 @@ def check_optional_modules():
         raise RuntimeError("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
     if options.save_notes or options.copy_notes:
         load_bs4('save notes' if options.save_notes else 'copy notes')
+    if options.save_video and not (have_module('yt_dlp') or have_module('youtube_dl')):
+        raise RuntimeError("--save-video: module 'youtube_dl' is not installed")
+
+
+
+def import_youtube_dl():
+    global youtube_dl
+    if youtube_dl is not None:
+        return youtube_dl
+
+    try:
+        import yt_dlp as youtube_dl
+    except ImportError:
+        pass
+    else:
+        return
+
+    import youtube_dl
+
+    return youtube_dl
 
 
 def naturaldelta(delta):
@@ -1466,11 +1491,8 @@ class TumblrPost(object):
         }
         if options.cookiefile is not None:
             ydl_options['cookiefile'] = options.cookiefile
-        try:
-            import youtube_dl
-            from youtube_dl.utils import sanitize_filename
-        except ImportError:
-            raise RuntimeError("--save-video: module 'youtube_dl' is not installed")
+
+        youtube_dl = import_youtube_dl()
         ydl = youtube_dl.YoutubeDL(ydl_options)
         ydl.add_default_info_extractors()
         try:

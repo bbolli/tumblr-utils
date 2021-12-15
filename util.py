@@ -522,3 +522,21 @@ def copyfile(src, dst):
     if _copy_file_range(src, dst):
         return dst
     return shutil.copyfile(src, dst)
+
+
+if PY3:
+    from importlib.machinery import PathFinder
+
+    def have_module(name):
+        return PathFinder.find_spec(name) is not None
+else:
+    import imp
+
+    def have_module(name):
+        try:
+            f, _, _ = imp.find_module(name)  # type: ignore[misc]
+        except ImportError:
+            return False
+        if f:
+            f.close()
+        return True
