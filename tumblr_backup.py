@@ -79,9 +79,9 @@ except ImportError:
     BeautifulSoup = None
 
 try:
-    import pyjq
+    import jq
 except ImportError:
-    pyjq = None
+    jq = None
 
 try:
     from os import DirEntry, scandir  # type: ignore[attr-defined]
@@ -927,7 +927,7 @@ class TumblrBackup(object):
                         continue
                 if os.path.exists(path_to(*post.get_path())) and options.no_post_clobber:
                     continue  # Post exists and no-clobber enabled
-                if options.filter and not options.filter.first(p):
+                if options.filter and not options.filter.input(p).first():
                     self.filter_skipped += 1
                     continue
 
@@ -1674,7 +1674,7 @@ if __name__ == '__main__':
     parser.add_argument('-T', '--type', action=RequestCallback, dest='request',
                         help='save only posts of type TYPE (comma-separated values from {})'
                              .format(', '.join(POST_TYPES)))
-    parser.add_argument('-F', '--filter', help='save posts matching a jq filter (needs pyjq)')
+    parser.add_argument('-F', '--filter', help='save posts matching a jq filter (needs jq module)')
     parser.add_argument('--no-reblog', action='store_true', help="don't save reblogged posts")
     parser.add_argument('-I', '--image-names', choices=('o', 'i', 'bi'), default='o', metavar='FMT',
                         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)")
@@ -1746,9 +1746,9 @@ if __name__ == '__main__':
         if options.notes_limit < 1:
             parser.error('--notes-limit: Value must be at least 1')
     if options.filter is not None:
-        if pyjq is None:
-            parser.error("--filter: module 'pyjq' is not installed")
-        options.filter = pyjq.compile(options.filter)
+        if jq is None:
+            parser.error("--filter: module 'jq' is not installed")
+        options.filter = jq.compile(options.filter)
     if options.prev_archives:
         if scandir is None:
             parser.error("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
