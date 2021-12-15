@@ -68,10 +68,12 @@ except ImportError:
     pyexiv2 = None
 
 try:
-    import youtube_dl
-    from youtube_dl.utils import sanitize_filename
+    import yt_dlp as youtube_dl
 except ImportError:
-    youtube_dl = None
+    try:
+        import youtube_dl
+    except ImportError:
+        youtube_dl = None
 
 try:
     from bs4 import BeautifulSoup
@@ -1195,7 +1197,7 @@ class TumblrPost(object):
         ydl.add_default_info_extractors()
         try:
             result = ydl.extract_info(youtube_url, download=False)
-            media_filename = sanitize_filename(filetmpl % result['entries'][0], restricted=True)
+            media_filename = youtube_dl.utils.sanitize_filename(filetmpl % result['entries'][0], restricted=True)
         except Exception:
             return ''
 
@@ -1704,7 +1706,7 @@ if __name__ == '__main__':
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
 
-    wget_retrieve = WgetRetrieveWrapper(options, logger)
+    wget_retrieve = WgetRetrieveWrapper(options, logger.log)
     setup_wget(not options.no_ssl_verify, options.user_agent)
 
     blogs = options.blogs or DEFAULT_BLOGS
