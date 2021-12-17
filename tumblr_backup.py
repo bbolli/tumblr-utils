@@ -178,7 +178,6 @@ TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 wget_retrieve = None  # type: Optional[WgetRetrieveWrapper]
 disable_note_scraper = set()  # type: Set[str]
 disablens_lock = threading.Lock()
-prev_resps = None  # type: Optional[Tuple[str, ...]]
 
 
 class Logger(object):
@@ -228,7 +227,7 @@ def mkdir(dir, recursive=False):
             else:
                 os.mkdir(dir)
         except EnvironmentError as e:
-            if getattr(e, 'errno', None) != errno.EEXIST:
+            if e.errno != errno.EEXIST:
                 raise
 
 
@@ -305,6 +304,8 @@ class ApiParser(object):
         )
 
     def read_archive(self, prev_archive):
+        assert scandir is not None
+
         def read_resp(path):
             with io.open(path, encoding=FILE_ENCODING) as jf:
                 return json.load(jf)
@@ -431,6 +432,7 @@ class ApiParser(object):
 
 
 def add_exif(image_name, tags):
+    assert pyexiv2 is not None
     try:
         metadata = pyexiv2.ImageMetadata(image_name)
         metadata.read()

@@ -208,7 +208,7 @@ class Logger(object):
         self.log_cb(qmsg)
 
 
-def gethttp(url, hstat, doctype, options, logger, retry_counter):
+def gethttp(url, hstat, doctype, logger, retry_counter):
     if hstat.current_url is not None:
         url = hstat.current_url  # The most recent location is cached
 
@@ -227,14 +227,14 @@ def gethttp(url, hstat, doctype, options, logger, retry_counter):
     url = hstat.current_url = urljoin(url, resp.current_url)
 
     try:
-        err, doctype = process_response(url, hstat, doctype, options, logger, retry_counter, resp)
+        err, doctype = process_response(url, hstat, doctype, logger, retry_counter, resp)
     finally:
         resp.release_conn()
 
     return err, doctype
 
 
-def process_response(url, hstat, doctype, options, logger, retry_counter, resp):
+def process_response(url, hstat, doctype, logger, retry_counter, resp):
     # RFC 7233 section 4.1 paragraph 6:
     # "A server MUST NOT generate a multipart response to a request for a single range [...]"
     conttype = resp.headers.get('Content-Type')
@@ -581,7 +581,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
         hstat.restval = hstat.bytes_read
 
         try:
-            err, doctype = gethttp(url, hstat, doctype, options, logger, retry_counter)
+            err, doctype = gethttp(url, hstat, doctype, logger, retry_counter)
         except MaxRetryError as e:
             raise WGMaxRetryError(logger, url, 'urllib3 reached a retry limit.', e)
         except HTTPError as e:
