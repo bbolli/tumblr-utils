@@ -710,7 +710,7 @@ def check_optional_modules():
             raise RuntimeError("--exif: module 'pyexiv2' is missing features, perhaps you need 'py3exiv2'?")
     if options.filter is not None and jq is None:
         raise RuntimeError("--filter: module 'jq' is not installed")
-    if options.prev_archives and scandir is None:
+    if (options.prev_archives or options.reuse_json) and scandir is None:
         raise RuntimeError("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
     if options.save_notes or options.copy_notes:
         load_bs4('save notes' if options.save_notes else 'copy notes')
@@ -1692,12 +1692,19 @@ class TumblrPost(object):
             BeautifulSoup = load_bs4('save notes' if options.save_notes else 'copy notes')
 
         if options.copy_notes:
-            # Copy notes from prev_archive
-            with io.open(join(self.prev_archive, post_dir, self.ident + post_ext)) as post_file:
-                soup = BeautifulSoup(post_file, 'lxml')
-            notes = soup.find('ol', class_='notes')
-            if notes is not None:
-                notes_html = u''.join([n.prettify() for n in notes.find_all('li')])
+            # Copy notes from prev_archive (or here)
+            prev_archive = save_folder if options.reuse_json else self.prev_archive
+            try:
+                with io.open(join(prev_archive, post_dir, self.ident + post_ext)) as post_file:
+                    soup = BeautifulSoup(post_file, 'lxml')
+            except EnvironmentError as e:
+                if e.errno != errno.ENOENT:
+                    raise
+                # Ignore ENOENT
+            else:
+                notes = soup.find('ol', class_='notes')
+                if notes is not None:
+                    notes_html = u''.join([n.prettify() for n in notes.find_all('li')])
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
             import note_scraper
@@ -2086,13 +2093,13 @@ if __name__ == '__main__':
         parser.error("-D cannot be used with --tag-index")
     if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
         parser.error('--cookiefile: file cannot be read')
-    if options.copy_notes and not options.prev_archives:
-        parser.error('--copy-notes requires --prev-archives')
     if options.notes_limit is not None:
         if not options.save_notes:
             parser.error('--notes-limit requires --save-notes')
         if options.notes_limit < 1:
             parser.error('--notes-limit: Value must be at least 1')
+    if options.copy_notes and not (options.prev_archives or options.reuse_json):
+        parser.error('--copy-notes requires --prev-archives or --reuse-json')
     if options.prev_archives and options.reuse_json:
         parser.error('--prev-archives and --reuse-json are mutually exclusive')
     if options.prev_archives:
