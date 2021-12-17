@@ -497,14 +497,15 @@ class ApiParser(object):
         if headers.get('X-Ratelimit-Perday-Remaining') == '0':
             reset = headers.get('X-Ratelimit-Perday-Reset')
             try:
-                freset = float(reset)  # type: Optional[float]
+                freset = float(reset)
             except ValueError:
                 logger.error("Expected numerical X-Ratelimit-Perday-Reset, got '{}'\n".format(reset))
-                freset = None
-            if freset is not None:
+                msg = 'sometime tomorrow'
+            else:
                 treset = datetime.now() + timedelta(seconds=freset)
+                msg = 'at {}'.format(treset.ctime())
             raise RuntimeError('{}: Daily API ratelimit exceeded. Resume with --continue after reset {}.\n'.format(
-                logger.backup_account, 'sometime tomorrow' if freset is None else 'at {}'.format(treset.ctime())
+                logger.backup_account, msg
             ))
 
         # Hourly ratelimit
@@ -656,7 +657,7 @@ def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
         try:
             srcf = io.open(srcpath, 'rb')
         except EnvironmentError as e:
-            if getattr(e, 'errno', None) not in (errno.ENOENT, errno.EISDIR):
+            if e.errno not in (errno.ENOENT, errno.EISDIR):
                 raise
             return False  # Source does not exist (Python 3)
     else:
@@ -673,14 +674,14 @@ def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
         try:
             src_st = os.stat(src)
         except EnvironmentError as e:
-            if getattr(e, 'errno', None) not in (errno.ENOENT, errno.EISDIR):
+            if e.errno not in (errno.ENOENT, errno.EISDIR):
                 raise
             return False  # Source does not exist (Python 2)
 
         try:
             dst_st = os.stat(dstpath)  # type: Optional[os.stat_result]
         except EnvironmentError as e:
-            if getattr(e, 'errno', None) != errno.ENOENT:
+            if e.errno != errno.ENOENT:
                 raise
             dst_st = None  # Destination does not exist yet
 
@@ -941,7 +942,7 @@ class TumblrBackup(object):
             with io.open(path_to('.first_run_options'), encoding=FILE_ENCODING) as f:
                 first_run_options = json.load(f)
         except EnvironmentError as e:
-            if getattr(e, 'errno', None) != errno.ENOENT:
+            if e.errno != errno.ENOENT:
                 raise
             first_run_options = None
 
@@ -983,7 +984,7 @@ class TumblrBackup(object):
                 with io.open(join(prev_archive, '.first_run_options'), encoding=FILE_ENCODING) as f:
                     pa_options = json.load(f)
             except EnvironmentError as e:
-                if getattr(e, 'errno', None) != errno.ENOENT:
+                if e.errno != errno.ENOENT:
                     raise
                 pa_options = None
 
@@ -1151,8 +1152,12 @@ class TumblrBackup(object):
         # use the meta information to create a HTML header
         TumblrPost.post_header = self.header(body_class='post')
 
-        jq_filter = None if options.filter is None else jq.compile(options.filter)  # pytype: disable=attribute-error
-        request_sets = None if options.request is None else {typ: set(tags) for typ, tags in options.request.items()}
+        jq_filter = request_sets = None
+        if options.filter is not None:
+            assert jq is not None
+            jq_filter = jq.compile(options.filter)
+        if options.request is not None:
+            request_sets = {typ: set(tags) for typ, tags in options.request.items()}
 
         # start the thread pool
         backup_pool = ThreadPool()
@@ -1616,7 +1621,7 @@ class TumblrPost(object):
             try:
                 st = os.stat(path_to(*path_parts))
             except EnvironmentError as e:
-                if getattr(e, 'errno', None) != errno.ENOENT:
+                if e.errno != errno.ENOENT:
                     raise
                 # Ignore ENOENT
             else:

@@ -492,7 +492,7 @@ def try_unlink(path):
     try:
         os.unlink(path)
     except EnvironmentError as e:
-        if getattr(e, 'errno', None) != errno.ENOENT:
+        if e.errno != errno.ENOENT:
             raise
 
 
