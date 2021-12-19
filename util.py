@@ -325,6 +325,12 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
     return session
 
 
+class LogLevel(object):
+    INFO = 0
+    WARN = 1
+    ERROR = 2
+
+
 if TYPE_CHECKING:
     if PY3:
         WaiterSeq = Deque[Any]
