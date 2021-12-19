@@ -1633,7 +1633,9 @@ class TumblrPost(object):
             )
             cpy_res = maybe_copy_media(self.prev_archive, path_parts, pa_path_parts)
         file_exists = os.path.exists(path_to(*path_parts))
-        if not (cpy_res or options.no_get or file_exists):
+        if not (cpy_res or file_exists):
+            if options.no_get:
+                return None
             # We don't have the media and we want it
             assert wget_retrieve is not None
             try:
