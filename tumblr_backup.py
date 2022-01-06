@@ -360,7 +360,7 @@ class ApiParser:
         if options.reuse_json:
             prev_archive = save_folder
         elif prev_archive is None:
-            return
+            return True
 
         def read_resp(path):
             with open(path, encoding=FILE_ENCODING) as jf:
@@ -375,8 +375,13 @@ class ApiParser:
                 if e.name.endswith('.json') and e.is_file()
             )
         else:
-            respfiles = (join(prev_archive, 'json', str(i) + '.json') for i in options.idents)
-            respfiles = (p for p in respfiles if os.path.isfile(p))
+            respfiles = []
+            for ident in options.idents:
+                resp = join(prev_archive, 'json', str(ident) + '.json')
+                if not os.path.isfile(resp):
+                    logger.error("post '{}' not found\n".format(ident), account=True)
+                    return False
+                respfiles.append(resp)
 
         self.prev_resps = sorted(
             respfiles,
@@ -386,8 +391,9 @@ class ApiParser:
             ),
             reverse=True,
         )
+        return True
 
-    def apiparse(self, count, start=0, before=None) -> Optional[JSONDict]:
+    def apiparse(self, count, start=0, before=None, ident=None) -> Optional[JSONDict]:
         assert self.session is not None
         if self.prev_resps is not None:
             # Reconstruct the API response
@@ -424,7 +430,9 @@ class ApiParser:
             base = self.base
             params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
             headers = None
-        if before is not None and not self.dashboard_only_blog:
+        if ident is not None:
+            params['post_id' if self.dashboard_only_blog else 'id'] = ident
+        elif before is not None and not self.dashboard_only_blog:
             params['before'] = before
         elif start > 0:
             params['offset'] = start
@@ -1102,8 +1110,9 @@ class TumblrBackup:
         oldest_tstamp, self.pa_options, write_fro = self.process_existing_backup(account, prev_archive)
         check_optional_modules()
 
-        if options.idents and not isinstance(options.idents, frozenset):
-            options.idents = frozenset(options.idents)
+        if options.idents:
+            # Normalize idents
+            options.idents.sort(reverse=True)
 
         if options.incremental or options.resume:
             post_glob = list(find_post_files())
@@ -1130,9 +1139,12 @@ class TumblrBackup:
         logger.status('Getting basic information\r')
 
         api_parser = ApiParser(base, account)
+        if not api_parser.read_archive(prev_archive):
+            self.failed_blogs.append(account)
+            return
+
         api_thread = AsyncCallable(main_thread_lock, api_parser.apiparse, 'API Thread')
         with api_thread.response.mutex:
-            api_parser.read_archive(prev_archive)
             api_thread.put(1)
             resp = api_thread.get()
         if not resp:
@@ -1211,12 +1223,6 @@ class TumblrBackup:
         if options.request is not None:
             request_sets = {typ: set(tags) for typ, tags in options.request.items()}
 
-        if options.idents is not None:
-            if options.likes:
-                idents_remaining = set(options.idents)
-            else:
-                ident_min = min(options.idents)
-
         # start the thread pool
         backup_pool = ThreadPool()
 
@@ -1249,12 +1255,9 @@ class TumblrBackup:
                 if options.period and post.date < options.period[0]:
                     logger.info('Stopping backup: Reached end of period\n', account=True)
                     return False, oldest_date
-                if options.idents is not None:
-                    if not options.likes and int(post.ident) < ident_min:
-                        logger.info('Stopping backup: Found post older than oldest requested post\n', account=True)
-                        return False, oldest_date
-                    if int(post.ident) not in options.idents:
-                        continue
+                if next_ident is not None and int(post.ident) != next_ident:
+                    logger.error("post '{}' not found\n".format(next_ident), account=True)
+                    return False, oldest_date
                 if request_sets:
                     if post.typ not in request_sets:
                         continue
@@ -1296,12 +1299,12 @@ class TumblrBackup:
                 if options.count and self.post_count >= options.count:
                     logger.info('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
                     return False, oldest_date
-                if options.idents is not None and options.likes:
-                    idents_remaining.remove(int(post.ident))
-                    if not idents_remaining:
-                        logger.info('Stopping backup: Found all requested posts\n', account=True)
-                        return False, oldest_date
             return True, oldest_date
+
+        next_ident: Optional[int] = None
+        if options.idents is not None:
+            remaining_idents = options.idents.copy()
+            count_estimate = len(remaining_idents)
 
         if options.media_list:
             mlf = open_text('media.json', mode='r+')
@@ -1325,8 +1328,16 @@ class TumblrBackup:
                     '' if count_estimate is None else ' (of {} expected)'.format(count_estimate),
                 ))
 
+                if options.idents is not None:
+                    try:
+                        next_ident = remaining_idents.pop(0)
+                    except IndexError:
+                        # if the last requested post does not get backed up we end up here
+                        logger.info('Stopping backup: End of requested posts\n', account=True)
+                        break
+
                 with multicond:
-                    api_thread.put(MAX_POSTS, i, before)
+                    api_thread.put(MAX_POSTS, i, before, next_ident)
 
                     while not api_thread.response.qsize():
                         no_internet.check(release=True)
@@ -1364,7 +1375,11 @@ class TumblrBackup:
                     if oldest_date == before:
                         oldest_date -= 1
                     before = oldest_date
-                i += MAX_POSTS
+
+                if options.idents is None:
+                    i += MAX_POSTS
+                else:
+                    i += 1
 
             api_thread.quit()
             backup_pool.wait()  # wait until all posts have been saved
@@ -2141,9 +2156,10 @@ if __name__ == '__main__':
     class IdFileCallback(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
             with open(values) as f:
-                setattr(namespace, self.dest, tuple(map(
-                    int, (line for line in map(lambda l: l.rstrip('\n'), f) if line),
-                )))
+                setattr(namespace, self.dest, sorted(
+                    map(int, (line for line in map(lambda l: l.rstrip('\n'), f) if line)),
+                    reverse=True,
+                ))
 
     parser = argparse.ArgumentParser(usage='%(prog)s [options] blog-name ...',
                                      description='Makes a local backup of Tumblr blogs.')
@@ -2279,6 +2295,8 @@ if __name__ == '__main__':
         logger.warn('Warning: --save-notes uses HTTP regardless of --no-get\n')
     if options.copy_notes and not (options.prev_archives or options.reuse_json):
         parser.error('--copy-notes requires --prev-archives or --reuse-json')
+    if options.idents is not None and options.likes:
+        parser.error('--id-file not implemented for likes')
     if options.copy_notes is None:
         # Default to True if we may regenerate posts
         options.copy_notes = options.reuse_json and not (options.no_post_clobber or options.mtime_fix)
