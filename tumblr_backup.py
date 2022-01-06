@@ -417,9 +417,9 @@ class ApiParser(object):
             base = self.base
             params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
             headers = None
-        if before:
+        if before is not None:
             params['before'] = before
-        if start > 0 and not options.likes:
+        elif start > 0:
             params['offset'] = start
 
         try:
@@ -1189,6 +1189,7 @@ class TumblrBackup(object):
         # start the thread pool
         backup_pool = ThreadPool()
 
+        oldest_date = None
         before = options.period[1] if options.period else None
         if oldest_tstamp is not None:
             before = oldest_tstamp if before is None else min(before, oldest_tstamp)
@@ -1200,6 +1201,7 @@ class TumblrBackup(object):
             for p, prf in sorted_posts:
                 no_internet.check()
                 post = post_class(p, account, prf, prev_archive, self.pa_options)
+                oldest_date = post.date
                 if before is not None and post.date >= before:
                     raise RuntimeError('Found post with date ({}) newer than before param ({})'.format(
                         post.date, before))
@@ -1207,10 +1209,10 @@ class TumblrBackup(object):
                     pass  # No limit
                 elif (p['liked_timestamp'] if options.likes else long(post.ident)) <= ident_max:
                     logger.info('Stopping backup: Incremental backup complete\n', account=True)
-                    return False
+                    return False, oldest_date
                 if options.period and post.date < options.period[0]:
                     logger.info('Stopping backup: Reached end of period\n', account=True)
-                    return False
+                    return False, oldest_date
                 if request_sets:
                     if post.typ not in request_sets:
                         continue
@@ -1241,8 +1243,8 @@ class TumblrBackup(object):
                 self.post_count += 1
                 if options.count and self.post_count >= options.count:
                     logger.info('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
-                    return False
-            return True
+                    return False, oldest_date
+            return True, oldest_date
 
         try:
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
@@ -1278,7 +1280,8 @@ class TumblrBackup(object):
                 post_respfiles = resp.get('post_respfiles')
                 if post_respfiles is None:
                     post_respfiles = [None for _ in posts]
-                if not _backup(posts, post_respfiles):
+                res, oldest_date = _backup(posts, post_respfiles)
+                if not res:
                     break
 
                 if options.likes:
@@ -1286,7 +1289,12 @@ class TumblrBackup(object):
                     if next_ is None:
                         logger.info('Backup complete: Found end of likes\n', account=True)
                         break
-                    before = next_['query_params']['before']
+                    before = int(next_['query_params']['before'])
+                elif before is not None:
+                    assert oldest_date <= before
+                    if oldest_date == before:
+                        oldest_date -= 1
+                    before = oldest_date
                 i += MAX_POSTS
 
             api_thread.quit()
