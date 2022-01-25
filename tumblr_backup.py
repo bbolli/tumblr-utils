@@ -2023,7 +2023,10 @@ if __name__ == '__main__':
     parser.add_argument('--save-video-tumblr', action='store_true', help='save only Tumblr video files')
     parser.add_argument('--save-audio', action='store_true', help='save audio files')
     parser.add_argument('--save-notes', action='store_true', help='save a list of notes for each post')
-    parser.add_argument('--copy-notes', action='store_true', help='copy the notes list from a previous archive')
+    parser.add_argument('--copy-notes', action='store_true', default=None,
+                        help='copy the notes list from a previous archive (inverse: --no-copy-notes)')
+    parser.add_argument('--no-copy-notes', action='store_false', default=None, dest='copy_notes',
+                        help=argparse.SUPPRESS)
     parser.add_argument('--notes-limit', type=int, metavar='COUNT', help='limit requested notes to COUNT, per-post')
     parser.add_argument('--cookiefile', help='cookie file for youtube-dl, --save-notes, and svc API')
     parser.add_argument('-j', '--json', action='store_true', help='save the original JSON source')
@@ -2071,7 +2074,8 @@ if __name__ == '__main__':
     parser.add_argument('--ignore-diffopt', action='store_true',
                         help='Force backup over an incomplete archive with different options')
     parser.add_argument('--no-get', action='store_true', help="Don't retrieve files not found in --prev-archives")
-    parser.add_argument('--reuse-json', action='store_true', help='Reuse the API responses saved with --json')
+    parser.add_argument('--reuse-json', action='store_true',
+                        help='Reuse the API responses saved with --json (implies --copy-notes)')
     parser.add_argument('--internet-archive', action='store_true',
                         help='Fall back to the Internet Archive for Tumblr media 403 and 404 responses')
     parser.add_argument('blogs', nargs='*')
@@ -2108,8 +2112,6 @@ if __name__ == '__main__':
             parser.error('--notes-limit requires --save-notes')
         if options.notes_limit < 1:
             parser.error('--notes-limit: Value must be at least 1')
-    if options.copy_notes and not (options.prev_archives or options.reuse_json):
-        parser.error('--copy-notes requires --prev-archives or --reuse-json')
     if options.prev_archives and options.reuse_json:
         parser.error('--prev-archives and --reuse-json are mutually exclusive')
     if options.prev_archives:
@@ -2130,6 +2132,11 @@ if __name__ == '__main__':
         parser.error('--no-get makes no sense without --prev-archives or --reuse-json')
     if options.no_get and options.save_notes:
         logger.warn('Warning: --save-notes uses HTTP regardless of --no-get\n')
+    if options.copy_notes and not (options.prev_archives or options.reuse_json):
+        parser.error('--copy-notes requires --prev-archives or --reuse-json')
+    if options.copy_notes is None:
+        # Default to True if we may regenerate posts
+        options.copy_notes = options.reuse_json and not (options.no_post_clobber or options.mtime_fix)
 
     check_optional_modules()
 
