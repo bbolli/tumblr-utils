@@ -8,6 +8,7 @@ import sys
 import time
 import traceback
 import warnings
+from datetime import datetime
 
 from bs4 import BeautifulSoup
 
@@ -120,10 +121,13 @@ class WebCrawler(object):
             return False
 
         try:
-            sleep_dur = float(reset)
+            reset_time = int(reset)
         except ValueError:
-            log(LogLevel.ERROR, self.lasturl, "Expected numerical X-Rate-Limit-Reset, got '{}'".format(reset))
+            log(LogLevel.ERROR, self.lasturl, "Expected integer X-Rate-Limit-Reset, got '{}'".format(reset))
             return False
+
+        # This header is apparently a unix timestamp
+        sleep_dur = (datetime.fromtimestamp(reset_time) - datetime.now()).total_seconds()
 
         if sleep_dur < 0:
             log(LogLevel.WARN, self.lasturl, 'Warning: X-Rate-Limit-Reset is {} seconds in the past'.format(-sleep_dur))
@@ -133,7 +137,7 @@ class WebCrawler(object):
                 'Refusing to sleep for {} minutes, giving up'.format(round(sleep_dur / 60)))
             return False
 
-        log(LogLevel.WARN, self.lasturl, 'Rate limited, sleeping for {} seconds as requested'.format(sleep_dur))
+        log(LogLevel.WARN, self.lasturl, 'Rate limited, sleeping for {:.2f} seconds as requested'.format(sleep_dur))
         time.sleep(sleep_dur)
         return True
 
