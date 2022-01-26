@@ -1791,5 +1791,5 @@ https://www.tumblr.com/oauth/apps\n''')
         sys.exit(EXIT_INTERRUPT)
 
     if tb.failed_blogs:
-        logger.warn('Failed to back up {}'.format(', '.join(tb.failed_blogs)))
+        logger.warn('Failed to back up {}\n'.format(', '.join(tb.failed_blogs)))
     sys.exit(tb.exit_code())
