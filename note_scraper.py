@@ -8,7 +8,7 @@ import warnings
 from datetime import datetime
 from multiprocessing.queues import SimpleQueue
 from typing import List, Optional, Tuple
-from urllib.parse import quote, urlparse, urlsplit, urlunsplit
+from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
@@ -157,14 +157,18 @@ class WebCrawler:
         if not onclick:
             log(LogLevel.WARN, notes_url, 'No onclick attribute, probably a dashboard-only blog')
             return None
-        match = re.search(r";tumblrReq\.open\('GET','([^']+)'", onclick)
-        if not match:
+        match_ = re.search(r";tumblrReq\.open\('GET','([^']+)'", onclick)
+        if not match_:
             log(LogLevel.ERROR, notes_url, 'tumblrReq regex failed, did Tumblr update?')
             return None
-        path = match.group(1)
-        if not path.startswith('/'):
-            path = '/' + path
-        return base + path
+        url = urljoin(base, match_.group(1))
+        spl = urlsplit(url)
+        query = parse_qs(spl.query)
+        try:
+            del query['large']
+        except KeyError:
+            pass
+        return urlunsplit(spl._replace(query=urlencode(query, doseq=True)))
 
     def append_notes(self, soup, notes_list, notes_url):
         notes = soup.find('ol', class_='notes')
