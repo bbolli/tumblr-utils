@@ -36,6 +36,7 @@ from util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, L
                   enospc, fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir,
                   to_bytes)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
+from is_reblog import post_is_reblog
 
 if TYPE_CHECKING:
     from typing_extensions import Literal
@@ -1264,17 +1265,9 @@ class TumblrBackup:
                     tags = request_sets[post.typ]
                     if not (TAG_ANY in tags or tags & {t.lower() for t in post.tags}):
                         continue
-                post_is_reblog = False
-                if 'reblogged_from_name' in p or 'reblogged_root_name' in p:
-                    if 'trail' in p and not p['trail']:
-                        post_is_reblog = True
-                    elif 'trail' in p and 'is_current_item' not in p['trail'][-1]:
-                        post_is_reblog = True
-                elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
-                    post_is_reblog = True
-                if options.no_reblog and post_is_reblog:
+                if options.no_reblog and post_is_reblog(p):
                     continue
-                if options.only_reblog and not post_is_reblog:
+                if options.only_reblog and not post_is_reblog(p):
                     continue
                 if jq_filter:
                     try:
