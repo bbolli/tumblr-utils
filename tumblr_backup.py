@@ -359,7 +359,7 @@ class ApiParser:
             with disablens_lock:
                 if self.account not in disable_note_scraper:
                     disable_note_scraper.add(self.account)
-                    logger.warn('[Note Scraper] Dashboard-only blog - scraping disabled for {}\n'.format(self.account))
+                    logger.info('[Note Scraper] Dashboard-only blog - scraping disabled for {}\n'.format(self.account))
         elif self.dashboard_only_blog is None:
             # If the first API request succeeds, it's a public blog
             self.dashboard_only_blog = False
@@ -1376,7 +1376,7 @@ class TumblrPost:
                         # Check if another thread already set this
                         if self.backup_account not in disable_note_scraper:
                             disable_note_scraper.add(self.backup_account)
-                            logger.warn('[Note Scraper] Blocked by safe mode - scraping disabled for {}\n'.format(
+                            logger.info('[Note Scraper] Blocked by safe mode - scraping disabled for {}\n'.format(
                                 self.backup_account
                             ))
                 elif process.exitcode == 3:  # EXIT_NO_INTERNET
