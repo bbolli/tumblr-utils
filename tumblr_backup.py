@@ -896,8 +896,6 @@ class TumblrBackup:
     @classmethod
     def process_existing_backup(cls, account, prev_archive):
         complete_backup = os.path.exists(path_to('.complete'))
-        if options.resume and complete_backup:
-            raise RuntimeError('{}: Cannot continue complete backup'.format(account))
         try:
             with open(path_to('.first_run_options'), encoding=FILE_ENCODING) as f:
                 first_run_options = json.load(f)
@@ -912,6 +910,7 @@ class TumblrBackup:
             def this(opts): return {opt: orig_options[opt] for opt in opts}
 
         # These options must always match
+        backdiff_nondef = None
         if first_run_options is not None:
             opts = Options(first_run_options)
             mustmatchdiff = tuple(filter(opts.differs, MUST_MATCH_OPTIONS))
@@ -920,14 +919,21 @@ class TumblrBackup:
                     account, opts.this(mustmatchdiff), opts.first(mustmatchdiff)))
 
             backdiff = tuple(filter(opts.differs, BACKUP_CHANGING_OPTIONS))
-            if options.resume:
+            if complete_backup:
+                # Complete archives may be added to with different options
+                if (
+                    options.resume
+                    and first_run_options.get('count') is None
+                    and (orig_options['period'] or [0, 0])[0] >= (first_run_options.get('period') or [0, 0])[0]
+                ):
+                    raise RuntimeError('{}: Cannot continue complete backup that was not stopped early with --count or '
+                                       '--period'.format(account))
+            elif options.resume:
                 backdiff_nondef = tuple(opt for opt in backdiff if orig_options[opt] != parser.get_default(opt))
                 if backdiff_nondef and not options.ignore_diffopt:
                     raise RuntimeError('{}: The script was given {} but the existing backup was made with {}. You may '
                                        'skip this check with --ignore-diffopt.'.format(
                                             account, opts.this(backdiff_nondef), opts.first(backdiff_nondef)))
-            elif complete_backup:
-                pass  # Complete archives may be added to with different options
             elif not backdiff:
                 raise RuntimeError('{}: Found incomplete archive, try --continue'.format(account))
             elif not options.ignore_diffopt:
@@ -953,7 +959,7 @@ class TumblrBackup:
                         account, pa_opts.this(mustmatchdiff), pa_opts.first(mustmatchdiff)))
 
         oldest_tstamp = None
-        if not complete_backup:
+        if options.resume or not complete_backup:
             # Read every post to find the oldest timestamp already saved
             filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
             post_glob = glob(path_to(post_dir, filter_))
@@ -970,7 +976,7 @@ class TumblrBackup:
                 )
 
         write_fro = False
-        if first_run_options is not None and options.resume:
+        if backdiff_nondef is not None:
             # Load saved options, unless they were overridden with --ignore-diffopt
             for opt in BACKUP_CHANGING_OPTIONS:
                 if opt not in backdiff_nondef:
