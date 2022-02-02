@@ -2014,10 +2014,11 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(usage='%(prog)s [options] blog-name ...',
                                      description='Makes a local backup of Tumblr blogs.')
+    postexist_group = parser.add_mutually_exclusive_group()
     parser.add_argument('-O', '--outdir', help='set the output directory (default: blog-name)')
     parser.add_argument('-D', '--dirs', action='store_true', help='save each post in its own folder')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress progress messages')
-    parser.add_argument('-i', '--incremental', action='store_true', help='incremental backup mode')
+    postexist_group.add_argument('-i', '--incremental', action='store_true', help='incremental backup mode')
     parser.add_argument('-l', '--likes', action='store_true', help="save a blog's likes, not its posts")
     parser.add_argument('-k', '--skip-images', action='store_false', dest='save_images',
                         help='do not save images; link to Tumblr instead')
@@ -2037,9 +2038,9 @@ if __name__ == '__main__':
                         help='reverse the post order in the monthly archives')
     parser.add_argument('-R', '--reverse-index', action='store_false', help='reverse the index file order')
     parser.add_argument('--tag-index', action='store_true', help='also create an archive per tag')
-    parser.add_argument('-a', '--auto', type=int, metavar='HOUR',
-                        help='do a full backup at HOUR hours, otherwise do an incremental backup'
-                             ' (useful for cron jobs)')
+    postexist_group.add_argument('-a', '--auto', type=int, metavar='HOUR',
+                                 help='do a full backup at HOUR hours, otherwise do an incremental backup'
+                                      ' (useful for cron jobs)')
     parser.add_argument('-n', '--count', type=int, help='save only COUNT posts')
     parser.add_argument('-s', '--skip', type=int, default=0, help='skip the first SKIP posts')
     parser.add_argument('-p', '--period', action=PeriodCallback,
@@ -2072,12 +2073,13 @@ if __name__ == '__main__':
     parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
     parser.add_argument('--user-agent', help='User agent string to use with HTTP requests')
     parser.add_argument('--threads', type=int, default=20, help='number of threads to use for post retrieval')
-    parser.add_argument('--continue', action='store_true', dest='resume', help='Continue an incomplete first backup')
+    postexist_group.add_argument('--continue', action='store_true', dest='resume',
+                                 help='Continue an incomplete first backup')
     parser.add_argument('--ignore-diffopt', action='store_true',
                         help='Force backup over an incomplete archive with different options')
     parser.add_argument('--no-get', action='store_true', help="Don't retrieve files not found in --prev-archives")
-    parser.add_argument('--reuse-json', action='store_true',
-                        help='Reuse the API responses saved with --json (implies --copy-notes)')
+    postexist_group.add_argument('--reuse-json', action='store_true',
+                                 help='Reuse the API responses saved with --json (implies --copy-notes)')
     parser.add_argument('--internet-archive', action='store_true',
                         help='Fall back to the Internet Archive for Tumblr media 403 and 404 responses')
     parser.add_argument('blogs', nargs='*')
@@ -2088,8 +2090,6 @@ if __name__ == '__main__':
 
     if not blogs:
         parser.error('Missing blog-name')
-    if sum(1 for arg in ('resume', 'incremental', 'auto') if getattr(options, arg) not in (None, False)) > 1:
-        parser.error('Only one of --continue, --incremental, or --auto may be given')
     if options.auto is not None and options.auto != time.localtime().tm_hour:
         options.incremental = True
     if options.resume or options.incremental:
