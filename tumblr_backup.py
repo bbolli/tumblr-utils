@@ -326,7 +326,7 @@ class ApiParser:
             base = self.base
             params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
             headers = None
-        if before is not None:
+        if before is not None and not self.dashboard_only_blog:
             params['before'] = before
         elif start > 0:
             params['offset'] = start
@@ -812,6 +812,9 @@ class TumblrBackup:
             self.failed_blogs.append(account)
             return
 
+        if options.period and api_parser.dashboard_only_blog:
+            logger.warn('Warning: skipping posts on a dashboard-only blog is slow\n', account=True)
+
         # collect all the meta information
         if options.likes:
             if not resp.get('blog', {}).get('share_likes', True):
@@ -834,12 +837,11 @@ class TumblrBackup:
         # start the thread pool
         backup_pool = ThreadPool()
 
-        oldest_date = None
-
         # returns whether any posts from this batch were saved
         def _backup(posts, post_respfiles):
             def sort_key(x): return x[0]['liked_timestamp'] if options.likes else int(x[0]['id'])
             sorted_posts = sorted(zip(posts, post_respfiles), key=sort_key, reverse=True)
+            oldest_date = None
             for p, prf in sorted_posts:
                 no_internet.check()
                 post = post_class(p, account, prf, prev_archive)
@@ -851,6 +853,8 @@ class TumblrBackup:
                     return False, oldest_date
                 if options.period:
                     if post.date > options.p_stop:
+                        if api_parser.dashboard_only_blog:
+                            continue  # cannot request 'before' with the svc API
                         raise RuntimeError('Found post with date ({}) newer than before param ({})'.format(
                             post.date, options.p_stop))
                     if post.date < options.p_start:
@@ -925,7 +929,7 @@ class TumblrBackup:
                         logger.info('Backup complete: Found end of likes\n', account=True)
                         break
                     before = int(next_['query_params']['before'])
-                elif before is not None:
+                elif before is not None and not api_parser.dashboard_only_blog:
                     assert oldest_date <= before
                     if oldest_date == before:
                         oldest_date -= 1
