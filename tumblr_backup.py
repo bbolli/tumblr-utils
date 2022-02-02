@@ -182,7 +182,9 @@ MEDIA_PATH_OPTIONS = ('dirs', 'hostdirs', 'image_names')
 MUST_MATCH_OPTIONS = PREV_MUST_MATCH_OPTIONS + MEDIA_PATH_OPTIONS
 BACKUP_CHANGING_OPTIONS = (
     'save_images', 'save_video', 'save_video_tumblr', 'save_audio', 'save_notes', 'copy_notes', 'notes_limit', 'json',
-    'count', 'skip', 'period', 'request', 'filter', 'no_reblog', 'exif', 'prev_archives')
+    'count', 'skip', 'period', 'request', 'filter', 'no_reblog', 'exif', 'prev_archives', 'use_server_timestamps',
+    'user_agent', 'no_get', 'internet_archive',
+)
 
 wget_retrieve = None  # type: Optional[WgetRetrieveWrapper]
 main_thread_lock = threading.RLock()
