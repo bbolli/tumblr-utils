@@ -326,7 +326,7 @@ def fsync(fd):
     if sys.platform == 'darwin':
         # Apple's fsync does not flush the drive write cache
         try:
-            fcntl.fcntl(fd, fcntl.F_FULLSYNC)  # pytype: disable=module-attr
+            fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
         except EnvironmentError:
             pass  # fall back to fsync
         else:
