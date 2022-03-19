@@ -12,8 +12,8 @@ import warnings
 from email.utils import mktime_tz, parsedate_tz
 from tempfile import NamedTemporaryFile
 
-from util import (PY3, URLLIB3_FROM_PIP, LogLevel, get_supported_encodings, is_dns_working, no_internet,
-                  setup_urllib3_ssl)
+from util import (PY3, URLLIB3_FROM_PIP, LogLevel, fdatasync, fsync, get_supported_encodings, is_dns_working,
+                  no_internet, setup_urllib3_ssl)
 
 try:
     from typing import TYPE_CHECKING
@@ -667,7 +667,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
             new_dest_basename = adjust_basename(dest_basename, pf)  # type: ignore[arg-type]
 
         # Sync the inode
-        os.fsync(hstat.part_file)
+        fsync(hstat.part_file)
         try:
             hstat.part_file.close()
         finally:
@@ -687,7 +687,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
 
         # Sync the directory and return
         if hstat.dest_dir is not None:
-            os.fdatasync(hstat.dest_dir)
+            fdatasync(hstat.dest_dir)
         return
 
 
