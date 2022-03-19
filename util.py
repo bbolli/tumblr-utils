@@ -4,6 +4,7 @@ from __future__ import absolute_import, division, print_function, with_statement
 
 import collections
 import errno
+import fcntl
 import io
 import os
 import shutil
@@ -329,6 +330,24 @@ class LogLevel(object):
     INFO = 0
     WARN = 1
     ERROR = 2
+
+
+def fsync(fd):
+    if sys.platform == 'darwin':
+        # Apple's fsync does not flush the drive write cache
+        try:
+            fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+        except EnvironmentError:
+            pass  # fall back to fsync
+        else:
+            return
+    os.fsync(fd)
+
+
+def fdatasync(fd):
+    if hasattr(os, 'fdatasync'):
+        return os.fdatasync(fd)
+    fsync(fd)
 
 
 if TYPE_CHECKING:

@@ -29,9 +29,9 @@ from posixpath import basename as urlbasename, join as urlpathjoin, splitext as 
 from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
 
-from util import (AsyncCallable, ConnectionFile, LockedQueue, LogLevel, MultiCondition, PY3, copyfile, have_module,
-                  is_dns_working, make_requests_session, no_internet, nullcontext, opendir, to_bytes, to_unicode,
-                  try_unlink)
+from util import (AsyncCallable, ConnectionFile, LockedQueue, LogLevel, MultiCondition, PY3, copyfile, fdatasync, fsync,
+                  have_module, is_dns_working, make_requests_session, no_internet, nullcontext, opendir, to_bytes,
+                  to_unicode, try_unlink)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
 try:
@@ -289,7 +289,7 @@ def open_text(*parts):
 
         # Flush buffers and sync the inode
         partf.flush()
-        os.fsync(partf)
+        fsync(partf)
 
         pfname = partf.name
 
@@ -1159,17 +1159,17 @@ class TumblrBackup(object):
 
             if not (account in self.failed_blogs or os.path.exists(path_to('.complete'))):
                 # Make .complete file
-                if os.name == 'posix':  # Opening directories and os.fdatasync are POSIX features
+                if os.name == 'posix':  # Opening directories and fdatasync are POSIX features
                     sf = opendir(save_folder, os.O_RDONLY)  # type: Optional[int]
                 else:
                     sf = None
                 try:
                     if sf is not None:
-                        os.fdatasync(sf)
+                        fdatasync(sf)
                     with io.open(open_file(lambda f: f, ('.complete',)), 'wb') as f:
-                        os.fsync(f)
+                        fsync(f)
                     if sf is not None:
-                        os.fdatasync(sf)
+                        fdatasync(sf)
                 finally:
                     if sf is not None:
                         os.close(sf)
