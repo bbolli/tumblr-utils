@@ -7,7 +7,7 @@ import traceback
 import warnings
 from datetime import datetime
 from multiprocessing.queues import SimpleQueue
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
@@ -15,12 +15,12 @@ from bs4 import BeautifulSoup
 from util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
                   to_bytes)
 
-if URLLIB3_FROM_PIP:
-    from pip._vendor.urllib3 import Retry, Timeout
-    from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
-else:
+if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import Retry, Timeout
     from urllib3.exceptions import HTTPError, InsecureRequestWarning
+else:
+    from pip._vendor.urllib3 import Retry, Timeout
+    from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
 
 setup_urllib3_ssl()
 
@@ -29,9 +29,9 @@ try:
 except ImportError:
     # Import pip._internal.download first to avoid a potential recursive import
     try:
-        from pip._internal import download as _  # noqa: F401
+        from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
     except ImportError:
-        pass  # Not absolutely necessary
+        pass  # doesn't exist in pip 20.0+
     try:
         from pip._vendor import requests  # type: ignore[no-redef]
     except ImportError:
@@ -45,7 +45,7 @@ EXIT_NO_INTERNET = 3
 HTTP_TIMEOUT = Timeout(90)
 # Always retry on 503 or 504, but never on connect or 429, the latter handled specially
 HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
-HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))  # type: ignore[misc]
 
 # Globals
 post_url = None
@@ -155,7 +155,7 @@ class WebCrawler:
         element = soup.find('a', class_='more_notes_link')
         if not element:
             return None
-        onclick = element.get_attribute_list('onclick')[0]
+        onclick = element.get_attribute_list('onclick')[0]  # pytype: disable=attribute-error
         if not onclick:
             log(LogLevel.WARN, notes_url, 'No onclick attribute, probably a dashboard-only blog')
             return None
@@ -177,7 +177,7 @@ class WebCrawler:
         if notes is None:
             log(LogLevel.WARN, notes_url, 'Response HTML does not have a notes list')
             return False
-        notes = notes.find_all('li')
+        notes = notes.find_all('li')  # pytype: disable=attribute-error
         for note in reversed(notes):
             classes = note.get('class', [])
             if 'more_notes_link_container' in classes:

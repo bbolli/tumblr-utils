@@ -9,24 +9,24 @@ from argparse import Namespace
 from email.utils import mktime_tz, parsedate_tz
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import Any, BinaryIO, Callable, Optional
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
 from util import (URLLIB3_FROM_PIP, LogLevel, fdatasync, fsync, get_supported_encodings, is_dns_working,
                   no_internet, setup_urllib3_ssl)
 
-if URLLIB3_FROM_PIP:
-    from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
-    from pip._vendor.urllib3 import Retry as Retry
-    from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
-    from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
-    from pip._vendor.urllib3.util import make_headers
-else:
+if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from urllib3 import Retry as Retry
     from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
     from urllib3.exceptions import HTTPError as HTTPError
     from urllib3.util import make_headers
+else:
+    from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
+    from pip._vendor.urllib3 import Retry as Retry
+    from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
+    from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
+    from pip._vendor.urllib3.util import make_headers
 
 setup_urllib3_ssl()
 
@@ -34,7 +34,7 @@ HTTP_TIMEOUT = Timeout(90)
 # Always retry on 503 or 504, but never on connect, which is handled specially
 # Also retry on 500 since Tumblr servers have temporary failures
 HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((500, 503, 504)))
-HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))  # type: ignore[misc]
 HTTP_CHUNK_SIZE = 1024 * 1024
 
 base_headers = make_headers(keep_alive=True, accept_encoding=list(get_supported_encodings()))
@@ -108,7 +108,7 @@ class WGHTTPResponse(HTTPResponse):
 
     # Make _init_length publicly usable because its implementation is nice
     def get_content_length(self, meth):
-        return self._init_length(meth)
+        return self._init_length(meth)  # type: ignore[attr-defined]
 
     # Wrap _decode to do some extra processing of the content-encoded entity data.
     def _decode(self, data, decode_content, flush_decoder):
@@ -124,7 +124,7 @@ class WGHTTPResponse(HTTPResponse):
         self.last_read_length = len(data)  # Count only non-skipped data
         if not data:
             return b''
-        return super(WGHTTPResponse, self)._decode(data, decode_content, flush_decoder)
+        return super(WGHTTPResponse, self)._decode(data, decode_content, flush_decoder)  # type: ignore[misc]
 
 
 class WGHTTPConnectionPool(HTTPConnectionPool):
@@ -166,7 +166,7 @@ class WGPoolManager(PoolManager):
     def connection_from_url(self, url, pool_kwargs=None):
         try:
             self.cfh_url = url
-            return super(WGPoolManager, self).connection_from_url(url, pool_kwargs)
+            return super(WGPoolManager, self).connection_from_url(url, pool_kwargs)  # type: ignore[call-arg]
         finally:
             self.cfh_url = None
 
@@ -181,7 +181,7 @@ class WGPoolManager(PoolManager):
         if request_context is None:
             request_context = self.connection_pool_kw.copy()
         request_context['cfh_url'] = self.cfh_url
-        return super(WGPoolManager, self)._new_pool(scheme, host, port, request_context)
+        return super(WGPoolManager, self)._new_pool(scheme, host, port, request_context)  # type: ignore[misc]
 
 
 poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT)

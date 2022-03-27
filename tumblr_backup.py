@@ -22,13 +22,22 @@ from glob import glob
 from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
-from typing import TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type
+from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type,
+                    TypeVar, Union)
 from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
-from util import (ConnectionFile, LockedQueue, LogLevel, is_dns_working, make_requests_session, no_internet,
-                  to_bytes)
+from util import (ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, is_dns_working, make_requests_session,
+                  no_internet, to_bytes)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
+
+T = TypeVar('T')
+
+if TYPE_CHECKING:
+    from typing_extensions import Literal
+else:
+    class Literal(metaclass=FakeGenericMeta):
+        pass
 
 JSONDict = Dict[str, Any]
 
@@ -69,9 +78,9 @@ except ImportError:
     if not TYPE_CHECKING:
         # Import pip._internal.download first to avoid a potential recursive import
         try:
-            from pip._internal import download as _  # noqa: F401
+            from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
         except ImportError:
-            pass  # Not absolutely necessary
+            pass  # doesn't exist in pip 20.0+
         try:
             from pip._vendor import requests  # type: ignore[no-redef]
         except ImportError:
@@ -130,7 +139,7 @@ REM_POST_INC = 10
 
 # Always retry on 503 or 504, but never on connect or 429, the latter handled specially
 HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
-HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))  # type: ignore[misc]
 
 # get your own API key at https://www.tumblr.com/oauth/apps
 API_KEY = ''
@@ -743,7 +752,7 @@ class TumblrBackup:
         for post in posts:
             with open(post, encoding=FILE_ENCODING) as pf:
                 soup = BeautifulSoup(pf, 'lxml')
-            postdate = soup.find('time')['datetime']
+            postdate = soup.find('time')['datetime']  # pytype: disable=unsupported-operands
             del soup
             # datetime.fromisoformat does not understand 'Z' suffix
             yield int(datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ').timestamp())
@@ -967,7 +976,7 @@ class TumblrBackup:
 class TumblrPost:
     post_header = ''  # set by TumblrBackup.backup()
 
-    def __init__(self, post: JSONDict, backup_account: str, respfile: str, prev_archive: str) -> None:
+    def __init__(self, post: JSONDict, backup_account: str, respfile: str, prev_archive: Optional[str]) -> None:
         self.content = ''
         self.post = post
         self.backup_account = backup_account
@@ -1009,7 +1018,7 @@ class TumblrPost:
         def append(s, fmt='%s'):
             content.append(fmt % s)
 
-        def get_try(elt):
+        def get_try(elt) -> Union[Any, Literal['']]:
             return post.get(elt, '')
 
         def append_try(elt, fmt='%s'):
@@ -1321,11 +1330,12 @@ class TumblrPost:
 
         if options.copy_notes:
             # Copy notes from prev_archive
+            assert self.prev_archive is not None
             with open(join(self.prev_archive, post_dir, self.ident + post_ext)) as post_file:
                 soup = BeautifulSoup(post_file, 'lxml')
             notes = soup.find('ol', class_='notes')
             if notes is not None:
-                notes_html = ''.join([n.prettify() for n in notes.find_all('li')])
+                notes_html = ''.join([n.prettify() for n in notes.find_all('li')])  # pytype: disable=attribute-error
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
             # Scrape and save notes

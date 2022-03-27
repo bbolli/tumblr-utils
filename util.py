@@ -38,7 +38,7 @@ try:
 except ImportError:
     try:
         # pip includes urllib3
-        from pip._vendor.urllib3.exceptions import DependencyWarning
+        from pip._vendor.urllib3.exceptions import DependencyWarning  # type: ignore[no-redef]
         URLLIB3_FROM_PIP = True
     except ImportError:
         raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
@@ -50,6 +50,11 @@ def to_bytes(string, encoding='utf-8', errors='strict'):
     return string.encode(encoding, errors)
 
 
+class FakeGenericMeta(type):
+    def __getitem__(cls, item):
+        return cls
+
+
 if TYPE_CHECKING:
     T = TypeVar('T')
 
@@ -57,10 +62,6 @@ if TYPE_CHECKING:
         pass
 else:
     T = None
-
-    class FakeGenericMeta(type):
-        def __getitem__(cls, item):
-            return cls
 
     class GenericQueue(queue.Queue, metaclass=FakeGenericMeta):
         pass
@@ -218,7 +219,7 @@ def setup_urllib3_ssl():
             if URLLIB3_FROM_PIP:
                 from pip._vendor.urllib3.contrib import pyopenssl
             else:
-                from urllib3.contrib import pyopenssl
+                from urllib3.contrib import pyopenssl  # type: ignore[attr-defined]
             pyopenssl.inject_into_urllib3()
         except ImportError as e:
             print('Warning: Failed to inject pyOpenSSL: {!r}'.format(e), file=sys.stderr)

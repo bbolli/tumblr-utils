@@ -21,9 +21,9 @@ try:
 except ImportError:
     # Import pip._internal.download first to avoid a potential recursive import
     try:
-        from pip._internal import download as _  # noqa: F401
+        from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
     except ImportError:
-        pass  # Not absolutely necessary
+        pass  # doesn't exist in pip 20.0+
     try:
         from pip._vendor import requests  # type: ignore[no-redef]
     except ImportError:
