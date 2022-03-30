@@ -268,15 +268,27 @@ def open_file(open_fn, parts):
     return open_fn(path_to(*parts))
 
 
-@contextlib.contextmanager
-def open_text(*parts, mode='w') -> Iterator[TextIO]:
-    assert 'b' not in mode
-    dest_path = open_file(lambda f: f, parts)
-    dest_dirname, dest_basename = split(dest_path)
+class open_outfile:
+    def __init__(self, mode, *parts, **kwargs):
+        self._dest_path = open_file(lambda f: f, parts)
+        dest_dirname, dest_basename = split(self._dest_path)
 
-    with NamedTemporaryFile(mode, prefix='.{}.'.format(dest_basename), dir=dest_dirname, delete=False) as partf:
-        with open(partf.fileno(), mode, encoding=FILE_ENCODING, errors='xmlcharrefreplace', closefd=False) as f:
-            yield f
+        self._partf = NamedTemporaryFile(mode, prefix='.{}.'.format(dest_basename), dir=dest_dirname, delete=False)
+        # NB: open by name so name attribute is accurate
+        self._f = open(self._partf.name, mode, **kwargs)
+
+    def __enter__(self):
+        return self._f
+
+    def __exit__(self, exc_type, exc_value, tb):
+        partf = self._partf
+        self._f.close()
+
+        if exc_type is not None:
+            # roll back on exception; do not write partial files
+            partf.close()
+            os.unlink(partf.name)
+            return
 
         # NamedTemporaryFile is created 0600, set mode to the usual 0644
         if os.name == 'posix':
@@ -287,11 +299,17 @@ def open_text(*parts, mode='w') -> Iterator[TextIO]:
         # Flush buffers and sync the inode
         partf.flush()
         fsync(partf)
+        partf.close()
 
-        pfname = partf.name
+        # Move to final destination
+        os.replace(partf.name, self._dest_path)
 
-    # Move to final destination
-    os.replace(pfname, dest_path)
+
+@contextlib.contextmanager
+def open_text(*parts, mode='w') -> Iterator[TextIO]:
+    assert 'b' not in mode
+    with open_outfile(mode, *parts, encoding=FILE_ENCODING, errors='xmlcharrefreplace') as f:
+        yield f
 
 
 def strftime(fmt, t=None):
@@ -349,6 +367,9 @@ class ApiParser:
         self.account = account
         self.prev_resps: Optional[List[str]] = None
         self.dashboard_only_blog: Optional[bool] = None
+        self._prev_iter: Optional[Iterator[JSONDict]] = None
+        self._last_mode: Optional[str] = None
+        self._last_offset: Optional[int] = None
 
     @classmethod
     def setup(cls):
@@ -394,30 +415,60 @@ class ApiParser:
         )
         return True
 
-    def apiparse(self, count, start=0, before=None, ident=None) -> Optional[JSONDict]:
-        assert self.session is not None
+    def _iter_prev(self) -> Iterator[JSONDict]:
+        assert self.prev_resps is not None
+        for path in self.prev_resps:
+            with open(path, encoding=FILE_ENCODING) as f:
+                try:
+                    yield json.load(f)
+                except ValueError as e:
+                    f.seek(0)
+                    logger.error('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
+
+    def get_initial(self) -> Optional[JSONDict]:
         if self.prev_resps is not None:
-            # Reconstruct the API response
-            def read_post(prf):
-                with open(prf, encoding=FILE_ENCODING) as f:
-                    try:
-                        post = json.load(f)
-                    except ValueError as e:
-                        f.seek(0)
-                        logger.error('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
-                        return None
-                return prf, post
-            posts: Iterable[Tuple[os.DirEntry[str], JSONDict]]
-            posts = map(read_post, self.prev_resps)
-            if before is not None:
-                posts = itertools.dropwhile(
-                    lambda pp: pp[1]['liked_timestamp' if options.likes else 'timestamp'] >= before,
-                    posts,
-                )
-            posts = list(itertools.islice(posts, start, start + count))
-            return {'posts': [post for prf, post in posts],
-                    'post_respfiles': [prf for prf, post in posts],
-                    'blog': dict(posts[0][1]['blog'] if posts else {}, posts=len(self.prev_resps))}
+            try:
+                first_post = next(self._iter_prev())
+            except StopIteration:
+                return None
+            return {'posts': [first_post], 'blog': dict(first_post['blog'], posts=len(self.prev_resps))}
+
+        resp = self.apiparse(1)
+        if self.dashboard_only_blog and resp and resp['posts']:
+            # svc API doesn't return blog info, steal it from the first post
+            resp['blog'] = resp['posts'][0]['blog']
+        return resp
+
+    def apiparse(self, count, start=0, before=None, ident=None) -> Optional[JSONDict]:
+        if self.prev_resps is not None:
+            if self._prev_iter is None:
+                self._prev_iter = self._iter_prev()
+            if ident is not None:
+                assert self._last_mode in (None, 'ident')
+                self._last_mode = 'ident'
+                # idents are pre-filtered
+                try:
+                    posts = [next(self._prev_iter)]
+                except StopIteration:
+                    return None
+            else:
+                it = self._prev_iter
+                if before is not None:
+                    assert self._last_mode in (None, 'before')
+                    assert self._last_offset is None or before < self._last_offset
+                    self._last_mode = 'before'
+                    self._last_offset = before
+                    it = itertools.dropwhile(
+                        lambda p: p['liked_timestamp' if options.likes else 'timestamp'] >= before,
+                        it,
+                    )
+                else:
+                    assert self._last_mode in (None, 'offset')
+                    assert start == (0 if self._last_offset is None else self._last_offset + MAX_POSTS)
+                    self._last_mode = 'offset'
+                    self._last_offset = start
+                posts = list(itertools.islice(it, None, count))
+            return {'posts': posts}
 
         if self.dashboard_only_blog:
             base = 'https://www.tumblr.com/svc/indash_blog'
@@ -480,11 +531,7 @@ class ApiParser:
             # If the first API request succeeds, it's a public blog
             self.dashboard_only_blog = False
 
-        resp = doc.get('response')
-        if resp is not None and self.dashboard_only_blog:
-            # svc API doesn't return blog info, steal it from the first post
-            resp['blog'] = resp['posts'][0]['blog'] if resp['posts'] else {}
-        return resp
+        return doc.get('response')
 
     def _get_resp(self, base, params, headers):
         assert self.session is not None
@@ -715,8 +762,9 @@ def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
     else:
         return True  # Don't overwrite
 
-    copyfile(srcpath, dstpath)
-    shutil.copystat(srcpath, dstpath)
+    with open_outfile('wb', *path_parts) as dstf:
+        copyfile(srcpath, dstf.name)
+        shutil.copystat(srcpath, dstf.name)
 
     return True  # Copied
 
@@ -1145,11 +1193,7 @@ class TumblrBackup:
         if not api_parser.read_archive(prev_archive):
             self.failed_blogs.append(account)
             return
-
-        api_thread = AsyncCallable(main_thread_lock, api_parser.apiparse, 'API Thread')
-        with api_thread.response.mutex:
-            api_thread.put(1)
-            resp = api_thread.get()
+        resp = api_parser.get_initial()
         if not resp:
             self.failed_blogs.append(account)
             return
@@ -1236,14 +1280,13 @@ class TumblrBackup:
             logger.warn('Warning: skipping posts on a dashboard-only blog is slow\n', account=True)
 
         # returns whether any posts from this batch were saved
-        def _backup(posts, post_respfiles):
-            def sort_key(x): return x[0]['liked_timestamp'] if options.likes else int(x[0]['id'])
-            sorted_posts = sorted(zip(posts, post_respfiles), key=sort_key, reverse=True)
+        def _backup(posts):
+            def sort_key(x): return x['liked_timestamp'] if options.likes else int(x['id'])
             oldest_date = None
-            for p, prf in sorted_posts:
+            for p in sorted(posts, key=sort_key, reverse=True):
                 no_internet.check()
                 enospc.check()
-                post = post_class(p, account, prf, prev_archive, self.pa_options, self.record_media)
+                post = post_class(p, account, prev_archive, self.pa_options, self.record_media)
                 oldest_date = post.date
                 if before is not None and post.date >= before:
                     if api_parser.dashboard_only_blog:
@@ -1295,6 +1338,8 @@ class TumblrBackup:
                     logger.info('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
                     return False, oldest_date
             return True, oldest_date
+
+        api_thread = AsyncCallable(main_thread_lock, api_parser.apiparse, 'API Thread')
 
         next_ident: Optional[int] = None
         if options.idents is not None:
@@ -1351,11 +1396,7 @@ class TumblrBackup:
                     logger.info('Backup complete: Found empty set of posts\n', account=True)
                     break
 
-                post_respfiles = resp.get('post_respfiles')
-                if post_respfiles is None:
-                    post_respfiles = [None for _ in posts]
-
-                res, oldest_date = _backup(posts, post_respfiles)
+                res, oldest_date = _backup(posts)
                 if not res:
                     break
 
@@ -1410,14 +1451,12 @@ class TumblrPost:
         self,
         post: JSONDict,
         backup_account: str,
-        respfile: str,
         prev_archive: Optional[str],
         pa_options: Optional[JSONDict],
         record_media: Callable[[int, Set[str]], None],
     ) -> None:
         self.post = post
         self.backup_account = backup_account
-        self.respfile = respfile
         self.prev_archive = prev_archive
         self.pa_options = pa_options
         self.record_media = record_media
@@ -1926,9 +1965,6 @@ class TumblrPost:
         return True
 
     def get_json_content(self):
-        if self.respfile is not None:
-            with open(self.respfile, encoding=FILE_ENCODING) as f:
-                return f.read()
         return json.dumps(self.post, sort_keys=True, indent=4, separators=(',', ': '))
 
     @staticmethod
