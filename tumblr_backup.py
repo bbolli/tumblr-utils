@@ -885,15 +885,12 @@ class TumblrBackup:
         return f
 
     @staticmethod
-    def get_post_timestamps(posts, reason):
-        BeautifulSoup = load_bs4(reason)
-        for post in posts:
-            with open(post, encoding=FILE_ENCODING) as pf:
-                soup = BeautifulSoup(pf, 'lxml')
-            postdate = soup.find('time')['datetime']  # pytype: disable=unsupported-operands
-            del soup
-            # datetime.fromisoformat does not understand 'Z' suffix
-            yield int(datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ').timestamp())
+    def get_post_timestamp(post, BeautifulSoup):
+        with open(post, encoding=FILE_ENCODING) as pf:
+            soup = BeautifulSoup(pf, 'lxml')
+        postdate = soup.find('time')['datetime']  # pytype: disable=unsupported-operands
+        # datetime.fromisoformat does not understand 'Z' suffix
+        return int(datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ').timestamp())
 
     @classmethod
     def process_existing_backup(cls, account, prev_archive):
@@ -970,8 +967,14 @@ class TumblrBackup:
             elif not post_glob:
                 raise RuntimeError('{}: Cannot continue empty backup'.format(account))
             else:
-                logger.warn('Found incomplete backup. Finding oldest post (may take a while)\n', account=True)
-                oldest_tstamp = min(cls.get_post_timestamps(post_glob, 'continue incomplete backup'))
+                logger.warn('Found incomplete backup.\n', account=True)
+                BeautifulSoup = load_bs4('continue incomplete backup')
+                if options.likes:
+                    logger.warn('Finding oldest liked post (may take a while)\n', account=True)
+                    oldest_tstamp = min(cls.get_post_timestamp(post, BeautifulSoup) for post in post_glob)
+                else:
+                    post_min = min(post_glob, key=lambda f: int(splitext(split(f)[1])[0]))
+                    oldest_tstamp = cls.get_post_timestamp(post_min, BeautifulSoup)
                 logger.info(
                     'Backing up posts before timestamp={} ({})\n'.format(oldest_tstamp, time.ctime(oldest_tstamp)),
                     account=True,
@@ -1035,7 +1038,8 @@ class TumblrBackup:
             if options.likes:
                 # Read every post to find the newest timestamp already saved
                 logger.warn('Finding newest liked post (may take a while)\n', account=True)
-                ident_max = max(self.get_post_timestamps(post_glob, 'backup likes incrementally'))
+                BeautifulSoup = load_bs4('backup likes incrementally')
+                ident_max = max(self.get_post_timestamp(post, BeautifulSoup) for post in post_glob)
                 logger.info('Backing up posts after timestamp={} ({})\n'.format(ident_max, time.ctime(ident_max)),
                             account=True)
             else:
