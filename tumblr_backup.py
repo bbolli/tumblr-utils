@@ -161,6 +161,8 @@ main_thread_lock = threading.RLock()
 multicond = MultiCondition(main_thread_lock)
 disable_note_scraper: Set[str] = set()
 disablens_lock = threading.Lock()
+downloading_media: Set[str] = set()
+downloading_media_cond = threading.Condition()
 
 
 def load_bs4(reason):
@@ -1585,7 +1587,22 @@ class TumblrPost:
             return parts
 
         path_parts = get_path(self.media_dir, options.image_names, options.hostdirs)
+        media_path = path_to(*path_parts)
 
+        # prevent racing of existence check and download
+        with downloading_media_cond:
+            while media_path in downloading_media:
+                downloading_media_cond.wait()
+            downloading_media.add(media_path)
+
+        try:
+            return self._download_media_inner(url, get_path, path_parts, media_path)
+        finally:
+            with downloading_media_cond:
+                downloading_media.remove(media_path)
+                downloading_media_cond.notify_all()
+
+    def _download_media_inner(self, url, get_path, path_parts, media_path):
         if self.prev_archive is None:
             cpy_res = False
         else:
@@ -1595,7 +1612,7 @@ class TumblrPost:
                 self.pa_options['image_names'], self.pa_options['hostdirs'],
             )
             cpy_res = maybe_copy_media(self.prev_archive, path_parts, pa_path_parts)
-        file_exists = os.path.exists(path_to(*path_parts))
+        file_exists = os.path.exists(media_path)
         if not (cpy_res or file_exists):
             if options.no_get:
                 return None
@@ -1608,12 +1625,12 @@ class TumblrPost:
                 return None
         if file_exists:
             try:
-                st = os.stat(path_to(*path_parts))
+                st = os.stat(media_path)
             except FileNotFoundError:
                 pass  # skip
             else:
                 if st.st_mtime > self.post['timestamp']:
-                    touch(path_to(*path_parts), self.post['timestamp'])
+                    touch(media_path, self.post['timestamp'])
 
         return path_parts[-1]
 
