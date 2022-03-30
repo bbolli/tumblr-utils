@@ -890,11 +890,16 @@ class TumblrBackup:
                     continue
                 if options.only_reblog and not post_is_reblog:
                     continue
+                if options.filter:
+                    try:
+                        matches = options.filter.input(p).first()
+                    except StopIteration:
+                        matches = False
+                    if not matches:
+                        self.filter_skipped += 1
+                        continue
                 if os.path.exists(path_to(*post.get_path())) and options.no_post_clobber:
                     continue  # Post exists and no-clobber enabled
-                if options.filter and not options.filter.input(p).first():
-                    self.filter_skipped += 1
-                    continue
 
                 while True:
                     try:
