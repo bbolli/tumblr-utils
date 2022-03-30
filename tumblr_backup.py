@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from glob import glob
 from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
@@ -545,24 +545,6 @@ def maybe_copy_media(prev_archive, path_parts):
             shutil.copystat(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
 
         return True  # Either we copied it or we didn't need to
-
-
-def naturaldelta(delta):
-    """Format a duration of at least one day approximately."""
-    days = delta.days
-    years, days = divmod(days, 365)
-    months = int(days // 30.436875)
-
-    def pl(s, n):
-        return s if n == 1 else '{}s'.format(s)
-
-    mstr = '{} {}'.format(months, pl('month', months)) if months else None  # N months
-
-    if years:
-        msg = '{} {}'.format(years, pl('year', years))  # N years
-        return '{}, {}'.format(msg, mstr) if mstr else msg
-
-    return mstr if mstr else '{} {}'.format(days, pl('day', days))  # N days
 
 
 class Index:
@@ -1308,11 +1290,6 @@ class TumblrPost:
                 pass  # skip
             else:
                 if st.st_mtime > self.post['timestamp']:
-                    if st.st_mtime > self.post['timestamp'] + timedelta(days=1).total_seconds():
-                        logger.info('Rolling back media timestamp by {}\n'.format(
-                            naturaldelta(datetime.fromtimestamp(st.st_mtime) -
-                                         datetime.fromtimestamp(self.post['timestamp']))
-                        ))
                     touch(path_to(*path_parts), self.post['timestamp'])
 
         return filename
