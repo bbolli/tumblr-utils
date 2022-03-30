@@ -866,14 +866,18 @@ class TumblrBackup:
                     tags = options.request[post.typ]
                     if not (TAG_ANY in tags or tags & post.tags_lower):
                         continue
-                if options.no_reblog:
-                    if 'reblogged_from_name' in p or 'reblogged_root_name' in p:
-                        if 'trail' in p and not p['trail']:
-                            continue
-                        if 'trail' in p and 'is_current_item' not in p['trail'][-1]:
-                            continue
-                    elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
-                        continue
+                post_is_reblog = False
+                if 'reblogged_from_name' in p or 'reblogged_root_name' in p:
+                    if 'trail' in p and not p['trail']:
+                        post_is_reblog = True
+                    elif 'trail' in p and 'is_current_item' not in p['trail'][-1]:
+                        post_is_reblog = True
+                elif 'trail' in p and p['trail'] and 'is_current_item' not in p['trail'][-1]:
+                    post_is_reblog = True
+                if options.no_reblog and post_is_reblog:
+                    continue
+                if options.only_reblog and not post_is_reblog:
+                    continue
                 if os.path.exists(path_to(*post.get_path())) and options.no_post_clobber:
                     continue  # Post exists and no-clobber enabled
                 if options.filter and not options.filter.input(p).first():
@@ -1585,6 +1589,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(usage='%(prog)s [options] blog-name ...',
                                      description='Makes a local backup of Tumblr blogs.')
+    reblog_group = parser.add_mutually_exclusive_group()
     parser.add_argument('-O', '--outdir', help='set the output directory (default: blog-name)')
     parser.add_argument('-D', '--dirs', action='store_true', help='save each post in its own folder')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress progress messages')
@@ -1624,7 +1629,8 @@ if __name__ == '__main__':
                         help='save only posts of type TYPE (comma-separated values from {})'
                              .format(', '.join(POST_TYPES)))
     parser.add_argument('-F', '--filter', help='save posts matching a jq filter (needs jq module)')
-    parser.add_argument('--no-reblog', action='store_true', help="don't save reblogged posts")
+    reblog_group.add_argument('--no-reblog', action='store_true', help="don't save reblogged posts")
+    reblog_group.add_argument('--only-reblog', action='store_true', help='save only reblogged posts')
     parser.add_argument('-I', '--image-names', choices=('o', 'i', 'bi'), default='o', metavar='FMT',
                         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)")
     parser.add_argument('-e', '--exif', action=CSVCallback, default=set(), metavar='KW',
