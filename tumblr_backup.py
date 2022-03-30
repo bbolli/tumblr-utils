@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # standard Python library imports
+import calendar
 import hashlib
 import imghdr
 import itertools
@@ -237,24 +238,31 @@ def get_api_url(account):
     )
 
 
-def set_period():
+def parse_period_date(period):
     """Prepare the period start and end timestamps"""
+    timefn: Callable[[Any], float] = time.mktime
+    # UTC marker
+    if period[-1] == 'Z':
+        period = period[:-1]
+        timefn = calendar.timegm
+
     i = 0
-    tm = [int(options.period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
-    if len(options.period) >= 6:
+    tm = [int(period[:4]), 1, 1, 0, 0, 0, 0, 0, -1]
+    if len(period) >= 6:
         i = 1
-        tm[1] = int(options.period[4:6])
-    if len(options.period) == 8:
+        tm[1] = int(period[4:6])
+    if len(period) == 8:
         i = 2
-        tm[2] = int(options.period[6:8])
+        tm[2] = int(period[6:8])
 
     def mktime(tml):
         tmt: Any = tuple(tml)
-        return time.mktime(tmt)
+        return timefn(tmt)
 
-    options.p_start = int(mktime(tm))
+    p_start = int(mktime(tm))
     tm[i] += 1
-    options.p_stop = int(mktime(tm))
+    p_stop = int(mktime(tm))
+    return [p_start, p_stop]
 
 
 class ApiParser:
@@ -1615,7 +1623,8 @@ if __name__ == '__main__':
                              ' (useful for cron jobs)')
     parser.add_argument('-n', '--count', type=int, help='save only COUNT posts')
     parser.add_argument('-s', '--skip', type=int, default=0, help='skip the first SKIP posts')
-    parser.add_argument('-p', '--period', help="limit the backup to PERIOD ('y', 'm', 'd' or YYYY[MM[DD]])")
+    parser.add_argument('-p', '--period',
+                        help="limit the backup to PERIOD ('y', 'm', 'd', YYYY[MM[DD]][Z], or START,END)")
     parser.add_argument('-N', '--posts-per-page', type=int, default=50, metavar='COUNT',
                         help='set the number of posts per monthly page, 0 for unlimited')
     parser.add_argument('-Q', '--request', action=RequestCallback,
@@ -1652,12 +1661,19 @@ if __name__ == '__main__':
     if options.period:
         try:
             pformat = {'y': '%Y', 'm': '%Y%m', 'd': '%Y%m%d'}[options.period]
-            options.period = time.strftime(pformat)
         except KeyError:
-            options.period = options.period.replace('-', '')
-            if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
-                parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
-        set_period()
+            periods = options.period.replace('-', '').split(',')
+            if not all(re.match(r'\d{4}(\d\d)?(\d\d)?Z?$', p) for p in periods):
+                parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]][Z]")
+            if not (1 <= len(periods) < 3):
+                parser.error('Period must have either one year/month/day or a start and end')
+            prange = parse_period_date(periods.pop(0))
+            if periods:
+                prange[1] = parse_period_date(periods.pop(0))[0]
+        else:
+            period = time.strftime(pformat)
+            prange = parse_period_date(period)
+        options.p_start, options.p_stop = prange
 
     wget_retrieve = WgetRetrieveWrapper(options, logger.log)
     setup_wget(not options.no_ssl_verify, options.user_agent)
