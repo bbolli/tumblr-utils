@@ -32,7 +32,8 @@ setup_urllib3_ssl()
 
 HTTP_TIMEOUT = Timeout(90)
 # Always retry on 503 or 504, but never on connect, which is handled specially
-HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
+# Also retry on 500 since Tumblr servers have temporary failures
+HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((500, 503, 504)))
 HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))
 HTTP_CHUNK_SIZE = 1024 * 1024
 
