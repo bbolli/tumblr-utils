@@ -18,13 +18,13 @@ from util import (URLLIB3_FROM_PIP, LogLevel, fdatasync, fsync, get_supported_en
 if URLLIB3_FROM_PIP:
     from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from pip._vendor.urllib3 import Retry as Retry
-    from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
+    from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
     from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
     from pip._vendor.urllib3.util import make_headers
 else:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from urllib3 import Retry as Retry
-    from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
+    from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
     from urllib3.exceptions import HTTPError as HTTPError
     from urllib3.util import make_headers
 
@@ -184,7 +184,7 @@ class WGPoolManager(PoolManager):
         return super(WGPoolManager, self)._new_pool(scheme, host, port, request_context)
 
 
-poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT, retries=HTTP_RETRY)
+poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT)
 
 
 class Logger:
@@ -466,9 +466,8 @@ def touch(fl, mtime, dir_fd=None):
 
 class WGError(Exception):
     def __init__(self, logger, url, msg, cause=None):
-        super(WGError, self).__init__('Error retrieving resource: {}{}'.format(
-            msg, '' if cause is None else '\nCaused by: {}'.format(cause),
-        ))
+        causestr = '' if cause is None else '\nCaused by {!r}'.format(cause)
+        super(WGError, self).__init__('Error retrieving resource: {}{}'.format(msg, causestr))
         self.logger = logger
         self.url = url
 
@@ -597,7 +596,8 @@ def _retrieve_loop(
         except HTTPError as e:
             if isinstance(e, ConnectTimeoutError):
                 # Host is unreachable (incl ETIMEDOUT, EHOSTUNREACH, and EAI_NONAME) - condemn it and don't retry
-                hostname = normalized_host_from_url(url)
+                conn = e.pool if isinstance(e, PoolError) else e.args[0]
+                hostname = normalized_host(None, conn.host, conn.port)
                 unreachable_hosts.add(hostname)
                 msg = 'Error connecting to host {}. From now on it will be ignored.'.format(hostname)
                 raise WGUnreachableHostError(logger, url, msg, e)
@@ -711,7 +711,7 @@ def urlopen(url, method='GET', headers=None, **kwargs):
 
     while True:
         try:
-            return poolman.request(method, url, headers=req_headers, **kwargs)
+            return poolman.request(method, url, headers=req_headers, retries=HTTP_RETRY, **kwargs)
         except HTTPError:
             if is_dns_working(timeout=5):
                 raise
