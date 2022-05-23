@@ -2061,7 +2061,6 @@ if __name__ == '__main__':
     options = parser.parse_args()
     blogs = options.blogs or DEFAULT_BLOGS
     del options.blogs
-    orig_options = vars(options).copy()
 
     if not blogs:
         parser.error('Missing blog-name')
@@ -2114,6 +2113,9 @@ if __name__ == '__main__':
     if options.copy_notes is None:
         # Default to True if we may regenerate posts
         options.copy_notes = options.reuse_json and not (options.no_post_clobber or options.mtime_fix)
+
+    # NB: this is done after setting implied options
+    orig_options = vars(options).copy()
 
     check_optional_modules()
 
