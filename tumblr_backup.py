@@ -530,24 +530,18 @@ def maybe_copy_media(prev_archive, path_parts):
         return False  # Source does not exist
 
     with srcf:
-        src_st = os.stat(srcf.fileno())
-
-        dst_st: Optional[os.stat_result]
         try:
-            dst_st = os.stat(dstpath)
+            os.stat(dstpath)
         except FileNotFoundError:
-            dst_st = None  # Destination does not exist yet
+            pass  # Destination does not exist yet
+        else:
+            return True  # Don't overwrite
 
-        # Do not overwrite if destination is no newer and has the same size
-        if (dst_st is None
-            or dst_st.st_mtime > src_st.st_mtime
-            or dst_st.st_size != src_st.st_size
-        ):
-            # dup srcf because open() takes ownership and closes it
-            shutil.copyfile(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
-            shutil.copystat(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
+        # dup srcf because open() takes ownership and closes it
+        shutil.copyfile(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
+        shutil.copystat(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
 
-        return True  # Either we copied it or we didn't need to
+        return True  # Copied
 
 
 class Index:
