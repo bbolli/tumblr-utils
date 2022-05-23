@@ -1513,6 +1513,8 @@ class ThreadPool:
             logger.status('Stopping threads {}{}\r'.format(' ' * i, '.' * (len(self.threads) - i)))
             t.join()
 
+        logger.info('Backup canceled.\n')
+
         with self.queue.mutex:
             self.queue.queue.clear()
             self.queue.all_tasks_done.notify_all()
