@@ -355,12 +355,15 @@ class ApiParser:
             sleep_dur *= 2
         if status != 200:
             # Detect dashboard-only blogs by the error codes
-            if self.dashboard_only_blog is None and status == 404:
+            if self.dashboard_only_blog is None and status == 404 and not options.likes:
                 errors = doc.get('errors', ())
                 if len(errors) == 1 and errors[0].get('code') == 4012:
                     self.dashboard_only_blog = True
                     logger.info('Found dashboard-only blog, trying svc API\n', account=True)
                     return self.apiparse(count, start)  # Recurse once
+            if status == 403 and options.likes:
+                logger.error('HTTP 403: Most likely {} does not have public likes.\n'.format(self.account))
+                return None
             logger.error('API response has non-200 status:\n{}\n'.format(doc))
             if status == 401 and self.dashboard_only_blog:
                 logger.error("This is a dashboard-only blog, so you probably don't have the right cookies.{}\n".format(
