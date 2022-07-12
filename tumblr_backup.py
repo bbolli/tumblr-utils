@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import, division, print_function, with_statement
-
 # standard Python library imports
-import errno
 import hashlib
 import imghdr
-import io
 import itertools
+import json
 import locale
 import multiprocessing
 import os
+import queue
 import re
 import shutil
 import sys
@@ -23,38 +21,15 @@ from glob import glob
 from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
+from typing import TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type
+from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
-from util import (ConnectionFile, LockedQueue, LogLevel, PY3, is_dns_working, make_requests_session, no_internet,
-                  nullcontext, to_bytes, to_unicode)
+from util import (ConnectionFile, LockedQueue, LogLevel, is_dns_working, make_requests_session, no_internet,
+                  to_bytes)
 from wget import HTTPError, HTTP_RETRY, HTTP_TIMEOUT, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
-
-if TYPE_CHECKING:
-    from queue import Queue
-    from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Text, Tuple, Type
-
-    JSONDict = Dict[str, Any]
-
-try:
-    import json
-except ImportError:
-    import simplejson as json  # type: ignore[no-redef]
-
-try:
-    import queue
-except ImportError:
-    import Queue as queue  # type: ignore[no-redef]
-
-try:
-    from urllib.parse import quote, urlencode, urlparse
-except ImportError:
-    from urllib import quote, urlencode  # type: ignore[attr-defined,no-redef]
-    from urlparse import urlparse  # type: ignore[no-redef]
+JSONDict = Dict[str, Any]
 
 try:
     from settings import DEFAULT_BLOGS
@@ -85,14 +60,6 @@ try:
 except ImportError:
     jq = None
 
-try:
-    from os import DirEntry, scandir  # type: ignore[attr-defined]
-except ImportError:
-    try:
-        from scandir import DirEntry, scandir  # type: ignore[no-redef]
-    except ImportError:
-        scandir = None  # type: ignore[assignment,no-redef]
-
 # NB: setup_urllib3_ssl has already been called by wget
 
 try:
@@ -109,19 +76,12 @@ except ImportError:
         except ImportError:
             raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
 
-# These builtins have new names in Python 3
-try:
-    long, xrange  # type: ignore[has-type]
-except NameError:
-    long = int
-    xrange = range
-
 # Format of displayed tags
-TAG_FMT = u'#{}'
+TAG_FMT = '#{}'
 
 # Format of tag link URLs; set to None to suppress the links.
 # Named placeholders that will be replaced: domain, tag
-TAGLINK_FMT = u'https://{domain}/tagged/{tag}'
+TAGLINK_FMT = 'https://{domain}/tagged/{tag}'
 
 # exit codes
 EXIT_SUCCESS    = 0
@@ -178,18 +138,18 @@ except locale.Error:
 FILE_ENCODING = 'utf-8'
 TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
-wget_retrieve = None  # type: Optional[WgetRetrieveWrapper]
-disable_note_scraper = set()  # type: Set[str]
+wget_retrieve: Optional[WgetRetrieveWrapper] = None
+disable_note_scraper: Set[str] = set()
 disablens_lock = threading.Lock()
 
 
-class Logger(object):
+class Logger:
     def __init__(self):
         self.lock = threading.Lock()
-        self.backup_account = None  # type: Optional[str]
-        self.status_msg = None  # type: Optional[str]
+        self.backup_account: Optional[str] = None
+        self.status_msg: Optional[str] = None
 
-    def log(self, level, msg, account=False):
+    def log(self, level: LogLevel, msg: str, account: bool = False) -> None:
         if options.quiet and level < LogLevel.WARN:
             return
         with self.lock:
@@ -238,9 +198,8 @@ def mkdir(dir, recursive=False):
                 os.makedirs(dir)
             else:
                 os.mkdir(dir)
-        except EnvironmentError as e:
-            if e.errno != errno.EEXIST:
-                raise
+        except FileExistsError:
+            pass  # ignored
 
 
 def path_to(*parts):
@@ -255,15 +214,14 @@ def open_file(open_fn, parts):
 
 def open_text(*parts):
     return open_file(
-        lambda f: io.open(f, 'w', encoding=FILE_ENCODING, errors='xmlcharrefreplace'), parts
+        lambda f: open(f, 'w', encoding=FILE_ENCODING, errors='xmlcharrefreplace'), parts
     )
 
 
 def strftime(fmt, t=None):
     if t is None:
         t = time.localtime()
-    s = time.strftime(fmt, t)
-    return to_unicode(s, encoding=TIME_ENCODING)
+    return time.strftime(fmt, t)
 
 
 def get_api_url(account):
@@ -291,7 +249,7 @@ def set_period():
         tm[2] = int(options.period[6:8])
 
     def mktime(tml):
-        tmt = tuple(tml)  # type: Any
+        tmt: Any = tuple(tml)
         return time.mktime(tmt)
 
     options.p_start = int(mktime(tm))
@@ -299,14 +257,14 @@ def set_period():
     options.p_stop = int(mktime(tm))
 
 
-class ApiParser(object):
-    session = None  # type: Optional[requests.Session]
+class ApiParser:
+    session: Optional[requests.Session] = None
 
     def __init__(self, base, account):
         self.base = base
         self.account = account
-        self.prev_resps = None  # type: Optional[Tuple[str, ...]]
-        self.dashboard_only_blog = None  # type: Optional[bool]
+        self.prev_resps: Optional[Tuple[str, ...]] = None
+        self.dashboard_only_blog: Optional[bool] = None
 
     @classmethod
     def setup(cls):
@@ -316,10 +274,8 @@ class ApiParser(object):
         )
 
     def read_archive(self, prev_archive):
-        assert scandir is not None
-
         def read_resp(path):
-            with io.open(path, encoding=FILE_ENCODING) as jf:
+            with open(path, encoding=FILE_ENCODING) as jf:
                 return json.load(jf)
 
         if options.likes:
@@ -327,19 +283,18 @@ class ApiParser(object):
 
         self.prev_resps = tuple(
             e.path for e in sorted(
-                (e for e in scandir(join(prev_archive, 'json')) if (e.name.endswith('.json') and e.is_file())),
-                key=lambda e: read_resp(e)['liked_timestamp'] if options.likes else long(e.name[:-5]),
+                (e for e in os.scandir(join(prev_archive, 'json')) if (e.name.endswith('.json') and e.is_file())),
+                key=lambda e: read_resp(e)['liked_timestamp'] if options.likes else int(e.name[:-5]),
                 reverse=True,
             )
         )
 
-    def apiparse(self, count, start=0, before=None):
-        # type: (...) -> Optional[JSONDict]
+    def apiparse(self, count, start=0, before=None) -> Optional[JSONDict]:
         assert self.session is not None
         if self.prev_resps is not None:
             # Reconstruct the API response
             def read_post(prf):
-                with io.open(prf, encoding=FILE_ENCODING) as f:
+                with open(prf, encoding=FILE_ENCODING) as f:
                     try:
                         post = json.load(f)
                     except ValueError as e:
@@ -347,7 +302,8 @@ class ApiParser(object):
                         logger.error('{}: {}\n{!r}\n'.format(e.__class__.__name__, e, f.read()))
                         return None
                 return prf, post
-            posts = map(read_post, self.prev_resps)  # type: Iterable[Tuple[DirEntry[str], JSONDict]]
+            posts: Iterable[Tuple[os.DirEntry[str], JSONDict]]
+            posts = map(read_post, self.prev_resps)
             if before is not None:
                 posts = itertools.dropwhile(
                     lambda pp: pp[1]['liked_timestamp' if options.likes else 'timestamp'] >= before,
@@ -362,10 +318,10 @@ class ApiParser(object):
             base = 'https://www.tumblr.com/svc/indash_blog'
             params = {'tumblelog_name_or_id': self.account, 'post_id': '', 'limit': count,
                       'should_bypass_safemode': 'true', 'should_bypass_tagfiltering': 'true'}
-            headers = {
+            headers: Optional[Dict[str, str]] = {
                 'Referer': 'https://www.tumblr.com/dashboard/blog/' + self.account,
                 'X-Requested-With': 'XMLHttpRequest',
-            }  # type: Optional[Dict[str, str]]
+            }
         else:
             base = self.base
             params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
@@ -435,7 +391,7 @@ class ApiParser(object):
                             e.__class__.__name__, e, resp.status_code, resp.reason, ctype, resp.content.decode('utf-8'),
                         ))
                         return None
-            except (EnvironmentError, HTTPError) as e:
+            except (OSError, HTTPError) as e:
                 if isinstance(e, HTTPError) and not is_dns_working(timeout=5):
                     no_internet.signal()
                     continue
@@ -448,8 +404,8 @@ def add_exif(image_name, tags):
     try:
         metadata = pyexiv2.ImageMetadata(image_name)
         metadata.read()
-    except EnvironmentError:
-        logger.error('Error reading metadata for image {}\n'.format(image_name))
+    except OSError as e:
+        logger.error('Error reading metadata for image {!r}: {!r}\n'.format(image_name, e))
         return
     KW_KEY = 'Iptc.Application2.Keywords'
     if '-' in options.exif:  # remove all tags
@@ -462,13 +418,13 @@ def add_exif(image_name, tags):
         metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, tags)
     try:
         metadata.write()
-    except EnvironmentError:
-        logger.error('Writing metadata failed for tags: {} in: {}\n'.format(tags, image_name))
+    except OSError as e:
+        logger.error('Writing metadata failed for tags {} in {!r}: {!r}\n'.format(tags, image_name, e))
 
 
 def save_style():
     with open_text(backup_css) as css:
-        css.write(u'''\
+        css.write('''\
 @import url("override.css");
 
 body { width: 720px; margin: 0 auto; }
@@ -553,36 +509,18 @@ def maybe_copy_media(prev_archive, path_parts):
     srcpath = join(prev_archive, *path_parts)
     dstpath = open_file(lambda f: f, path_parts)
 
-    if PY3:
-        try:
-            srcf = io.open(srcpath, 'rb')
-        except EnvironmentError as e:
-            if getattr(e, 'errno', None) not in (errno.ENOENT, errno.EISDIR):
-                raise
-            return False  # Source does not exist (Python 3)
-    else:
-        srcf = nullcontext()
+    try:
+        srcf = open(srcpath, 'rb')
+    except (FileNotFoundError, IsADirectoryError):
+        return False  # Source does not exist
 
     with srcf:
-        if PY3:
-            src = srcf.fileno()  # pytype: disable=attribute-error
-            def dup(fd): return os.dup(fd)
-        else:
-            src = srcpath
-            def dup(fd): return fd
+        src_st = os.stat(srcf.fileno())
 
+        dst_st: Optional[os.stat_result]
         try:
-            src_st = os.stat(src)
-        except EnvironmentError as e:
-            if getattr(e, 'errno', None) not in (errno.ENOENT, errno.EISDIR):
-                raise
-            return False  # Source does not exist (Python 2)
-
-        try:
-            dst_st = os.stat(dstpath)  # type: Optional[os.stat_result]
-        except EnvironmentError as e:
-            if getattr(e, 'errno', None) != errno.ENOENT:
-                raise
+            dst_st = os.stat(dstpath)
+        except FileNotFoundError:
             dst_st = None  # Destination does not exist yet
 
         # Do not overwrite if destination is no newer and has the same size
@@ -590,9 +528,9 @@ def maybe_copy_media(prev_archive, path_parts):
             or dst_st.st_mtime > src_st.st_mtime
             or dst_st.st_size != src_st.st_size
         ):
-            # dup src because open() takes ownership and closes it
-            shutil.copyfile(dup(src), dstpath)
-            shutil.copystat(src, dstpath)  # type: ignore[arg-type]
+            # dup srcf because open() takes ownership and closes it
+            shutil.copyfile(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
+            shutil.copystat(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
 
         return True  # Either we copied it or we didn't need to
 
@@ -615,11 +553,13 @@ def naturaldelta(delta):
     return mstr if mstr else '{} {}'.format(days, pl('day', days))  # N days
 
 
-class Index(object):
+class Index:
+    index: DefaultDict[int, DefaultDict[int, List['LocalPost']]]
+
     def __init__(self, blog, body_class='index'):
         self.blog = blog
         self.body_class = body_class
-        self.index = defaultdict(lambda: defaultdict(list))  # type: DefaultDict[int, DefaultDict[int, List[LocalPost]]]
+        self.index = defaultdict(lambda: defaultdict(list))
 
     def add_post(self, post):
         self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
@@ -638,19 +578,19 @@ class Index(object):
                 ))
             for year in sorted(self.index.keys(), reverse=options.reverse_index):
                 self.save_year(idx, archives, index_dir, year)
-            idx.write(u'<footer><p>Generated on %s by <a href=https://github.com/'
+            idx.write('<footer><p>Generated on %s by <a href=https://github.com/'
                 'bbolli/tumblr-utils>tumblr-utils</a>.</p></footer>\n' % strftime('%x %X')
             )
 
     def save_year(self, idx, archives, index_dir, year):
-        idx.write(u'<h3>%s</h3>\n<ul>\n' % year)
+        idx.write('<h3>%s</h3>\n<ul>\n' % year)
         for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
             tm = time.localtime(time.mktime((year, month, 3, 0, 0, 0, 0, 0, -1)))
             month_name = self.save_month(archives, index_dir, year, month, tm)
-            idx.write(u'    <li><a href={} title="{} post(s)">{}</a></li>\n'.format(
+            idx.write('    <li><a href={} title="{} post(s)">{}</a></li>\n'.format(
                 urlpathjoin(archive_dir, month_name), len(self.index[year][month]), strftime('%B', tm)
             ))
-        idx.write(u'</ul>\n\n')
+        idx.write('</ul>\n\n')
 
     def save_month(self, archives, index_dir, year, month, tm):
         posts = sorted(self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month)
@@ -670,8 +610,8 @@ class Index(object):
 
         FILE_FMT = '%d-%02d-p%s%s'
         pages_month = pages_per_month(year, month)
-        first_file = None  # type: Optional[str]
-        for page, start in enumerate(xrange(0, posts_month, posts_page), start=1):
+        first_file: Optional[str] = None
+        for page, start in enumerate(range(0, posts_month, posts_page), start=1):
 
             archive = [self.blog.header(strftime('%B %Y', tm), body_class='archive')]
             archive.extend(p.get_post(self.body_class == 'tag-archive') for p in posts[start:start + posts_page])
@@ -712,7 +652,7 @@ class TagIndex(Index):
         self.name = name
 
 
-class Indices(object):
+class Indices:
     def __init__(self, blog):
         self.blog = blog
         self.main_index = Index(blog)
@@ -742,24 +682,24 @@ class Indices(object):
         for tag, index in sorted(self.tags.items(), key=lambda kv: kv[1].name):
             digest = hashlib.md5(to_bytes(tag)).hexdigest()
             index.save_index(tag_index_dir + os.sep + digest,
-                u"Tag ‛%s’" % index.name
+                "Tag ‛%s’" % index.name
             )
-            tag_index.append(u'    <li><a href={}>{}</a></li>'.format(
+            tag_index.append('    <li><a href={}>{}</a></li>'.format(
                 urlpathjoin(digest, dir_index), escape(index.name)
             ))
         tag_index.extend(['</ul>', ''])
         with open_text(tag_index_dir, dir_index) as f:
-            f.write(u'\n'.join(tag_index))
+            f.write('\n'.join(tag_index))
 
 
-class TumblrBackup(object):
+class TumblrBackup:
     def __init__(self):
         self.failed_blogs = []
         self.total_count = 0
         self.post_count = 0
         self.filter_skipped = 0
-        self.title = None  # type: Optional[Text]
-        self.subtitle = None  # type: Optional[str]
+        self.title: Optional[str] = None
+        self.subtitle: Optional[str] = None
 
     def exit_code(self):
         if self.failed_blogs:
@@ -775,7 +715,7 @@ class TumblrBackup(object):
         css_rel = urlpathjoin(root_rel, custom_css if have_custom_css else backup_css)
         if body_class:
             body_class = ' class=' + body_class
-        h = u'''<!DOCTYPE html>
+        h = '''<!DOCTYPE html>
 
 <meta charset=%s>
 <title>%s</title>
@@ -790,9 +730,9 @@ class TumblrBackup(object):
             if f:
                 h += '<img src={} alt=Avatar>\n'.format(urlpathjoin(root_rel, theme_dir, split(f[0])[1]))
         if title:
-            h += u'<h1>%s</h1>\n' % title
+            h += '<h1>%s</h1>\n' % title
         if subtitle:
-            h += u'<p class=subtitle>%s</p>\n' % subtitle
+            h += '<p class=subtitle>%s</p>\n' % subtitle
         h += '</header>\n'
         return h
 
@@ -810,12 +750,12 @@ class TumblrBackup(object):
     @staticmethod
     def get_post_timestamps(posts):
         for post in posts:
-            with io.open(post, encoding=FILE_ENCODING) as pf:
+            with open(post, encoding=FILE_ENCODING) as pf:
                 soup = BeautifulSoup(pf, 'lxml')
             postdate = soup.find('time')['datetime']
             del soup
-            # No datetime.fromisoformat or datetime.timestamp on Python 2
-            yield (datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ') - datetime(1970, 1, 1)) // timedelta(seconds=1)
+            # datetime.fromisoformat does not understand 'Z' suffix
+            yield int(datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ').timestamp())
 
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -828,7 +768,7 @@ class TumblrBackup(object):
             save_folder = root_folder
             post_ext = '.txt'
             post_dir = os.curdir
-            post_class = BlosxomPost  # type: Type[TumblrPost]
+            post_class: Type[TumblrPost] = BlosxomPost
         else:
             save_folder = join(root_folder, options.outdir or account)
             media_folder = path_to(media_dir)
@@ -858,7 +798,7 @@ class TumblrBackup(object):
                 logger.warn('Finding newest liked post (may take a while)\n', account=True)
                 ident_max = max(self.get_post_timestamps(post_glob))
             else:
-                ident_max = max(long(splitext(split(f)[1])[0]) for f in post_glob)
+                ident_max = max(int(splitext(split(f)[1])[0]) for f in post_glob)
             if ident_max is not None:
                 logger.info('Backing up posts after {}\n'.format(ident_max), account=True)
 
@@ -898,7 +838,7 @@ class TumblrBackup(object):
 
         # returns whether any posts from this batch were saved
         def _backup(posts, post_respfiles):
-            def sort_key(x): return x[0]['liked_timestamp'] if options.likes else long(x[0]['id'])
+            def sort_key(x): return x[0]['liked_timestamp'] if options.likes else int(x[0]['id'])
             sorted_posts = sorted(zip(posts, post_respfiles), key=sort_key, reverse=True)
             for p, prf in sorted_posts:
                 no_internet.check()
@@ -906,7 +846,7 @@ class TumblrBackup(object):
                 oldest_date = post.date
                 if ident_max is None:
                     pass  # No limit
-                elif (p['liked_timestamp'] if options.likes else long(post.ident)) <= ident_max:
+                elif (p['liked_timestamp'] if options.likes else int(post.ident)) <= ident_max:
                     logger.info('Stopping backup: Incremental backup complete\n', account=True)
                     return False, oldest_date
                 if options.period:
@@ -1020,11 +960,10 @@ class TumblrBackup(object):
         self.total_count += self.post_count
 
 
-class TumblrPost(object):
+class TumblrPost:
     post_header = ''  # set by TumblrBackup.backup()
 
-    def __init__(self, post, backup_account, respfile, prev_archive):
-        # type: (JSONDict, str, Text, Text) -> None
+    def __init__(self, post: JSONDict, backup_account: str, respfile: str, prev_archive: str) -> None:
         self.content = ''
         self.post = post
         self.backup_account = backup_account
@@ -1035,10 +974,10 @@ class TumblrPost(object):
         self.url = post['post_url']
         self.shorturl = post['short_url']
         self.typ = str(post['type'])
-        self.date = post['liked_timestamp' if options.likes else 'timestamp']  # type: float
+        self.date: float = post['liked_timestamp' if options.likes else 'timestamp']
         self.isodate = datetime.utcfromtimestamp(self.date).isoformat() + 'Z'
         self.tm = time.localtime(self.date)
-        self.title = u''
+        self.title = ''
         self.tags = post['tags']
         self.note_count = post.get('note_count')
         if self.note_count is None:
@@ -1049,7 +988,7 @@ class TumblrPost(object):
         self.reblogged_root = post.get('reblogged_root_url')
         self.source_title = post.get('source_title', '')
         self.source_url = post.get('source_url', '')
-        self.tags_lower = None  # type: Optional[Set[str]]
+        self.tags_lower: Optional[Set[str]] = None
         if options.request:
             self.tags_lower = {t.lower() for t in self.tags}
         self.file_name = join(self.ident, dir_index) if options.dirs else self.ident + post_ext
@@ -1063,13 +1002,13 @@ class TumblrPost(object):
         post = self.post
         content = []
 
-        def append(s, fmt=u'%s'):
+        def append(s, fmt='%s'):
             content.append(fmt % s)
 
         def get_try(elt):
             return post.get(elt, '')
 
-        def append_try(elt, fmt=u'%s'):
+        def append_try(elt, fmt='%s'):
             elt = get_try(elt)
             if elt:
                 if options.save_images:
@@ -1099,22 +1038,22 @@ class TumblrPost(object):
                 src = o['url']
                 if options.save_images:
                     src = self.get_image_url(src, offset if is_photoset else 0)
-                append(escape(src), u'<img alt="" src="%s">')
+                append(escape(src), '<img alt="" src="%s">')
                 if url:
-                    content[-1] = u'<a href="%s">%s</a>' % (escape(url), content[-1])
+                    content[-1] = '<a href="%s">%s</a>' % (escape(url), content[-1])
                 content[-1] = '<p>' + content[-1] + '</p>'
                 if p['caption']:
-                    append(p['caption'], u'<p>%s</p>')
+                    append(p['caption'], '<p>%s</p>')
             append_try('caption')
 
         elif self.typ == 'link':
             url = post['url']
-            self.title = u'<a href="%s">%s</a>' % (escape(url), post['title'] or url)
+            self.title = '<a href="%s">%s</a>' % (escape(url), post['title'] or url)
             append_try('description')
 
         elif self.typ == 'quote':
-            append(post['text'], u'<blockquote><p>%s</p></blockquote>')
-            append_try('source', u'<p>%s</p>')
+            append(post['text'], '<blockquote><p>%s</p></blockquote>')
+            append_try('source', '<p>%s</p>')
 
         elif self.typ == 'video':
             src = ''
@@ -1126,7 +1065,7 @@ class TumblrPost(object):
                 if not src:
                     logger.warn('Unable to download video in post #{}\n'.format(self.ident))
             if src:
-                append(u'<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
+                append('<p><video controls><source src="%s" type=video/mp4>%s<br>\n<a href="%s">%s</a></video></p>' % (
                     src, "Your browser does not support the video element.", src, "Video file"
                 ))
             else:
@@ -1139,8 +1078,8 @@ class TumblrPost(object):
 
         elif self.typ == 'audio':
             def make_player(src_):
-                append(u'<p><audio controls><source src="{src}" type=audio/mpeg>{}<br>\n<a href="{src}">{}'
-                       u'</a></audio></p>'
+                append('<p><audio controls><source src="{src}" type=audio/mpeg>{}<br>\n<a href="{src}">{}'
+                       '</a></audio></p>'
                        .format('Your browser does not support the audio element.', 'Audio file', src=src_))
 
             src = None
@@ -1150,7 +1089,7 @@ class TumblrPost(object):
                     if audio_url.startswith('https://a.tumblr.com/'):
                         src = self.get_media_url(audio_url, '.mp3')
                     elif audio_url.startswith('https://www.tumblr.com/audio_file/'):
-                        audio_url = u'https://a.tumblr.com/{}o1.mp3'.format(urlbasename(urlparse(audio_url).path))
+                        audio_url = 'https://a.tumblr.com/{}o1.mp3'.format(urlbasename(urlparse(audio_url).path))
                         src = self.get_media_url(audio_url, '.mp3')
                 elif post['audio_type'] == 'soundcloud':
                     src = self.get_media_url(audio_url, '.mp3')
@@ -1170,13 +1109,13 @@ class TumblrPost(object):
         elif self.typ == 'chat':
             self.title = get_try('title')
             append(
-                u'<br>\n'.join('%(label)s %(phrase)s' % d for d in post['dialogue']),
-                u'<p>%s</p>'
+                '<br>\n'.join('%(label)s %(phrase)s' % d for d in post['dialogue']),
+                '<p>%s</p>'
             )
 
         else:
-            logger.warn(u"Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
-            append(escape(self.get_json_content()), u'<pre>%s</pre>')
+            logger.warn("Unknown post type '{}' in post #{}\n".format(self.typ, self.ident))
+            append(escape(self.get_json_content()), '<pre>%s</pre>')
 
         self.content = '\n'.join(content)
 
@@ -1188,7 +1127,7 @@ class TumblrPost(object):
 
     def get_youtube_url(self, youtube_url):
         # determine the media file name
-        filetmpl = u'%(id)s_%(uploader_id)s_%(title)s.%(ext)s'
+        filetmpl = '%(id)s_%(uploader_id)s_%(title)s.%(ext)s'
         ydl_options = {
             'outtmpl': join(self.media_folder, filetmpl),
             'quiet': True,
@@ -1255,7 +1194,7 @@ class TumblrPost(object):
         saved_name = self.download_media(image_url, image_filename)
         if saved_name is None:
             return match.group(0)
-        return u'%s%s/%s%s' % (match.group(1), self.media_url,
+        return '%s%s/%s%s' % (match.group(1), self.media_url,
             saved_name, match.group(3)
         )
 
@@ -1270,7 +1209,7 @@ class TumblrPost(object):
             return match.group(0)
         # get rid of autoplay and muted attributes to align with normal video
         # download behaviour
-        return (u'%s%s/%s%s' % (match.group(1), self.media_url,
+        return ('%s%s/%s%s' % (match.group(1), self.media_url,
             saved_name, match.group(3)
         )).replace('autoplay="autoplay"', '').replace('muted="muted"', '')
 
@@ -1287,7 +1226,7 @@ class TumblrPost(object):
             saved_name = self.get_youtube_url(video_url)
         if saved_name is None:
             return match.group(0)
-        return u'%s%s%s' % (match.group(1), saved_name, match.group(3))
+        return '%s%s%s' % (match.group(1), saved_name, match.group(3))
 
     def get_filename(self, url, offset=''):
         """Determine the image file name depending on options.image_names"""
@@ -1340,10 +1279,8 @@ class TumblrPost(object):
         if file_exists:
             try:
                 st = os.stat(path_to(*path_parts))
-            except EnvironmentError as e:
-                if getattr(e, 'errno', None) != errno.ENOENT:
-                    raise
-                # Ignore ENOENT
+            except FileNotFoundError:
+                pass  # skip
             else:
                 if st.st_mtime > self.post['timestamp']:
                     if st.st_mtime > self.post['timestamp'] + timedelta(days=1).total_seconds():
@@ -1357,48 +1294,45 @@ class TumblrPost(object):
 
     def get_post(self):
         """returns this post in HTML"""
-        typ = (u'liked-' if options.likes else u'') + self.typ
-        post = self.post_header + u'<article class=%s id=p-%s>\n' % (typ, self.ident)
-        post += u'<header>\n'
+        typ = ('liked-' if options.likes else '') + self.typ
+        post = self.post_header + '<article class=%s id=p-%s>\n' % (typ, self.ident)
+        post += '<header>\n'
         if options.likes:
-            post += u'<p><a href=\"https://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
-        post += u'<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
-        post += u'<a class=llink href={}>¶</a>\n'.format(urlpathjoin(save_dir, post_dir, self.llink))
-        post += u'<a href=%s>●</a>\n' % self.shorturl
+            post += '<p><a href=\"https://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
+        post += '<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
+        post += '<a class=llink href={}>¶</a>\n'.format(urlpathjoin(save_dir, post_dir, self.llink))
+        post += '<a href=%s>●</a>\n' % self.shorturl
         if self.reblogged_from and self.reblogged_from != self.reblogged_root:
-            post += u'<a href=%s>⬀</a>\n' % self.reblogged_from
+            post += '<a href=%s>⬀</a>\n' % self.reblogged_from
         if self.reblogged_root:
-            post += u'<a href=%s>⬈</a>\n' % self.reblogged_root
+            post += '<a href=%s>⬈</a>\n' % self.reblogged_root
         post += '</header>\n'
         if self.title:
-            post += u'<h2>%s</h2>\n' % self.title
+            post += '<h2>%s</h2>\n' % self.title
         post += self.content
         foot = []
         if self.tags:
-            foot.append(u''.join(self.tag_link(t) for t in self.tags))
+            foot.append(''.join(self.tag_link(t) for t in self.tags))
         if self.source_title and self.source_url:
-            foot.append(u'<a title=Source href=%s>%s</a>' %
+            foot.append('<a title=Source href=%s>%s</a>' %
                 (self.source_url, self.source_title)
             )
 
-        notes_html = u''
+        notes_html = ''
 
         if options.copy_notes:
             # Copy notes from prev_archive
-            with io.open(join(self.prev_archive, post_dir, self.ident + post_ext)) as post_file:
+            with open(join(self.prev_archive, post_dir, self.ident + post_ext)) as post_file:
                 soup = BeautifulSoup(post_file, 'lxml')
             notes = soup.find('ol', class_='notes')
             if notes is not None:
-                notes_html = u''.join([n.prettify() for n in notes.find_all('li')])
+                notes_html = ''.join([n.prettify() for n in notes.find_all('li')])
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
             # Scrape and save notes
             while True:
                 ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
-                if PY3:
-                    ns_msg_queue = multiprocessing.SimpleQueue()  # type: SimpleQueue[Tuple[int, str]]
-                else:
-                    ns_msg_queue = SimpleQueue()
+                ns_msg_queue: SimpleQueue[Tuple[LogLevel, str]] = multiprocessing.SimpleQueue()
                 try:
                     args = (ns_stdout_wr, ns_msg_queue, self.url, self.ident,
                             options.no_ssl_verify, options.user_agent, options.cookiefile, options.notes_limit)
@@ -1433,7 +1367,7 @@ class TumblrPost(object):
 
                 if process.exitcode == 2:  # EXIT_SAFE_MODE
                     # Safe mode is blocking us, disable note scraping for this blog
-                    notes_html = u''
+                    notes_html = ''
                     with disablens_lock:
                         # Check if another thread already set this
                         if self.backup_account not in disable_note_scraper:
@@ -1446,27 +1380,27 @@ class TumblrPost(object):
                     continue
                 break
 
-        notes_str = u'{} note{}'.format(self.note_count, 's'[self.note_count == 1:])
+        notes_str = '{} note{}'.format(self.note_count, 's'[self.note_count == 1:])
         if notes_html.strip():
-            foot.append(u'<details><summary>{}</summary>\n'.format(notes_str))
-            foot.append(u'<ol class="notes">')
+            foot.append('<details><summary>{}</summary>\n'.format(notes_str))
+            foot.append('<ol class="notes">')
             foot.append(notes_html)
-            foot.append(u'</ol></details>')
+            foot.append('</ol></details>')
         else:
             foot.append(notes_str)
 
         if foot:
-            post += u'\n<footer>{}</footer>'.format(u'\n'.join(foot))
-        post += u'\n</article>\n'
+            post += '\n<footer>{}</footer>'.format('\n'.join(foot))
+        post += '\n</article>\n'
         return post
 
     @staticmethod
     def tag_link(tag):
         tag_disp = escape(TAG_FMT.format(tag))
         if not TAGLINK_FMT:
-            return tag_disp + u' '
+            return tag_disp + ' '
         url = TAGLINK_FMT.format(domain=blog_name, tag=quote(to_bytes(tag)))
-        return u'<a href=%s>%s</a>\n' % (url, tag_disp)
+        return '<a href=%s>%s</a>\n' % (url, tag_disp)
 
     def get_path(self):
         return (post_dir, self.ident, dir_index) if options.dirs else (post_dir, self.file_name)
@@ -1482,9 +1416,9 @@ class TumblrPost(object):
 
     def get_json_content(self):
         if self.respfile is not None:
-            with io.open(self.respfile, encoding=FILE_ENCODING) as f:
+            with open(self.respfile, encoding=FILE_ENCODING) as f:
                 return f.read()
-        return to_unicode(json.dumps(self.post, sort_keys=True, indent=4, separators=(',', ': ')))
+        return json.dumps(self.post, sort_keys=True, indent=4, separators=(',', ': '))
 
     @staticmethod
     def _parse_url_match(match, transform=None):
@@ -1510,14 +1444,14 @@ class BlosxomPost(TumblrPost):
         return post
 
 
-class LocalPost(object):
+class LocalPost:
     def __init__(self, post_file):
         self.post_file = post_file
         if options.tag_index:
-            with io.open(post_file, encoding=FILE_ENCODING) as f:
+            with open(post_file, encoding=FILE_ENCODING) as f:
                 post = f.read()
             # extract all URL-encoded tags
-            self.tags = []  # type: List[Tuple[str, str]]
+            self.tags: List[Tuple[str, str]] = []
             footer_pos = post.find('<footer>')
             if footer_pos > 0:
                 self.tags = re.findall(r'<a.+?/tagged/(.+?)>#(.+?)</a>', post[footer_pos:])
@@ -1528,11 +1462,11 @@ class LocalPost(object):
         else:
             self.file_name = parts[-1]
             self.ident = splitext(self.file_name)[0]
-        self.date = os.stat(post_file).st_mtime  # type: float
+        self.date: float = os.stat(post_file).st_mtime
         self.tm = time.localtime(self.date)
 
     def get_post(self, in_tag_index):
-        with io.open(self.post_file, encoding=FILE_ENCODING) as f:
+        with open(self.post_file, encoding=FILE_ENCODING) as f:
             post = f.read()
         # remove header and footer
         lines = post.split('\n')
@@ -1549,9 +1483,11 @@ class LocalPost(object):
         return post
 
 
-class ThreadPool(object):
+class ThreadPool:
+    queue: LockedQueue[Callable[[], None]]
+
     def __init__(self, thread_count=20, max_queue=1000):
-        self.queue = LockedQueue(threading.RLock(), max_queue)  # type: LockedQueue[Callable[[], None]]
+        self.queue = LockedQueue(threading.RLock(), max_queue)
         self.quit = threading.Event()
         self.abort = threading.Event()
         self.threads = [threading.Thread(target=self.handler) for _ in range(thread_count)]
@@ -1605,9 +1541,7 @@ class ThreadPool(object):
 if __name__ == '__main__':
     # The default of 'fork' can cause deadlocks, even on Linux
     # See https://bugs.python.org/issue40399
-    if not PY3:
-        pass  # No set_start_method. Here be dragons
-    elif 'forkserver' in multiprocessing.get_all_start_methods():
+    if 'forkserver' in multiprocessing.get_all_start_methods():
         multiprocessing.set_start_method('forkserver')  # Fastest safe option, if supported
     else:
         multiprocessing.set_start_method('spawn')  # Slow but safe
@@ -1676,10 +1610,10 @@ if __name__ == '__main__':
     parser.add_argument('-N', '--posts-per-page', type=int, default=50, metavar='COUNT',
                         help='set the number of posts per monthly page, 0 for unlimited')
     parser.add_argument('-Q', '--request', action=RequestCallback,
-                        help=u'save posts matching the request TYPE:TAG:TAG:…,TYPE:TAG:…,…. '
-                             u'TYPE can be {} or {any}; TAGs can be omitted or a colon-separated list. '
-                             u'Example: -Q {any}:personal,quote,photo:me:self'
-                             .format(u', '.join(POST_TYPES), any=TYPE_ANY))
+                        help='save posts matching the request TYPE:TAG:TAG:…,TYPE:TAG:…,…. '
+                             'TYPE can be {} or {any}; TAGs can be omitted or a colon-separated list. '
+                             'Example: -Q {any}:personal,quote,photo:me:self'
+                             .format(', '.join(POST_TYPES), any=TYPE_ANY))
     parser.add_argument('-t', '--tags', action=TagsCallback, dest='request',
                         help='save only posts tagged TAGS (comma-separated values; case-insensitive)')
     parser.add_argument('-T', '--type', action=RequestCallback, dest='request',
@@ -1761,8 +1695,6 @@ if __name__ == '__main__':
             parser.error("--filter: module 'jq' is not installed")
         options.filter = jq.compile(options.filter)
     if options.prev_archives:
-        if scandir is None:
-            parser.error("--prev-archives: Python is less than 3.5 and module 'scandir' is not installed")
         if len(options.prev_archives) != len(blogs):
             parser.error('--prev-archives: expected {} directories, got {}'.format(
                 len(blogs), len(options.prev_archives),

@@ -1,33 +1,21 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import, division, print_function, with_statement
-
 import fcntl
-import io
 import os
+import queue
 import socket
 import sys
 import threading
 import time
 import warnings
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
+from enum import Enum
+from functools import total_ordering
+from http.cookiejar import MozillaCookieJar
+from typing import TYPE_CHECKING, Generic, Optional, TypeVar
 
 if TYPE_CHECKING:
-    from typing import Generic, Optional, TypeVar
-
-try:
-    import queue
-except ImportError:
-    import Queue as queue  # type: ignore[no-redef]
-
-try:
-    from http.cookiejar import MozillaCookieJar
-except ImportError:
-    from cookielib import MozillaCookieJar  # type: ignore[no-redef]
+    import requests
+    swt_base = requests.Session
 
 _PATH_IS_ON_VFAT_WORKS = True
 
@@ -39,7 +27,7 @@ except ImportError:
 
 if os.name == 'nt':
     try:
-        from nt import _getvolumepathname  # type: ignore[no-redef]
+        from nt import _getvolumepathname  # pytype: disable=import-error
     except ImportError:
         _getvolumepathname = None  # type: ignore[no-redef]
         _PATH_IS_ON_VFAT_WORKS = False
@@ -55,32 +43,11 @@ except ImportError:
     except ImportError:
         raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
 
-# This builtin has a new name in Python 3
-try:
-    raw_input  # type: ignore[has-type]
-except NameError:
-    raw_input = input
-
-PY3 = sys.version_info[0] >= 3
-
-
-def to_unicode(string, encoding='utf-8', errors='strict'):
-    if isinstance(string, bytes):
-        return string.decode(encoding, errors)
-    return string
-
 
 def to_bytes(string, encoding='utf-8', errors='strict'):
     if isinstance(string, bytes):
         return string
     return string.encode(encoding, errors)
-
-
-def to_native_str(string, encoding='utf-8', errors='strict'):
-    if PY3:
-        return to_unicode(string, encoding, errors)
-    else:
-        return to_bytes(string, encoding, errors)
 
 
 if TYPE_CHECKING:
@@ -95,12 +62,8 @@ else:
         def __getitem__(cls, item):
             return cls
 
-    if PY3:
-        exec("""class GenericQueue(queue.Queue, metaclass=FakeGenericMeta):
-    pass""")
-    else:
-        class GenericQueue(queue.Queue, object):
-            __metaclass__ = FakeGenericMeta
+    class GenericQueue(queue.Queue, metaclass=FakeGenericMeta):
+        pass
 
 
 class LockedQueue(GenericQueue[T]):
@@ -112,11 +75,11 @@ class LockedQueue(GenericQueue[T]):
         self.all_tasks_done = threading.Condition(lock)
 
 
-class ConnectionFile(object):
+class ConnectionFile:
     def __init__(self, conn, *args, **kwargs):
         kwargs.setdefault('closefd', False)
         self.conn = conn
-        self.file = io.open(conn.fileno(), *args, **kwargs)
+        self.file = open(conn.fileno(), *args, **kwargs)
 
     def __enter__(self):
         return self.file.__enter__()
@@ -126,15 +89,6 @@ class ConnectionFile(object):
         self.conn.close()
 
 
-# contextlib.nullcontext, not available in Python 2
-class nullcontext(object):
-    def __enter__(self):
-        return None
-
-    def __exit__(self, *excinfo):
-        pass
-
-
 KNOWN_GOOD_NAMESERVER = '8.8.8.8'
 # DNS query for 'A' record of 'google.com'.
 # Generated using python -c "import dnslib; print(bytes(dnslib.DNSRecord.question('google.com').pack()))"
@@ -142,27 +96,22 @@ DNS_QUERY = b'\xf1\xe1\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06google\x03com\
 
 
 def is_dns_working(timeout=None):
-    sock = None
     try:
-        # Would use a with statement, but that doesn't work on Python 2, mumble mumble
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        if timeout is not None:
-            sock.settimeout(timeout)
-        sock.sendto(DNS_QUERY, (KNOWN_GOOD_NAMESERVER, 53))
-        sock.recvfrom(1)
-    except EnvironmentError:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            if timeout is not None:
+                sock.settimeout(timeout)
+            sock.sendto(DNS_QUERY, (KNOWN_GOOD_NAMESERVER, 53))
+            sock.recvfrom(1)
+    except OSError:
         return False
-    finally:
-        if sock is not None:
-            sock.close()
 
     return True
 
 
-class WaitOnMainThread(object):
+class WaitOnMainThread:
     def __init__(self):
-        self.cond = None  # type: Optional[threading.Condition]
-        self.flag = False  # type: Optional[bool]
+        self.cond: Optional[threading.Condition] = None
+        self.flag: Optional[bool] = False
 
     def setup(self, lock=None):
         self.cond = threading.Condition(lock)
@@ -257,8 +206,8 @@ def setup_urllib3_ssl():
                 from pip._vendor.urllib3.contrib import securetransport
             else:
                 from urllib3.contrib import securetransport
-        except (ImportError, EnvironmentError) as e:
-            print('Warning: Failed to inject SecureTransport: {}'.format(e), file=sys.stderr)
+        except (ImportError, OSError) as e:
+            print('Warning: Failed to inject SecureTransport: {!r}'.format(e), file=sys.stderr)
         else:
             securetransport.inject_into_urllib3()
             have_sni = True  # SNI always works
@@ -272,7 +221,7 @@ def setup_urllib3_ssl():
                 from urllib3.contrib import pyopenssl
             pyopenssl.inject_into_urllib3()
         except ImportError as e:
-            print('Warning: Failed to inject pyOpenSSL: {}'.format(e), file=sys.stderr)
+            print('Warning: Failed to inject pyOpenSSL: {!r}'.format(e), file=sys.stderr)
         else:
             have_sni = True  # SNI always works
 
@@ -280,7 +229,7 @@ def setup_urllib3_ssl():
 def get_supported_encodings():
     encodings = ['deflate', 'gzip']
     try:
-        from brotli import brotli
+        from brotli import brotli  # noqa: F401
     except ImportError:
         pass
     else:
@@ -289,7 +238,11 @@ def get_supported_encodings():
 
 
 def make_requests_session(session_type, retry, timeout, verify, user_agent, cookiefile):
-    class SessionWithTimeout(session_type):  # type: ignore[misc,valid-type]
+    if TYPE_CHECKING:
+        global swt_base
+    else:
+        swt_base = session_type  # type: ignore
+    class SessionWithTimeout(swt_base):
         def request(self, method, url, **kwargs):
             kwargs.setdefault('timeout', timeout)
             return super(SessionWithTimeout, self).request(method, url, **kwargs)
@@ -316,10 +269,16 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
     return session
 
 
-class LogLevel(object):
+@total_ordering
+class LogLevel(Enum):
     INFO = 0
     WARN = 1
     ERROR = 2
+
+    def __lt__(self, other):
+        if type(self) is type(other):
+            return self.value < other.value
+        return NotImplemented
 
 
 def fsync(fd):
@@ -327,7 +286,7 @@ def fsync(fd):
         # Apple's fsync does not flush the drive write cache
         try:
             fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
-        except EnvironmentError:
+        except OSError:
             pass  # fall back to fsync
         else:
             return

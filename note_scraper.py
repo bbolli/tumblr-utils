@@ -1,34 +1,19 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import, division, print_function, with_statement
-
-import itertools
 import re
 import sys
 import time
 import traceback
 import warnings
 from datetime import datetime
+from multiprocessing.queues import SimpleQueue
+from typing import List, Optional, Tuple
+from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
 from util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
-                  to_bytes, to_native_str)
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
-
-if TYPE_CHECKING:
-    from multiprocessing.queues import SimpleQueue
-    from typing import List, Optional, Text, Tuple
-
-try:
-    from urllib.parse import quote, urlparse, urlsplit, urlunsplit
-except ImportError:
-    from urllib import quote  # type: ignore[attr-defined,no-redef]
-    from urlparse import urlparse, urlsplit, urlunsplit  # type: ignore[no-redef]
+                  to_bytes)
 
 if URLLIB3_FROM_PIP:
     from pip._vendor.urllib3 import Retry, Timeout
@@ -63,7 +48,7 @@ HTTP_RETRY = Retry(3, connect=False)
 # Globals
 post_url = None
 ident = None
-msg_queue = None  # type: Optional[SimpleQueue[Tuple[int, str]]]
+msg_queue: Optional[SimpleQueue[Tuple[int, str]]] = None
 
 
 def log(level, url, msg):
@@ -72,8 +57,7 @@ def log(level, url, msg):
     msg_queue.put((level, '[Note Scraper] Post {}{}: {}\n'.format(ident, url_msg, msg)))
 
 
-class WebCrawler(object):
-
+class WebCrawler:
     # Python 2.x urllib.always_safe is private in Python 3.x; its content is copied here
     _ALWAYS_SAFE_BYTES = (b'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
                           b'abcdefghijklmnopqrstuvwxyz'
@@ -108,10 +92,11 @@ class WebCrawler(object):
         except UnicodeError:
             netloc = parts.netloc
 
-        return urlunsplit(tuple(itertools.chain(
-            (to_native_str(parts.scheme), to_native_str(netloc).rstrip(':')),
-            (cls.quote_unsafe(getattr(parts, p)) for p in ('path', 'query', 'fragment')),
-        )))
+        return urlunsplit((
+            parts.scheme,
+            netloc.rstrip(':'),
+            *(cls.quote_unsafe(getattr(parts, p)) for p in ('path', 'query', 'fragment')),
+        ))
 
     def ratelimit_sleep(self, headers):
         reset = headers.get('X-Rate-Limit-Reset')
@@ -203,7 +188,7 @@ class WebCrawler(object):
         base = '{uri.scheme}://{uri.netloc}'.format(uri=parsed_uri)
 
         notes_10k = 0
-        notes_list = []  # type: List[Text]
+        notes_list: List[str] = []
 
         notes_url = post_url
         while True:
@@ -226,7 +211,7 @@ class WebCrawler(object):
                 log(LogLevel.WARN, notes_url, 'Warning: Reached notes limit, stopping early.')
                 break
 
-        return u''.join(notes_list)
+        return ''.join(notes_list)
 
 
 def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cookiefile, notes_limit):
@@ -259,4 +244,4 @@ def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cooki
         msg_queue._writer.close()  # type: ignore[attr-defined]
 
     with ConnectionFile(stdout_conn, 'w') as stdout:
-        print(notes, end=u'', file=stdout)
+        print(notes, end='', file=stdout)

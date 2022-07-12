@@ -22,9 +22,8 @@ These scripts are or have been useful to me over the years.
 More documentation can be found in each script's docstring or in
 [tumblr_backup.md](https://github.com/bbolli/tumblr-utils/blob/master/tumblr_backup.md).
 
-The utilities run under Python 2.7, though Python 3 is supported and preferred
-for tumblr_backup.py, which has been tested on Python 3.8 but should also run
-fine on Python 3.9.3 and later.
+The utilities run under Python 2.7, except for tumblr_backup.py and
+tumblr_login.py, which run on Python 3.6 and later.
 
 ### Notice
 
