@@ -479,9 +479,9 @@ class ApiParser:
         if headers.get('X-Ratelimit-Perday-Remaining') == '0':
             reset = headers.get('X-Ratelimit-Perday-Reset')
             try:
-                freset = float(reset)
-            except ValueError:
-                logger.error("Expected numerical X-Ratelimit-Perday-Reset, got '{}'\n".format(reset))
+                freset = float(reset)  # pytype: disable=wrong-arg-types
+            except (TypeError, ValueError):
+                logger.error("Expected numerical X-Ratelimit-Perday-Reset, got {!r}\n".format(reset))
                 msg = 'sometime tomorrow'
             else:
                 treset = datetime.now() + timedelta(seconds=freset)
@@ -680,7 +680,7 @@ def import_youtube_dl():
     except ImportError:
         pass
     else:
-        return
+        return youtube_dl
 
     import youtube_dl
 
