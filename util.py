@@ -1,36 +1,25 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import, division, print_function, with_statement
-
 import collections
 import errno
 import fcntl
-import io
 import os
+import queue
 import shutil
 import socket
 import sys
 import threading
 import time
 import warnings
-
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
+from enum import Enum
+from functools import total_ordering
+from http.cookiejar import MozillaCookieJar
+from importlib.machinery import PathFinder
+from typing import TYPE_CHECKING, Any, Deque, Dict, Generic, Optional, Tuple, TypeVar
 
 if TYPE_CHECKING:
-    from typing import Any, Deque, Dict, Generic, List, Optional, Tuple, TypeVar
-
-try:
-    import queue
-except ImportError:
-    import Queue as queue  # type: ignore[no-redef]
-
-try:
-    from http.cookiejar import MozillaCookieJar
-except ImportError:
-    from cookielib import MozillaCookieJar  # type: ignore[no-redef]
+    import requests
+    swt_base = requests.Session
 
 _PATH_IS_ON_VFAT_WORKS = True
 
@@ -42,7 +31,7 @@ except ImportError:
 
 if os.name == 'nt':
     try:
-        from nt import _getvolumepathname  # type: ignore[no-redef]
+        from nt import _getvolumepathname  # pytype: disable=import-error
     except ImportError:
         _getvolumepathname = None  # type: ignore[no-redef]
         _PATH_IS_ON_VFAT_WORKS = False
@@ -53,24 +42,10 @@ try:
 except ImportError:
     try:
         # pip includes urllib3
-        from pip._vendor.urllib3.exceptions import DependencyWarning
+        from pip._vendor.urllib3.exceptions import DependencyWarning  # type: ignore[no-redef]
         URLLIB3_FROM_PIP = True
     except ImportError:
         raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
-
-# This builtin has a new name in Python 3
-try:
-    raw_input  # type: ignore[has-type]
-except NameError:
-    raw_input = input
-
-PY3 = sys.version_info[0] >= 3
-
-
-def to_unicode(string, encoding='utf-8', errors='strict'):
-    if isinstance(string, bytes):
-        return string.decode(encoding, errors)
-    return string
 
 
 def to_bytes(string, encoding='utf-8', errors='strict'):
@@ -79,11 +54,9 @@ def to_bytes(string, encoding='utf-8', errors='strict'):
     return string.encode(encoding, errors)
 
 
-def to_native_str(string, encoding='utf-8', errors='strict'):
-    if PY3:
-        return to_unicode(string, encoding, errors)
-    else:
-        return to_bytes(string, encoding, errors)
+class FakeGenericMeta(type):
+    def __getitem__(cls, item):
+        return cls
 
 
 if TYPE_CHECKING:
@@ -94,16 +67,8 @@ if TYPE_CHECKING:
 else:
     T = None
 
-    class FakeGenericMeta(type):
-        def __getitem__(cls, item):
-            return cls
-
-    if PY3:
-        exec("""class GenericQueue(queue.Queue, metaclass=FakeGenericMeta):
-    pass""")
-    else:
-        class GenericQueue(queue.Queue, object):
-            __metaclass__ = FakeGenericMeta
+    class GenericQueue(queue.Queue, metaclass=FakeGenericMeta):
+        pass
 
 
 class LockedQueue(GenericQueue[T]):
@@ -115,11 +80,11 @@ class LockedQueue(GenericQueue[T]):
         self.all_tasks_done = threading.Condition(lock)
 
 
-class ConnectionFile(object):
+class ConnectionFile:
     def __init__(self, conn, *args, **kwargs):
         kwargs.setdefault('closefd', False)
         self.conn = conn
-        self.file = io.open(conn.fileno(), *args, **kwargs)
+        self.file = open(conn.fileno(), *args, **kwargs)
 
     def __enter__(self):
         return self.file.__enter__()
@@ -129,15 +94,6 @@ class ConnectionFile(object):
         self.conn.close()
 
 
-# contextlib.nullcontext, not available in Python 2
-class nullcontext(object):
-    def __enter__(self):
-        return None
-
-    def __exit__(self, *excinfo):
-        pass
-
-
 KNOWN_GOOD_NAMESERVER = '8.8.8.8'
 # DNS query for 'A' record of 'google.com'.
 # Generated using python -c "import dnslib; print(bytes(dnslib.DNSRecord.question('google.com').pack()))"
@@ -145,27 +101,22 @@ DNS_QUERY = b'\xf1\xe1\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06google\x03com\
 
 
 def is_dns_working(timeout=None):
-    sock = None
     try:
-        # Would use a with statement, but that doesn't work on Python 2, mumble mumble
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        if timeout is not None:
-            sock.settimeout(timeout)
-        sock.sendto(DNS_QUERY, (KNOWN_GOOD_NAMESERVER, 53))
-        sock.recvfrom(1)
-    except EnvironmentError:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            if timeout is not None:
+                sock.settimeout(timeout)
+            sock.sendto(DNS_QUERY, (KNOWN_GOOD_NAMESERVER, 53))
+            sock.recvfrom(1)
+    except OSError:
         return False
-    finally:
-        if sock is not None:
-            sock.close()
 
     return True
 
 
-class WaitOnMainThread(object):
+class WaitOnMainThread:
     def __init__(self):
-        self.cond = None  # type: Optional[threading.Condition]
-        self.flag = False  # type: Optional[bool]
+        self.cond: Optional[threading.Condition] = None
+        self.flag: Optional[bool] = False
 
     def setup(self, lock=None):
         self.cond = threading.Condition(lock)
@@ -267,8 +218,8 @@ def setup_urllib3_ssl():
                 from pip._vendor.urllib3.contrib import securetransport
             else:
                 from urllib3.contrib import securetransport
-        except (ImportError, EnvironmentError) as e:
-            print('Warning: Failed to inject SecureTransport: {}'.format(e), file=sys.stderr)
+        except (ImportError, OSError) as e:
+            print('Warning: Failed to inject SecureTransport: {!r}'.format(e), file=sys.stderr)
         else:
             securetransport.inject_into_urllib3()
             have_sni = True  # SNI always works
@@ -279,10 +230,10 @@ def setup_urllib3_ssl():
             if URLLIB3_FROM_PIP:
                 from pip._vendor.urllib3.contrib import pyopenssl
             else:
-                from urllib3.contrib import pyopenssl
+                from urllib3.contrib import pyopenssl  # type: ignore[attr-defined]
             pyopenssl.inject_into_urllib3()
         except ImportError as e:
-            print('Warning: Failed to inject pyOpenSSL: {}'.format(e), file=sys.stderr)
+            print('Warning: Failed to inject pyOpenSSL: {!r}'.format(e), file=sys.stderr)
         else:
             have_sni = True  # SNI always works
 
@@ -290,7 +241,7 @@ def setup_urllib3_ssl():
 def get_supported_encodings():
     encodings = ['deflate', 'gzip']
     try:
-        from brotli import brotli
+        from brotli import brotli  # noqa: F401
     except ImportError:
         pass
     else:
@@ -299,7 +250,11 @@ def get_supported_encodings():
 
 
 def make_requests_session(session_type, retry, timeout, verify, user_agent, cookiefile):
-    class SessionWithTimeout(session_type):  # type: ignore[misc,valid-type]
+    if TYPE_CHECKING:
+        global swt_base
+    else:
+        swt_base = session_type  # type: ignore
+    class SessionWithTimeout(swt_base):
         def request(self, method, url, **kwargs):
             kwargs.setdefault('timeout', timeout)
             return super(SessionWithTimeout, self).request(method, url, **kwargs)
@@ -326,10 +281,16 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
     return session
 
 
-class LogLevel(object):
+@total_ordering
+class LogLevel(Enum):
     INFO = 0
     WARN = 1
     ERROR = 2
+
+    def __lt__(self, other):
+        if type(self) is type(other):
+            return self.value < other.value
+        return NotImplemented
 
 
 def fsync(fd):
@@ -337,7 +298,7 @@ def fsync(fd):
         # Apple's fsync does not flush the drive write cache
         try:
             fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
-        except EnvironmentError:
+        except OSError:
             pass  # fall back to fsync
         else:
             return
@@ -351,21 +312,13 @@ def fdatasync(fd):
 
 
 if TYPE_CHECKING:
-    if PY3:
-        WaiterSeq = Deque[Any]
-    else:
-        WaiterSeq = List[Any]
-    MCBase = threading.Condition
-elif PY3:
-    WaiterSeq = collections.deque
-    MCBase = threading.Condition
+    WaiterSeq = Deque[Any]
 else:
-    WaiterSeq = list
-    MCBase = threading._Condition
+    WaiterSeq = collections.deque
 
 
 # Minimal implementation of a sum of mutable sequences
-class MultiSeqProxy(object):
+class MultiSeqProxy:
     def __init__(self, subseqs):
         self.subseqs = subseqs
 
@@ -387,10 +340,6 @@ class NotifierWaiters(WaiterSeq):
         item = super(NotifierWaiters, self).__getitem__(index)
         return WaiterSeq(v[0] for v in item) if isinstance(index, slice) else item[0]  # pytype: disable=not-callable
 
-    if not PY3:
-        def __getslice__(self, i, j):
-            return self[max(0, i):max(0, j):]
-
     def remove(self, value):
         try:
             match = next(x for x in super(NotifierWaiters, self).__iter__() if x[0] == value)
@@ -404,24 +353,21 @@ class NotifierWaiters(WaiterSeq):
 
 
 # Supports waiting on multiple threading.Conditions objects simultaneously
-class MultiCondition(MCBase):
+class MultiCondition(threading.Condition):
     def __init__(self, lock):
         super(MultiCondition, self).__init__(lock)
 
     def wait(self, children, timeout=None):
-        def get_waiters(c):    return getattr(c, '_waiters' if PY3 else '_Condition__waiters')
-        def set_waiters(c, v):        setattr(c, '_waiters' if PY3 else '_Condition__waiters', v)
-        def get_lock(c):       return getattr(c, '_lock'    if PY3 else '_Condition__lock')
-
         assert len(frozenset(id(c) for c in children)) == len(children), 'Children must be unique'
-        assert all(get_lock(c) is get_lock(self) for c in children), 'All locks must be the same'
+        assert all(c._lock is self._lock for c in children), 'All locks must be the same'  # type: ignore[attr-defined]
 
         # Modify children so their notify methods do cleanup
         for child in children:
-            if not isinstance(get_waiters(child), NotifierWaiters):
-                set_waiters(child, NotifierWaiters((w, (get_waiters(child),))
-                                                   for w in get_waiters(child)))
-        set_waiters(self, MultiSeqProxy(tuple(get_waiters(c) for c in children)))
+            if not isinstance(child._waiters, NotifierWaiters):
+                child._waiters = NotifierWaiters(
+                    ((w, (child._waiters,)) for w in child._waiters),
+                )
+        self._waiters = MultiSeqProxy(tuple(c._waiters for c in children))
 
         super(MultiCondition, self).wait(timeout)
 
@@ -459,19 +405,20 @@ def lock_acquire_restore(lock, state):
         lock.acquire()  # Ignore saved state
 
 
-class AsyncCallable(object):
+ACParams = Tuple[Tuple[Any, ...], Dict[str, Any]]  # (args, kwargs)
+
+
+class AsyncCallable:
+    request: LockedQueue[Optional[ACParams]]
+    response: LockedQueue[Any]
+
     def __init__(self, lock, fun, name=None):
         self.lock = lock
         self.fun = fun
-        if TYPE_CHECKING:
-            Params = Tuple[Tuple[Any, ...], Dict[str, Any]]  # (args, kwargs)
-        self.request = LockedQueue(lock, maxsize=1)  # type: LockedQueue[Optional[Params]]
-        self.response = LockedQueue(lock, maxsize=1)  # type: LockedQueue[Any]
+        self.request = LockedQueue(lock, maxsize=1)
+        self.response = LockedQueue(lock, maxsize=1)
         self.quit_flag = False
-        if PY3:
-            self.thread = threading.Thread(target=self.run_thread, name=name, daemon=True)
-        else:
-            self.thread = threading.Thread(target=self.run_thread, name=name)
+        self.thread = threading.Thread(target=self.run_thread, name=name, daemon=True)
         self.thread.start()
 
     def run_thread(self):
@@ -510,13 +457,12 @@ def opendir(dir_, flags):
 def try_unlink(path):
     try:
         os.unlink(path)
-    except EnvironmentError as e:
-        if e.errno != errno.ENOENT:
-            raise
+    except FileNotFoundError:
+        pass  # ignored
 
 
 def _copy_file_range(src, dst):
-    if not PY3 or not hasattr(os, 'copy_file_range'):
+    if not hasattr(os, 'copy_file_range'):
         return False
 
     with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
@@ -543,19 +489,5 @@ def copyfile(src, dst):
     return shutil.copyfile(src, dst)
 
 
-if PY3:
-    from importlib.machinery import PathFinder
-
-    def have_module(name):
-        return PathFinder.find_spec(name) is not None
-else:
-    import imp
-
-    def have_module(name):
-        try:
-            f, _, _ = imp.find_module(name)  # type: ignore[misc]
-        except ImportError:
-            return False
-        if f:
-            f.close()
-        return True
+def have_module(name):
+    return PathFinder.find_spec(name) is not None

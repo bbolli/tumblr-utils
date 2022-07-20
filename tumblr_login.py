@@ -6,8 +6,7 @@
 # Cleaned up and split off by Cebtenzzre.
 
 """
-This script works in both Python 2 & 3.
-It uses Tumblr's internal SVC API to access a hidden or explicit blog,
+This script uses Tumblr's internal SVC API to access a hidden or explicit blog,
 and retrieves a JSON of very similar (but not quite identical) format to the
 normal API.
 """
@@ -15,30 +14,20 @@ normal API.
 import re
 import sys
 from getpass import getpass
-
-try:
-    from http.cookiejar import MozillaCookieJar
-except ImportError:
-    from cookielib import MozillaCookieJar  # type: ignore[no-redef]
+from http.cookiejar import MozillaCookieJar
 
 try:
     import requests
 except ImportError:
     # Import pip._internal.download first to avoid a potential recursive import
     try:
-        from pip._internal import download as _  # noqa: F401
+        from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
     except ImportError:
-        pass  # Not absolutely necessary
+        pass  # doesn't exist in pip 20.0+
     try:
         from pip._vendor import requests  # type: ignore[no-redef]
     except ImportError:
         raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
-
-# This builtin has a new name in Python 3
-try:
-    raw_input  # type: ignore[has-type]
-except NameError:
-    raw_input = input
 
 
 def get_api_token():
@@ -76,7 +65,7 @@ if __name__ == '__main__':
     cookiefile, = sys.argv[1:]
 
     print('Enter the credentials for your Tumblr account.')
-    login = raw_input('Email: ')
+    login = input('Email: ')
     password = getpass()
 
     # Create a requests session with cookies

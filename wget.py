@@ -1,60 +1,42 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import, division, print_function, with_statement
-
 import functools
-import io
 import itertools
 import os
 import time
 import warnings
+from argparse import Namespace
 from email.utils import mktime_tz, parsedate_tz
+from enum import Enum
 from tempfile import NamedTemporaryFile
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
+from urllib.parse import urljoin, urlsplit
 
-from util import (PY3, URLLIB3_FROM_PIP, LogLevel, fsync, get_supported_encodings, is_dns_working, no_internet, opendir,
+from util import (URLLIB3_FROM_PIP, LogLevel, fsync, get_supported_encodings, is_dns_working, no_internet, opendir,
                   setup_urllib3_ssl, try_unlink)
 
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
-
-if TYPE_CHECKING:
-    from argparse import Namespace
-    from typing import Any, AnyStr, BinaryIO, Callable, Optional, Text
-
-try:
-    from urllib.parse import urljoin, urlsplit
-except ImportError:
-    from urlparse import urljoin, urlsplit  # type: ignore[no-redef]
-
-if URLLIB3_FROM_PIP:
-    from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
-    from pip._vendor.urllib3 import Retry as Retry
-    from pip._vendor.urllib3._collections import HTTPHeaderDict
-    from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
-    from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
-    from pip._vendor.urllib3.util import make_headers
-else:
+if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from urllib3 import Retry as Retry
     from urllib3._collections import HTTPHeaderDict
-    from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError
+    from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
     from urllib3.exceptions import HTTPError as HTTPError
     from urllib3.util import make_headers
+else:
+    from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
+    from pip._vendor.urllib3 import Retry as Retry
+    from pip._vendor.urllib3._collections import HTTPHeaderDict
+    from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
+    from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
+    from pip._vendor.urllib3.util import make_headers
 
 setup_urllib3_ssl()
 
-# long is int in Python 3
-try:
-    long  # type: ignore[has-type]
-except NameError:
-    long = int
-
 HTTP_TIMEOUT = Timeout(90)
 # Always retry on 503 or 504, but never on connect, which is handled specially
-HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
-HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))
+# Also retry on 500 since Tumblr servers have temporary failures
+HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((500, 503, 504)))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))  # type: ignore[misc]
 HTTP_CHUNK_SIZE = 1024 * 1024
 
 base_headers = make_headers(keep_alive=True, accept_encoding=list(get_supported_encodings()))
@@ -65,28 +47,39 @@ RETROKF = 0x2             # retrieval was OK
 
 
 # Error statuses
-class UErr(object):
+class UErr(Enum):
     RETRUNNEEDED = 0
-    RETRINCOMPLETE = 1  # Not part of wget
+    RETRINCOMPLETE = 1
     RETRFINISHED = 2
 
 
-class HttpStat(object):
+class HttpStat:
+    current_url: Optional[Any]
+    contlen: Optional[int]
+    last_modified: Optional[str]
+    remote_time: Optional[int]
+    dest_dir: Optional[int]
+    part_file: Optional[BinaryIO]
+    remote_encoding: Optional[str]
+    enc_is_identity: Optional[bool]
+    decoder: Optional[object]
+    _make_part_file: Optional[Callable[[], BinaryIO]]
+
     def __init__(self):
-        self.current_url = None        # type: Optional[Any] # the most recent redirect, otherwise the initial url
-        self.bytes_read = 0            # received length
-        self.bytes_written = 0         # written length
-        self.contlen = None            # type: Optional[int] # expected length
-        self.restval = 0               # the restart value
-        self.last_modified = None      # type: Optional[str] # Last-Modified header
-        self.remote_time = None        # type: Optional[int] # remote time-stamp
-        self.statcode = 0              # status code
-        self.dest_dir = None           # type: Optional[int] # handle to the directory containing part_file
-        self.part_file = None          # type: Optional[BinaryIO] # handle to local file used for in-progress download
-        self.remote_encoding = None    # type: Optional[str] # the encoding of the remote file
-        self.enc_is_identity = None    # type: Optional[bool] # whether the remote encoding is identity
-        self.decoder = None            # type: Optional[object] # saved decoder from the HTTPResponse
-        self._make_part_file = None    # type: Optional[Callable[[], BinaryIO]] # part_file supplier
+        self.current_url = None      # the most recent redirect, otherwise the initial url
+        self.bytes_read = 0          # received length
+        self.bytes_written = 0       # written length
+        self.contlen = None          # expected length
+        self.restval = 0             # the restart value
+        self.last_modified = None    # Last-Modified header
+        self.remote_time = None      # remote time-stamp
+        self.statcode = 0            # status code
+        self.dest_dir = None         # handle to the directory containing part_file
+        self.part_file = None        # handle to local file used for in-progress download
+        self.remote_encoding = None  # the encoding of the remote file
+        self.enc_is_identity = None  # whether the remote encoding is identity
+        self.decoder = None          # saved decoder from the HTTPResponse
+        self._make_part_file = None  # part_file supplier
 
     def set_part_file_supplier(self, value):
         self._make_part_file = value
@@ -131,7 +124,7 @@ class WGHTTPResponse(HTTPResponse):
 
     # Make _init_length publicly usable because its implementation is nice
     def get_content_length(self, meth):
-        return self._init_length(meth)
+        return self._init_length(meth)  # type: ignore[attr-defined]
 
     # Wrap _decode to do some extra processing of the content-encoded entity data.
     def _decode(self, data, decode_content, flush_decoder):
@@ -147,7 +140,7 @@ class WGHTTPResponse(HTTPResponse):
         self.last_read_length = len(data)  # Count only non-skipped data
         if not data:
             return b''
-        return super(WGHTTPResponse, self)._decode(data, decode_content, flush_decoder)
+        return super(WGHTTPResponse, self)._decode(data, decode_content, flush_decoder)  # type: ignore[misc]
 
 
 class WGHTTPConnectionPool(HTTPConnectionPool):
@@ -189,7 +182,7 @@ class WGPoolManager(PoolManager):
     def connection_from_url(self, url, pool_kwargs=None):
         try:
             self.cfh_url = url
-            return super(WGPoolManager, self).connection_from_url(url, pool_kwargs)
+            return super(WGPoolManager, self).connection_from_url(url, pool_kwargs)  # type: ignore[call-arg]
         finally:
             self.cfh_url = None
 
@@ -204,27 +197,27 @@ class WGPoolManager(PoolManager):
         if request_context is None:
             request_context = self.connection_pool_kw.copy()
         request_context['cfh_url'] = self.cfh_url
-        return super(WGPoolManager, self)._new_pool(scheme, host, port, request_context)
+        return super(WGPoolManager, self)._new_pool(scheme, host, port, request_context)  # type: ignore[misc]
 
 
-poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT, retries=HTTP_RETRY)
+poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT)
 
 
-class Logger(object):
+class Logger:
     def __init__(self, original_url, log):
         self.original_url = original_url
         self.log_cb = log
         self.prev_log_url = None
 
     def log(self, level, url, msg):
-        qmsg = u''
+        qmsg = ''
         if self.prev_log_url is None:
-            qmsg += u'[wget] {}URL is {}\n'.format('' if url == self.original_url else 'Original ', self.original_url)
+            qmsg += '[wget] {}URL is {}\n'.format('' if url == self.original_url else 'Original ', self.original_url)
             self.prev_log_url = self.original_url
         if url != self.prev_log_url:
-            qmsg += u'[wget] Current redirect URL is {}\n'.format(url)
+            qmsg += '[wget] Current redirect URL is {}\n'.format(url)
             self.prev_log_url = url
-        qmsg += u'[wget] {}\n'.format(msg)
+        qmsg += '[wget] {}\n'.format(msg)
         self.log_cb(level, qmsg)
 
     def info(self, url, msg):
@@ -309,7 +302,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
 
     # In some cases, httplib returns a status of _UNKNOWN
     try:
-        hstat.statcode = long(resp.status)
+        hstat.statcode = int(resp.status)
     except ValueError:
         hstat.statcode = 0
 
@@ -400,7 +393,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
             hstat.part_file.write(chunk)
     except MaxRetryError:
         raise
-    except (HTTPError, EnvironmentError) as e:
+    except (HTTPError, OSError) as e:
         is_read_error = isinstance(e, HTTPError)
         length_known = hstat.contlen is not None and (is_read_error or hstat.enc_is_identity)
         logger.warn(url, '{} error at byte {}{}'.format(
@@ -428,9 +421,9 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
 def parse_crange_num(hdrc, ci, postchar):
     if not hdrc[ci].isdigit():
         raise ValueError('parse error')
-    num = long(0)
+    num = 0
     while hdrc[ci].isdigit():
-        num = long(10) * num + long(hdrc[ci])
+        num = 10 * num + int(hdrc[ci])
         ci += 1
     if hdrc[ci] != postchar:
         raise ValueError('parse error')
@@ -465,9 +458,9 @@ def parse_content_range(hdr):
     if hdrc[ci] == '*':
         entity_length = None
     else:
-        num_ = long(0)
+        num_ = int(0)
         while hdrc[ci].isdigit():
-            num_ = long(10) * num_ + long(hdrc[ci])
+            num_ = int(10) * num_ + int(hdrc[ci])
             ci += 1
         entity_length = num_
 
@@ -481,7 +474,7 @@ def parse_content_range(hdr):
 
 def touch(fl, mtime, dir_fd=None):
     atime = time.time()
-    if PY3 and os.utime in os.supports_dir_fd and dir_fd is not None:
+    if os.utime in os.supports_dir_fd and dir_fd is not None:
         os.utime(os.path.basename(fl), (atime, mtime), dir_fd=dir_fd)
     else:
         os.utime(fl, (atime, mtime))
@@ -489,9 +482,8 @@ def touch(fl, mtime, dir_fd=None):
 
 class WGError(Exception):
     def __init__(self, logger, url, msg, cause=None):
-        super(WGError, self).__init__('Error retrieving resource: {}{}'.format(
-            msg, '' if cause is None else '\nCaused by: {}'.format(cause),
-        ))
+        causestr = '' if cause is None else '\nCaused by {!r}'.format(cause)
+        super(WGError, self).__init__('Error retrieving resource: {}{}'.format(msg, causestr))
         self.logger = logger
         self.url = url
 
@@ -532,7 +524,7 @@ class WGRangeError(WGBadResponseError):
 unreachable_hosts = set()
 
 
-class RetryCounter(object):
+class RetryCounter:
     TRY_LIMIT = 20
     MAX_RETRY_WAIT = 10
 
@@ -573,11 +565,15 @@ def normalized_host(scheme, host, port):
     return '{}:{}'.format(host, port)
 
 
-def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, options, log):
-    # type: (HttpStat, AnyStr, AnyStr, Optional[float], Optional[Callable[[AnyStr, BinaryIO], AnyStr]], Namespace, Callable[[Text], None]) -> None  # noqa: E501
-    if PY3 and (isinstance(url, bytes) or isinstance(dest_file, bytes)):
-        raise ValueError('This function does not support bytes arguments on Python 3')
-
+def _retrieve_loop(
+    hstat: HttpStat,
+    url: str,
+    dest_file: str,
+    post_timestamp: Optional[float],
+    adjust_basename: Optional[Callable[[str, BinaryIO], str]],
+    options: Namespace,
+    log: Callable[[str], None],
+) -> None:
     logger = Logger(url, log)
 
     if urlsplit(url).scheme not in ('http', 'https'):
@@ -594,7 +590,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
         hstat.dest_dir = opendir(dest_dirname, os.O_RDONLY)
     hstat.set_part_file_supplier(functools.partial(
         lambda pfx, dir_: NamedTemporaryFile('wb', prefix=pfx, dir=dir_, delete=False),
-        '.{}.'.format(dest_basename), dest_dirname,  # type: ignore[str-bytes-safe]
+        '.{}.'.format(dest_basename), dest_dirname,
     ))
 
     # THE loop
@@ -615,7 +611,8 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
         except HTTPError as e:
             if isinstance(e, ConnectTimeoutError):
                 # Host is unreachable (incl ETIMEDOUT, EHOSTUNREACH, and EAI_NONAME) - condemn it and don't retry
-                hostname = normalized_host_from_url(url)
+                conn = e.pool if isinstance(e, PoolError) else e.args[0]
+                hostname = normalized_host(None, conn.host, conn.port)
                 unreachable_hosts.add(hostname)
                 msg = 'Error connecting to host {}. From now on it will be ignored.'.format(hostname)
                 raise WGUnreachableHostError(logger, url, msg, e)
@@ -712,8 +709,8 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
             new_dest_basename = dest_basename
         else:
             # Give adjust_basename a read-only file handle
-            pf = io.open(hstat.part_file.fileno(), 'rb', closefd=False)
-            new_dest_basename = adjust_basename(dest_basename, pf)  # type: ignore[arg-type]
+            pf = open(hstat.part_file.fileno(), 'rb', closefd=False)
+            new_dest_basename = adjust_basename(dest_basename, pf)
 
         # Sync the inode
         fsync(hstat.part_file)
@@ -724,11 +721,7 @@ def _retrieve_loop(hstat, url, dest_file, post_timestamp, adjust_basename, optio
 
         # Move to final destination
         new_dest = os.path.join(dest_dirname, new_dest_basename)
-        if not PY3:
-            if os.name == 'nt':
-                try_unlink(new_dest)  # Avoid potential FileExistsError
-            os.rename(pfname, new_dest)
-        elif os.rename not in os.supports_dir_fd:
+        if os.rename not in os.supports_dir_fd:
             os.replace(pfname, new_dest)
         else:
             os.replace(os.path.basename(pfname), new_dest_basename,
@@ -754,7 +747,7 @@ def urlopen(url, method='GET', headers=None, **kwargs):
 
     while True:
         try:
-            return poolman.request(method, url, headers=req_headers, **kwargs)
+            return poolman.request(method, url, headers=req_headers, retries=HTTP_RETRY, **kwargs)
         except HTTPError:
             if is_dns_working(timeout=5):
                 raise
@@ -763,7 +756,7 @@ def urlopen(url, method='GET', headers=None, **kwargs):
 
 
 # This functor is the primary API of this module.
-class WgetRetrieveWrapper(object):
+class WgetRetrieveWrapper:
     def __init__(self, options, log):
         self.options = options
         self.log = log

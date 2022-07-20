@@ -1,41 +1,26 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import, division, print_function, with_statement
-
-import itertools
 import re
 import sys
 import time
 import traceback
 import warnings
 from datetime import datetime
+from multiprocessing.queues import SimpleQueue
+from typing import TYPE_CHECKING, List, Optional, Tuple
+from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
 from util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
-                  to_bytes, to_native_str)
+                  to_bytes)
 
-try:
-    from typing import TYPE_CHECKING
-except ImportError:
-    TYPE_CHECKING = False
-
-if TYPE_CHECKING:
-    from multiprocessing.queues import SimpleQueue
-    from typing import List, Optional, Text, Tuple
-
-try:
-    from urllib.parse import quote, urlparse, urlsplit, urlunsplit
-except ImportError:
-    from urllib import quote  # type: ignore[attr-defined,no-redef]
-    from urlparse import urlparse, urlsplit, urlunsplit  # type: ignore[no-redef]
-
-if URLLIB3_FROM_PIP:
-    from pip._vendor.urllib3 import Retry, Timeout
-    from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
-else:
+if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import Retry, Timeout
     from urllib3.exceptions import HTTPError, InsecureRequestWarning
+else:
+    from pip._vendor.urllib3 import Retry, Timeout
+    from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
 
 setup_urllib3_ssl()
 
@@ -44,9 +29,9 @@ try:
 except ImportError:
     # Import pip._internal.download first to avoid a potential recursive import
     try:
-        from pip._internal import download as _  # noqa: F401
+        from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
     except ImportError:
-        pass  # Not absolutely necessary
+        pass  # doesn't exist in pip 20.0+
     try:
         from pip._vendor import requests  # type: ignore[no-redef]
     except ImportError:
@@ -60,12 +45,12 @@ EXIT_NO_INTERNET = 3
 HTTP_TIMEOUT = Timeout(90)
 # Always retry on 503 or 504, but never on connect or 429, the latter handled specially
 HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
-HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))
+HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))  # type: ignore[misc]
 
 # Globals
 post_url = None
 ident = None
-msg_queue = None  # type: Optional[SimpleQueue[Tuple[int, str]]]
+msg_queue: Optional[SimpleQueue[Tuple[int, str]]] = None
 
 
 def log(level, url, msg):
@@ -74,8 +59,7 @@ def log(level, url, msg):
     msg_queue.put((level, '[Note Scraper] Post {}{}: {}\n'.format(ident, url_msg, msg)))
 
 
-class WebCrawler(object):
-
+class WebCrawler:
     # Python 2.x urllib.always_safe is private in Python 3.x; its content is copied here
     _ALWAYS_SAFE_BYTES = (b'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
                           b'abcdefghijklmnopqrstuvwxyz'
@@ -110,10 +94,11 @@ class WebCrawler(object):
         except UnicodeError:
             netloc = parts.netloc
 
-        return urlunsplit(tuple(itertools.chain(
-            (to_native_str(parts.scheme), to_native_str(netloc).rstrip(':')),
-            (cls.quote_unsafe(getattr(parts, p)) for p in ('path', 'query', 'fragment')),
-        )))
+        return urlunsplit((
+            parts.scheme,
+            netloc.rstrip(':'),
+            *(cls.quote_unsafe(getattr(parts, p)) for p in ('path', 'query', 'fragment')),
+        ))
 
     def ratelimit_sleep(self, headers):
         reset = headers.get('X-Rate-Limit-Reset')
@@ -170,25 +155,29 @@ class WebCrawler(object):
         element = soup.find('a', class_='more_notes_link')
         if not element:
             return None
-        onclick = element.get_attribute_list('onclick')[0]
+        onclick = element.get_attribute_list('onclick')[0]  # pytype: disable=attribute-error
         if not onclick:
             log(LogLevel.WARN, notes_url, 'No onclick attribute, probably a dashboard-only blog')
             return None
-        match = re.search(r";tumblrReq\.open\('GET','([^']+)'", onclick)
-        if not match:
+        match_ = re.search(r";tumblrReq\.open\('GET','([^']+)'", onclick)
+        if not match_:
             log(LogLevel.ERROR, notes_url, 'tumblrReq regex failed, did Tumblr update?')
             return None
-        path = match.group(1)
-        if not path.startswith('/'):
-            path = '/' + path
-        return base + path
+        url = urljoin(base, match_.group(1))
+        spl = urlsplit(url)
+        query = parse_qs(spl.query)
+        try:
+            del query['large']
+        except KeyError:
+            pass
+        return urlunsplit(spl._replace(query=urlencode(query, doseq=True)))
 
     def append_notes(self, soup, notes_list, notes_url):
         notes = soup.find('ol', class_='notes')
         if notes is None:
             log(LogLevel.WARN, notes_url, 'Response HTML does not have a notes list')
             return False
-        notes = notes.find_all('li')
+        notes = notes.find_all('li')  # pytype: disable=attribute-error
         for note in reversed(notes):
             classes = note.get('class', [])
             if 'more_notes_link_container' in classes:
@@ -205,7 +194,7 @@ class WebCrawler(object):
         base = '{uri.scheme}://{uri.netloc}'.format(uri=parsed_uri)
 
         notes_10k = 0
-        notes_list = []  # type: List[Text]
+        notes_list: List[str] = []
 
         notes_url = post_url
         while True:
@@ -228,7 +217,7 @@ class WebCrawler(object):
                 log(LogLevel.WARN, notes_url, 'Warning: Reached notes limit, stopping early.')
                 break
 
-        return u''.join(notes_list)
+        return ''.join(notes_list)
 
 
 def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cookiefile, notes_limit):
@@ -261,4 +250,4 @@ def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cooki
         msg_queue._writer.close()  # type: ignore[attr-defined]
 
     with ConnectionFile(stdout_conn, 'w') as stdout:
-        print(notes, end=u'', file=stdout)
+        print(notes, end='', file=stdout)
