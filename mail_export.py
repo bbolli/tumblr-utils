@@ -20,7 +20,7 @@ import smtplib
 import textwrap
 import urllib.parse
 import urllib.request
-from email.mime.text import MIMEText
+from email.message import EmailMessage
 import json
 
 
@@ -94,14 +94,15 @@ http://%s
             print(body)
             return
 
-        msg = MIMEText(body)
+        msg = EmailMessage()
+        msg.set_content(body, cte='quoted-printable')
         msg['Subject'] = "Interesting links" if len(links) > 1 else links[0]['link-text']
         msg['From'] = '%s (%s)' % (SENDER, self.user)
         if self.recipients:
             msg['To'] = ', '.join(self.recipients)
 
         if options.full:
-            print(msg.as_string())
+            print(str(msg))
             return
 
         smtp = smtplib.SMTP(SMTP_SERVER)
