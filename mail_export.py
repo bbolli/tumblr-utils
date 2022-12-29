@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """E-mails a user's recent Tumblr links to recipients.
 
@@ -17,14 +17,10 @@ import os
 import re
 import smtplib
 import textwrap
-import urllib
-import urlparse
+import urllib.parse
+import urllib.request
 from email.mime.text import MIMEText
-try:
-    import json
-except ImportError:
-    # Python 2.5 and earlier need this package
-    import simplejson as json
+import json
 
 
 # configuration
@@ -59,12 +55,12 @@ class TumblrToMail:
 
     def get_links(self):
         url = 'http://%s/api/read/json?type=link&filter=text' % self.domain
-        posts = urllib.urlopen(url).read()
-        posts = re.sub(r'^.*?(\{.*\});*$', r'\1', posts)   # extract the JSON structure
+        posts = urllib.request.urlopen(url).read()
+        posts = re.sub(rb'^.*?(\{.*\});*$', r'\1', posts)   # extract the JSON structure
         try:
             posts = json.loads(posts)
         except ValueError:
-            print posts
+            print(posts)
             return []
         return [
             p for p in posts['posts']
@@ -72,9 +68,9 @@ class TumblrToMail:
         ]
 
     def make_mail(self, link):
-        url = list(urlparse.urlsplit(link['link-url']))
-        url[2] = urllib.quote(url[2])
-        mail = self.lw.fill(u'%s: %s' % (link['link-text'], urlparse.urlunsplit(url)))
+        url = list(urllib.parse.urlsplit(link['link-url']))
+        url[2] = urllib.parse.quote(url[2])
+        mail = self.lw.fill('%s: %s' % (link['link-text'], urllib.parse.urlunsplit(url)))
         desc = link['link-description']
         if desc:
             mail += '\n\n' + self.tw.fill(desc)
@@ -94,18 +90,17 @@ http://%s
         self.latest = max(int(l['id']) for l in links) if not options.dry_run else None
 
         if not self.recipients and not options.full:
-            print body
+            print(body)
             return
 
-        msg = MIMEText(body.encode('utf-8'))
-        msg.set_charset('utf-8')
+        msg = MIMEText(body)
         msg['Subject'] = "Interesting links" if len(links) > 1 else links[0]['link-text']
         msg['From'] = '%s (%s)' % (SENDER, self.user)
         if self.recipients:
             msg['To'] = ', '.join(self.recipients)
 
         if options.full:
-            print msg.as_string()
+            print(msg.as_string())
             return
 
         smtp = smtplib.SMTP(SMTP_SERVER)
