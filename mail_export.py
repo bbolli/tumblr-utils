@@ -109,26 +109,24 @@ http://%s
 
 
 def main():
-    import optparse
-    parser = optparse.OptionParser("Usage: %prog [options] blog-name tag [recipient ...]",
+    import argparse
+    parser = argparse.ArgumentParser(
         description="Sends an email generated from tagged link posts.",
-        epilog="Without recipients, prints the mail body to stdout."
     )
-    parser.add_option('-d', '--dry-run', action='store_true',
+    parser.add_argument('-d', '--dry-run', action='store_true',
         help="don't save which link was sent last"
     )
-    parser.add_option('-f', '--full', action='store_true',
-        help="print the full mail with headers to stdout"
+    parser.add_argument('-f', '--full', action='store_true',
+        help="print the full mail with headers"
     )
-    options, args = parser.parse_args()
-    try:
-        user = args[0]
-        tag = args[1]
-        recipients = args[2:]
-    except IndexError:
-        parser.error("blog-name and tag are required arguments.")
+    parser.add_argument('user', help="The Tumblr user or custom domain name")
+    parser.add_argument('tag', help="The tag to filter for")
+    parser.add_argument('recipients', nargs='*',
+        help="The email recipients (if none, print the email body)"
+    )
 
-    TumblrToMail(user, tag, recipients).run(options)
+    options = parser.parse_args()
+    TumblrToMail(options.user, options.tag, options.recipients).run(options)
 
 
 if __name__ == '__main__':
