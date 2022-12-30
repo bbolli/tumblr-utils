@@ -5,9 +5,9 @@ import oauth2 as oauth
 consumer_key = sys.argv[1]
 consumer_secret = sys.argv[2]
 
-request_token_url = 'http://www.tumblr.com/oauth/request_token'
-access_token_url = 'http://www.tumblr.com/oauth/access_token'
-authorize_url = 'http://www.tumblr.com/oauth/authorize'
+request_token_url = 'https://www.tumblr.com/oauth/request_token'
+access_token_url = 'https://www.tumblr.com/oauth/access_token'
+authorize_url = 'https://www.tumblr.com/oauth/authorize'
 
 consumer = oauth.Consumer(consumer_key, consumer_secret)
 client = oauth.Client(consumer)
@@ -17,7 +17,7 @@ client = oauth.Client(consumer)
 # said access token.
 
 resp, content = client.request(request_token_url, "POST",
-    body=urllib.parse.urlencode({"oauth_callback": "http://www.tumblr.com/omgwtf"})
+    body=urllib.parse.urlencode({"oauth_callback": "https://www.tumblr.com/omgwtf"})
 )
 if resp['status'] != '200':
     raise Exception("Invalid response %s." % resp['status'])

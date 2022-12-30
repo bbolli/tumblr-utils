@@ -1,6 +1,6 @@
 ## 0. Description
 
-`tumblr_backup.py` is a script that backs up your [Tumblr](http://tumblr.com)
+`tumblr_backup.py` is a script that backs up your [Tumblr](https://tumblr.com)
 blog locally.
 
 The backup includes all images both from inline text as well as photo posts. An index links to
@@ -10,7 +10,7 @@ the output format. The audio and video files can also be saved.
 
 By default, all posts of a blog are backed up in minimally styled HTML5.
 
-You can see an example of its output [on my home page](http://drbeat.li/tumblr).
+You can see an example of its output [on my home page](https://drbeat.li/tumblr).
 
 
 ## 1. Installation
@@ -197,7 +197,7 @@ The directories look like this:
 
 The modification time of the single post pages is set to the post’s timestamp.
 `tumblr_backup` applies a simple style to the saved pages. All generated pages
-are [HTML5](http://html5.org).
+are [HTML5](https://html5.org).
 
 The index pages are recreated from scratch after every backup, based on the
 existing single post pages. Normally, the index and monthly pages are in
@@ -288,7 +288,7 @@ All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
 
 `tumblr_backup` is developed and tested on Linux and OS X. If you want to run
-it under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)
+it under Windows, I suggest to try the excellent [Cygwin](https://cygwin.com)
 environment.
 
 
@@ -309,4 +309,4 @@ There are no formal releases so check back often!
 ## 6. Author
 
 Beat Bolli `<me+tumblr-utils@drbeat.li>`,
-[http://drbeat.li/py/](http://drbeat.li/py/)
+[https://drbeat.li/py/](https://drbeat.li/py/)

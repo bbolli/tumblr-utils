@@ -55,7 +55,7 @@ class TumblrToMail:
             open(self.db_file, 'w').write(repr(self.db))
 
     def get_links(self):
-        url = 'http://%s/api/read/json?type=link&filter=text' % self.domain
+        url = 'https://%s/api/read/json?type=link&filter=text' % self.domain
         posts = urllib.request.urlopen(url).read()
         posts = re.sub(rb'^.*?(\{.*\});*$', r'\1', posts)   # extract the JSON structure
         try:

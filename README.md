@@ -23,4 +23,4 @@ a password in Tumblr's v2 API.
 
 ### License
 
-[GPL3](http://www.gnu.org/licenses/gpl-3.0.txt).
+[GPL3](https://www.gnu.org/licenses/gpl-3.0.txt).

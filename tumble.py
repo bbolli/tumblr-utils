@@ -25,9 +25,8 @@ developer site and running the included oauth.py with the consumer key and
 secret as arguments to get an access token and secret.
 
 Non-standard Python dependencies:
-    - simplejson (http://pypi.python.org/pypi/simplejson/; for Python <= 2.6)
-    - oauth2 (http://pypi.python.org/pypi/oauth2/)
-    - httplib2 (http://pypi.python.org/pypi/httplib2/)
+    - feedparser (https://pypi.python.org/pypi/feedparser/)
+    - oauth2 (https://pypi.python.org/pypi/oauth2/)
 """
 
 import sys
@@ -41,7 +40,7 @@ import json
 import oauth2 as oauth
 import feedparser
 
-URL_FMT = 'http://api.tumblr.com/v2/blog/%s/post'
+URL_FMT = 'https://api.tumblr.com/v2/blog/%s/post'
 CONFIG = '~/.config/tumblr'
 
 
