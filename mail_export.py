@@ -41,7 +41,7 @@ class TumblrToMail:
         self.db_key = (user, tag)
         try:
             self.db = eval(open(self.db_file).read(), {}, {})
-        except:
+        except Exception:
             self.db = {}
         self.latest = self.db.get(self.db_key, 0)
         self.lw = textwrap.TextWrapper(initial_indent='* ', subsequent_indent='  ',

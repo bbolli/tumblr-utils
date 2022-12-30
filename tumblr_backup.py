@@ -599,7 +599,7 @@ class TumblrBackup:
 
                 i += MAX_POSTS
                 prev_ids = ids
-        except:
+        except BaseException:
             # ensure proper thread pool termination
             backup_pool.cancel()
             raise
@@ -796,14 +796,14 @@ class TumblrPost:
         try:
             result = ydl.extract_info(youtube_url, download=False)
             media_filename = sanitize_filename(filetmpl % result['entries'][0], restricted=True)
-        except:
+        except Exception:
             return ''
 
         # check if a file with this name already exists
         if not os.path.isfile(media_filename):
             try:
                 ydl.extract_info(youtube_url, download=True)
-            except:
+            except Exception:
                 return ''
         return '%s/%s' % (self.media_url, split(media_filename)[1])
 
