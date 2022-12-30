@@ -105,15 +105,11 @@ except locale.Error:
 encoding = 'utf-8'
 time_encoding = locale.getlocale(locale.LC_TIME)[1] or encoding
 
+ssl_ctx = ssl.create_default_context()
 
-have_ssl_ctx = sys.version_info >= (2, 7, 9)
-if have_ssl_ctx:
-    ssl_ctx = ssl.create_default_context()
-    def urlopen(url):
-        return urllib.request.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
-else:
-    def urlopen(url):
-        return urllib.request.urlopen(url, timeout=HTTP_TIMEOUT)
+
+def urlopen(url):
+    return urllib.request.urlopen(url, timeout=HTTP_TIMEOUT, context=ssl_ctx)
 
 
 def log(account, s):
@@ -1198,11 +1194,8 @@ if __name__ == '__main__':
             if not re.match(r'^\d{4}(\d\d)?(\d\d)?$', options.period):
                 parser.error("Period must be 'y', 'm', 'd' or YYYY[MM[DD]]")
         set_period()
-    if have_ssl_ctx and options.no_ssl_verify:
+    if options.no_ssl_verify:
         ssl_ctx = ssl._create_unverified_context()
-        # Otherwise, it's an old Python version without SSL verification,
-        # so this is the default.
-
     if not options.blog:
         parser.error("Missing blog-name")
     if options.outdir and len(options.blog) > 1:
