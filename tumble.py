@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
 
-"""Read a feed from stdin and post its entries to tumblr.
-
-Options:
-    -b sub-blog         Post to a sub-blog of your account.
-    -c cred-file        The name of the credentials file.
-    -e post-id          Edit the existing post with the given ID.
-                        This only looks at the first entry of the feed.
-    -d                  Debug mode: print the raw post data instead
-                        of posting it to tumblr.com.
-"""
-
 """Authorization is handled via OAuth. Prepare the file ~/.config/tumblr
 with 5 lines:
 
@@ -30,8 +19,8 @@ Non-standard Python dependencies:
 """
 
 import sys
-import os
-import getopt
+from os.path import expanduser
+import argparse
 from urllib.parse import urlencode
 from datetime import datetime
 from calendar import timegm
@@ -41,32 +30,35 @@ import oauth2 as oauth
 import feedparser
 
 URL_FMT = 'https://api.tumblr.com/v2/blog/%s/post'
-CONFIG = '~/.config/tumblr'
 
 
 class Tumble:
 
-    def __init__(self):
-        self.blog = self.consumer_token = self.consumer_secret = \
+    def __init__(self, args):
+        self.blog = self.consumer_token = self.consumer_secret = None
         self.access_token = self.access_secret = None
-        self.post_id = None
-        self.debug = False
+        self.args = args
 
-    def set_credentials(self, cred_file):
+    def set_credentials(self):
         (
             self.blog,
             self.consumer_token, self.consumer_secret,
             self.access_token, self.access_secret
-        ) = (s.strip() for s in open(cred_file))
+        ) = (s.strip() for s in open(expanduser(self.args.cred_file)))
 
     def tumble(self, feed):
-        feed = feedparser.parse(feed)
-        if self.post_id:
-            return [self.post(feed.entries[0])]
-        else:
-            return [self.post(e) for e in feed.entries]
+        if self.args.sub_blog:
+            self.blog = self.args.sub_blog
+        if '.' not in self.blog:
+            self.blog += '.tumblr.com'
 
-    def post(self, entry):
+        feed = feedparser.parse(feed)
+        if self.args.post_id:
+            return [self.post(feed.entries[0], self.args.post_id)]
+        else:
+            return [self.post(e, None) for e in feed.entries]
+
+    def post(self, entry, post_id):
         # the first enclosure determines the media type
         enc = entry.get('enclosures', [])
         if enc:
@@ -100,16 +92,14 @@ class Tumble:
                 data['date'] = pub.isoformat(' ')
                 break
 
-        if '.' not in self.blog:
-            self.blog += '.tumblr.com'
         url = URL_FMT % self.blog
-        if self.post_id:
-            data['id'] = self.post_id
+        if post_id:
+            data['id'] = post_id
             op = 'edit'
             url += '/edit'
         else:
             op = 'post'
-        if self.debug:
+        if self.args.debug:
             return dict(url=url, entry=entry, data=data)
 
         for k in data:
@@ -123,7 +113,7 @@ class Tumble:
         try:
             headers, resp = client.request(url, method='POST', body=urlencode(data))
             resp = json.loads(resp)
-        except ValueError as e:
+        except ValueError:
             return 'error', 'json', resp
         except EnvironmentError as e:
             return 'error', str(e)
@@ -132,35 +122,38 @@ class Tumble:
         else:
             return 'error', headers, resp
 
+
 if __name__ == '__main__':
-    t = Tumble()
+    parser = argparse.ArgumentParser(
+        description="Read an RSS feed from stdin and post its entries to tumblr."
+    )
+    parser.add_argument(
+        '-b', '--sub-blog', help="post to a sub-blog of your account"
+    )
+    parser.add_argument(
+        '-c', '--cred-file', default='~/.config/tumblr',
+        help="the name of the credentials file"
+    )
+    parser.add_argument(
+        '-e', '--post-id', help="edit the existing post with the given ID "
+        "using the feed's first entry"
+    )
+    parser.add_argument(
+        '-d', '--debug', action='store_true',
+        help="debug mode: print the raw post data instead of posting it"
+    )
+    args = parser.parse_args()
+
+    t = Tumble(args)
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hb:c:e:d')
-    except getopt.GetoptError:
-        print("Usage: %s [-b blog-name] [-c cred-file] [-e post-id] [-d]" %
-            sys.argv[0].split(os.sep)[-1])
-        sys.exit(1)
-    for o, v in opts:
-        if o == '-h':
-            print(__doc__.strip())
-            sys.exit(0)
-        if o == '-b':
-            t.blog = v
-        elif o == '-c':
-            CONFIG = v
-        elif o == '-e':
-            t.post_id = v
-        elif o == '-d':
-            t.debug = True
-    try:
-        t.set_credentials(os.path.expanduser(CONFIG))
+        t.set_credentials()
     except EnvironmentError:
-        sys.stderr.write('Credentials file %s not found or not readable\n' % CONFIG)
+        print(f'Credentials file {args.cred_file} not found or not readable\n', file=sys.stderr)
         sys.exit(1)
     result = t.tumble(sys.stdin.buffer)  # read stdin in binary mode
     if result:
         import pprint
         pprint.pprint(result)
-        if not t.debug and 'error' in [r[0] for r in result]:
+        if not args.debug and 'error' in [r[0] for r in result]:
             sys.exit(2)
     sys.exit(0)
