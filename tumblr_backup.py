@@ -49,7 +49,7 @@ TAGLINK_FMT = 'http://%(domain)s/tagged/%(tag)s'
 # exit codes
 EXIT_SUCCESS    = 0
 EXIT_NOPOSTS    = 1
-# EXIT_OPTPARSE = 2 -- returned by module optparse
+# EXIT_ARGPARSE = 2 -- returned by module argparse
 EXIT_INTERRUPT  = 3
 EXIT_ERRORS     = 4
 
@@ -1079,113 +1079,113 @@ class ThreadPool:
 
 
 if __name__ == '__main__':
-    import optparse
+    import argparse
 
-    def csv_callback(option, opt, value, parser):
-        setattr(parser.values, option.dest, set(value.split(',')))
+    class Request(argparse.Action):
+        def __init__(self, option_strings, dest, **kwargs):
+            super().__init__(option_strings, dest, **kwargs)
+            self.default = defaultdict(set)
 
-    def tags_callback(option, opt, value, parser):
-        request_callback(option, opt, TYPE_ANY + ':' + value.replace(',', ':'), parser)
+        def __call__(self, parser, ns, values, opt=None):
+            for req in values.lower().split(','):
+                tags = req.strip().split(':')
+                typ = tags.pop(0)
+                if typ != TYPE_ANY and typ not in POST_TYPES:
+                    parser.error("%s: invalid post type '%s'" % (opt, typ))
+                for typ in POST_TYPES if typ == TYPE_ANY else (typ,):
+                    ns.request[typ] |= set(tags or (TAG_ANY,))
 
-    def request_callback(option, opt, value, parser):
-        request = parser.values.request or {}
-        for req in value.lower().split(','):
-            parts = req.strip().split(':')
-            typ = parts.pop(0)
-            if typ != TYPE_ANY and typ not in POST_TYPES:
-                parser.error("%s: invalid post type '%s'" % (opt, typ))
-            for typ in POST_TYPES if typ == TYPE_ANY else (typ,):
-                if parts:
-                    request[typ] = request.get(typ, set()).union(parts)
-                else:
-                    request[typ] = set([TAG_ANY])
-        parser.values.request = request
+    class Tags(Request):
+        def __call__(self, parser, ns, values, opt=None):
+            super().__call__(parser, ns, TYPE_ANY + ':' + values.replace(',', ':'), opt)
 
-    parser = optparse.OptionParser("Usage: %prog [options] blog-name ...",
+    parser = argparse.ArgumentParser(
         description="Makes a local backup of Tumblr blogs."
     )
-    parser.add_option('-O', '--outdir', help="set the output directory"
+    parser.add_argument('-O', '--outdir', help="set the output directory"
         " (default: blog-name)"
     )
-    parser.add_option('-D', '--dirs', action='store_true',
+    parser.add_argument('-D', '--dirs', action='store_true',
         help="save each post in its own folder"
     )
-    parser.add_option('-q', '--quiet', action='store_true',
+    parser.add_argument('-q', '--quiet', action='store_true',
         help="suppress progress messages"
     )
-    parser.add_option('-i', '--incremental', action='store_true',
+    parser.add_argument('-i', '--incremental', action='store_true',
         help="incremental backup mode"
     )
-    parser.add_option('-l', '--likes', action='store_true',
+    parser.add_argument('-l', '--likes', action='store_true',
         dest='likes', help="save a blog's likes, not its posts"
     )
-    parser.add_option('-k', '--skip-images', action='store_false', default=True,
+    parser.add_argument('-k', '--skip-images', action='store_false', default=True,
         dest='save_images', help="do not save images; link to Tumblr instead"
     )
-    parser.add_option('--save-video', action='store_true', help="save all video files")
-    parser.add_option('--save-video-tumblr', action='store_true', help="save only Tumblr video files")
-    parser.add_option('--save-audio', action='store_true', help="save audio files")
-    parser.add_option('--cookiefile', help="cookie file for youtube-dl", metavar='FILE')
-    parser.add_option('-j', '--json', action='store_true',
+    parser.add_argument('--save-video', action='store_true', help="save all video files")
+    parser.add_argument('--save-video-tumblr', action='store_true', help="save only Tumblr video files")
+    parser.add_argument('--save-audio', action='store_true', help="save audio files")
+    parser.add_argument('--cookiefile', help="cookie file for youtube-dl")
+    parser.add_argument('-j', '--json', action='store_true',
         help="save the original JSON source"
     )
-    parser.add_option('-b', '--blosxom', action='store_true',
+    parser.add_argument('-b', '--blosxom', action='store_true',
         help="save the posts in blosxom format"
     )
-    parser.add_option('-r', '--reverse-month', action='store_false', default=True,
+    parser.add_argument('-r', '--reverse-month', action='store_false', default=True,
         help="reverse the post order in the monthly archives"
     )
-    parser.add_option('-R', '--reverse-index', action='store_false', default=True,
+    parser.add_argument('-R', '--reverse-index', action='store_false', default=True,
         help="reverse the index file order"
     )
-    parser.add_option('--tag-index', action='store_true',
+    parser.add_argument('--tag-index', action='store_true',
         help="also create an archive per tag"
     )
-    parser.add_option('-a', '--auto', type='int', metavar="HOUR",
+    parser.add_argument('-a', '--auto', type=int, metavar="HOUR",
         help="do a full backup at HOUR hours, otherwise do an incremental backup"
         " (useful for cron jobs)"
     )
-    parser.add_option('-n', '--count', type='int', default=0,
+    parser.add_argument('-n', '--count', type=int, default=0,
         help="save only COUNT posts"
     )
-    parser.add_option('-s', '--skip', type='int', default=0,
+    parser.add_argument('-s', '--skip', type=int, default=0,
         help="skip the first SKIP posts"
     )
-    parser.add_option('-p', '--period', help="limit the backup to PERIOD"
+    parser.add_argument('-p', '--period', help="limit the backup to PERIOD"
         " ('y', 'm', 'd' or YYYY[MM[DD]])"
     )
-    parser.add_option('-N', '--posts-per-page', type='int', default=50,
+    parser.add_argument('-N', '--posts-per-page', type=int, default=50,
         metavar='COUNT', help="set the number of posts per monthly page, "
         "0 for unlimited"
     )
-    parser.add_option('-Q', '--request', type='string', action='callback',
-        callback=request_callback, help="save posts matching the request"
+    parser.add_argument('-Q', '--request', action=Request,
+        help="save posts matching the request"
         " TYPE:TAG:TAG:…,TYPE:TAG:…,…. TYPE can be %s or %s; TAGs can be"
         " omitted or a colon-separated list. Example: -Q %s:personal,quote"
         ",photo:me:self" % (', '.join(POST_TYPES), TYPE_ANY, TYPE_ANY)
     )
-    parser.add_option('-t', '--tags', type='string', action='callback',
-        callback=tags_callback, help="save only posts tagged TAGS (comma-separated values;"
+    parser.add_argument('-t', '--tags', action=Tags,
+        help="save only posts tagged TAGS (comma-separated values;"
         " case-insensitive)"
     )
-    parser.add_option('-T', '--type', type='string', action='callback',
-        callback=request_callback, help="save only posts of type TYPE"
+    parser.add_argument('-T', '--type', action=Request,
+        help="save only posts of type TYPE"
         " (comma-separated values from %s)" % ', '.join(POST_TYPES)
     )
-    parser.add_option('--no-reblog', action='store_true', help="don't save reblogged posts")
-    parser.add_option('-I', '--image-names', type='choice', choices=('o', 'i', 'bi'),
+    parser.add_argument('--no-reblog', action='store_true', help="don't save reblogged posts")
+    parser.add_argument('-I', '--image-names', choices=('o', 'i', 'bi'),
         default='o', metavar='FMT',
         help="image filename format ('o'=original, 'i'=<post-id>, 'bi'=<blog-name>_<post-id>)"
     )
-    parser.add_option('-e', '--exif', type='string', action='callback',
-        callback=csv_callback, default=set(), metavar='KW',
+    parser.add_argument('-e', '--exif', metavar='KW',
         help="add EXIF keyword tags to each picture (comma-separated values;"
         " '-' to remove all tags, '' to add no extra tags)"
     )
-    parser.add_option('-S', '--no-ssl-verify', action='store_true',
+    parser.add_argument('-S', '--no-ssl-verify', action='store_true',
         help="ignore SSL verification errors"
     )
-    options, args = parser.parse_args()
+    parser.add_argument('blog', nargs='+', default=DEFAULT_BLOGS,
+        help="the blog(s) to backup"
+    )
+    options = parser.parse_args()
 
     if options.auto is not None and options.auto != time.localtime().tm_hour:
         options.incremental = True
@@ -1203,15 +1203,16 @@ if __name__ == '__main__':
         # Otherwise, it's an old Python version without SSL verification,
         # so this is the default.
 
-    args = args or DEFAULT_BLOGS
-    if not args:
+    if not options.blog:
         parser.error("Missing blog-name")
-    if options.outdir and len(args) > 1:
+    if options.outdir and len(options.blog) > 1:
         parser.error("-O can only be used for a single blog-name")
     if options.dirs and options.tag_index:
         parser.error("-D cannot be used with --tag-index")
-    if options.exif and not pyexiv2:
-        parser.error("--exif: module 'pyexiv2' is not installed")
+    if options.exif:
+        if not pyexiv2:
+            parser.error("--exif: module 'pyexiv2' is not installed")
+        options.exif = set(options.exif.split(','))
     if options.save_video and not youtube_dl:
         parser.error("--save-video: module 'youtube_dl' is not installed")
 
@@ -1227,7 +1228,7 @@ https://www.tumblr.com/oauth/apps\n''')
 
     tb = TumblrBackup()
     try:
-        for account in args:
+        for account in options.blog:
             tb.backup(account)
     except KeyboardInterrupt:
         sys.exit(EXIT_INTERRUPT)
