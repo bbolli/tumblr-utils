@@ -846,55 +846,27 @@ class TumblrPost:
     def get_inline_image(self, match):
         """Saves an inline image if not saved yet. Returns the new <img> tag or
         the original one in case of download errors."""
-        image_url = match.group(2)
-        if image_url.startswith('//'):
-            image_url = 'http:' + image_url
-        image_url = self.maxsize_image_url(image_url)
-        path = urlparse.urlparse(image_url).path
-        image_filename = path.split('/')[-1]
-        if not image_filename or not image_url.startswith('http'):
-            return match.group(0)
-        saved_name = self.download_media(image_url, image_filename)
-        if saved_name is None:
-            return match.group(0)
-        return u'%s%s/%s%s' % (match.group(1), self.media_url,
-            saved_name, match.group(3)
-        )
+        return InlineMedia(match, maximize=True).download(self)
 
     def get_inline_video_poster(self, match):
         """Saves an inline video poster if not saved yet. Returns the new
         <video> tag or the original one in case of download errors."""
-        poster_url = match.group(2)
-        if poster_url.startswith('//'):
-            poster_url = 'http:' + poster_url
-        path = urlparse.urlparse(poster_url).path
-        poster_filename = path.split('/')[-1]
-        if not poster_filename or not poster_url.startswith('http'):
-            return match.group(0)
-        saved_name = self.download_media(poster_url, poster_filename)
-        if saved_name is None:
-            return match.group(0)
         # get rid of autoplay and muted attributes to align with normal video
         # download behaviour
-        return (u'%s%s/%s%s' % (match.group(1), self.media_url,
-            saved_name, match.group(3)
-        )).replace('autoplay="autoplay"', '').replace('muted="muted"', '')
+        return InlineMedia(match).download(self) \
+            .replace('autoplay="autoplay"', '').replace('muted="muted"', '')
 
     def get_inline_video(self, match):
         """Saves an inline video if not saved yet. Returns the new <video> tag
         or the original one in case of download errors."""
-        video_url = match.group(2)
-        if video_url.startswith('//'):
-            video_url = 'http:' + video_url
-        path = urlparse.urlparse(video_url).path
-        video_filename = path.split('/')[-1]
-        if not video_filename or not video_url.startswith('http'):
+        media = InlineMedia(match)
+        if not media.valid():
             return match.group(0)
         saved_name = None
-        if '.tumblr.com' in video_url:
-            saved_name = self.get_media_url(video_url, '.mp4')
+        if '.tumblr.com/' in media.url:
+            saved_name = self.get_media_url(media.url, '.mp4')
         elif options.save_video:
-            saved_name = self.get_youtube_url(video_url)
+            saved_name = self.get_youtube_url(media.url)
         if saved_name is None:
             return match.group(0)
         return u'%s%s%s' % (match.group(1), saved_name, match.group(3))
@@ -1042,6 +1014,33 @@ class LocalPost:
         return self.post
 
 
+class InlineMedia:
+
+    def __init__(self, match, maximize=False):
+        url = match.group(2)
+        if url.startswith('//'):
+            url = 'https:' + url
+        if maximize:
+            url = TumblrPost.maxsize_image_url(url)
+        path = urlparse.urlparse(url).path
+        self.filename = path.split('/')[-1]
+        self.match = match
+        self.url = url
+
+    def valid(self):
+        return self.filename and self.url.startswith('http')
+
+    def download(self, post):
+        if not self.valid():
+            return self.match.group(0)
+        saved_name = post.download_media(self.url, self.filename)
+        if saved_name is None:
+            return self.match.group(0)
+        return u'%s%s/%s%s' % (self.match.group(1), post.media_url,
+            saved_name, self.match.group(3)
+        )
+
+
 class ThreadPool:
 
     def __init__(self, thread_count=20, max_queue=1000):
@@ -1130,7 +1129,7 @@ if __name__ == '__main__':
     parser.add_option('--save-video', action='store_true', help="save all video files")
     parser.add_option('--save-video-tumblr', action='store_true', help="save only Tumblr video files")
     parser.add_option('--save-audio', action='store_true', help="save audio files")
-    parser.add_option('--cookiefile', help="cookie file for youtube-dl")
+    parser.add_option('--cookiefile', help="cookie file for youtube-dl", metavar='FILE')
     parser.add_option('-j', '--json', action='store_true',
         help="save the original JSON source"
     )
