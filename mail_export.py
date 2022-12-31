@@ -84,7 +84,7 @@ class TumblrToMail:
 
         body = ('\n\n'.join(self.make_mail(l) for l in links)).strip() + """
 
--- 
+--\x20
 http://%s
 """ % self.domain
 
