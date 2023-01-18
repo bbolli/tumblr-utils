@@ -584,6 +584,7 @@ class TumblrBackup:
                 self.post_count += 1
             return True
 
+        prev_ids = []
         # start the thread pool
         backup_pool = ThreadPool()
         try:
@@ -601,12 +602,14 @@ class TumblrBackup:
                     continue
 
                 posts = _get_content(soup)
+                ids = [p['id'] for p in posts]
                 # `_backup(posts)` can be empty even when `posts` is not if we don't backup reblogged posts
-                if not posts or not _backup(posts):
+                if not ids or ids == prev_ids or not _backup(posts):
                     log(account, "done\r")
                     break
 
                 i += MAX_POSTS
+                prev_ids = ids
         except:
             # ensure proper thread pool termination
             backup_pool.cancel()
