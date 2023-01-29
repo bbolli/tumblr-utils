@@ -1014,7 +1014,7 @@ class InlineMedia:
             url = 'https:' + url
         if maximize:
             url = TumblrPost.maxsize_image_url(url)
-        path = urlparse.urlparse(url).path
+        path = urllib.parse.urlparse(url).path
         self.filename = path.split('/')[-1]
         self.match = match
         self.url = url
