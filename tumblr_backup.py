@@ -636,23 +636,21 @@ def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
     dstpath = open_file(lambda f: f, path_parts)
 
     try:
-        srcf = open(srcpath, 'rb')
-    except (FileNotFoundError, IsADirectoryError):
+        os.stat(srcpath)
+    except FileNotFoundError:
         return False  # Source does not exist
 
-    with srcf:
-        try:
-            os.stat(dstpath)
-        except FileNotFoundError:
-            pass  # Destination does not exist yet
-        else:
-            return True  # Don't overwrite
+    try:
+        os.stat(dstpath)
+    except FileNotFoundError:
+        pass  # Destination does not exist yet
+    else:
+        return True  # Don't overwrite
 
-        # dup srcf because open() takes ownership and closes it
-        copyfile(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
-        shutil.copystat(os.dup(srcf.fileno()), dstpath)  # type: ignore[arg-type]
+    copyfile(srcpath, dstpath)
+    shutil.copystat(srcpath, dstpath)
 
-        return True  # Copied
+    return True  # Copied
 
 
 def check_optional_modules():
