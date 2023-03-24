@@ -77,6 +77,7 @@ post_dir = 'posts'
 json_dir = 'json'
 media_dir = 'media'
 archive_dir = 'archive'
+flat_dir = 'flat'
 theme_dir = 'theme'
 save_dir = '../'
 backup_css = 'backup.css'
@@ -142,6 +143,10 @@ def mkdir(dir, recursive=False):
             if e.errno != errno.EEXIST:
                 raise
 
+
+def tag_bare_name(tag):
+    # Replaces tag, quotes, and unicode quotes
+    return tag.strip("Tag ").replace("'", "").replace(unichr(8219), "").replace(unichr(8217), "")
 
 def path_to(*parts):
     return join(save_folder, *parts)
@@ -392,13 +397,94 @@ class Index:
 
         return first_file
 
+class FlatIndex:
+
+    def __init__(self, blog, body_class='index'):
+        self.blog = blog
+        self.body_class = body_class
+        self.index = defaultdict(lambda: defaultdict(list))
+
+    def add_post(self, post):
+        self.index[post.tm.tm_year][post.tm.tm_mon].append(post)
+        return self
+
+    def save_index(self, index_dir='.', title=None):
+        subtitle = self.blog.title if title else self.blog.subtitle
+        title = title or self.blog.title
+
+        if re.findall(r'(?i)Tags', index_dir):
+            index_dir = 'Tags/'
+            title = tag_bare_name(title)
+
+        posts = []
+        for year in sorted(self.index.keys(), reverse=options.reverse_index):
+            self.collect_flat(index_dir, year, posts)
+
+        self.save_posts(posts, index_dir, title)
+
+    def save_posts(self, posts, index_dir, title):
+        total_posts = len(posts)
+        per_page = options.posts_per_page if options.posts_per_page >= 1 else total_posts
+        FILE_FMT = '%s-p%d.html'
+        page = 0
+
+        def name_for_page(file_fmt, page_num):
+            if page_num < 0:
+                return ""
+
+            if page_num == 0:
+                return title + ".html"
+            else:
+                return FILE_FMT % (title, page)
+
+        while posts != []:
+            if options.dirs:
+                base = save_dir + flat_dir + '/'
+            else:
+                base = ''
+
+            previous_page = ""
+            file_name = name_for_page(FILE_FMT, page)
+            previous_page = name_for_page(FILE_FMT, page - 1)
+
+            file_page = open_text(flat_dir, index_dir, file_name)
+
+            current_posts = posts[0:per_page]
+            for post in current_posts:
+                posts.remove(post)
+            current_page_content = [self.blog.header(body_class='flat')]
+
+            current_page_content.extend(post.get_post() for post in current_posts)
+
+            if posts != []:
+                np = name_for_page(FILE_FMT, page +1)
+            else:
+                np = ""
+
+            current_page_content.append(self.blog.footer(base, previous_page, np, ""))
+
+            file_page.write('\n'.join(current_page_content))
+            page += 1
+
+        return
+
+
+    def collect_month_posts(self, index_dir, year, month):
+        return sorted(self.index[year][month], key=lambda x: x.date, reverse=options.reverse_index)
+
+    def collect_flat(self, index_dir, year, posts):
+        for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
+            posts += self.collect_month_posts(index_dir, year, month)
+
+        return posts
 
 class Indices:
 
     def __init__(self, blog):
         self.blog = blog
-        self.main_index = Index(blog)
-        self.tags = defaultdict(lambda: Index(blog, 'tag-archive'))
+        self.index_type = FlatIndex if options.flat_index else Index
+        self.main_index = self.index_type(blog)
+        self.tags = defaultdict(lambda: self.index_type(blog, 'tag-archive'))
 
     def build_index(self):
         filter = join('*', dir_index) if options.dirs else '*' + post_ext
@@ -411,12 +497,15 @@ class Indices:
 
     def save_index(self):
         self.main_index.save_index()
+        level = '../../' if options.flat_index else '../../../'
         if options.tag_index:
-            self.save_tag_index()
+            self.save_tag_index(level)
+        if options.flat_index:
+            self.fixup_media_links()
 
-    def save_tag_index(self):
+    def save_tag_index(self, level='../../../'):
         global save_dir
-        save_dir = '../../../'
+        save_dir = level
         mkdir(path_to(tag_index_dir))
         self.fixup_media_links()
         tag_index = [self.blog.header('Tag index', 'tag-index', self.blog.title, True), '<ul>']
@@ -485,9 +574,9 @@ class TumblrBackup:
         f = '<footer><nav>'
         f += '<a href=%s%s rel=index>Index</a>\n' % (save_dir, dir_index)
         if previous_page:
-            f += '| <a href=%s%s%s rel=prev>Previous</a>\n' % (base, previous_page, suffix)
+            f += '| <a href="%s%s%s" rel=prev>Previous</a>\n' % (base, previous_page, suffix)
         if next_page:
-            f += '| <a href=%s%s%s rel=next>Next</a>\n' % (base, next_page, suffix)
+            f += '| <a href="%s%s%s" rel=next>Next</a>\n' % (base, next_page, suffix)
         f += '</nav></footer>\n'
         return f
 
@@ -1147,6 +1236,9 @@ if __name__ == '__main__':
     )
     parser.add_option('--tag-index', action='store_true',
         help="also create an archive per tag"
+    )
+    parser.add_option('--flat-index', action='store_true',
+        help="Create a flat index as opposed to archive"
     )
     parser.add_option('-a', '--auto', type='int', metavar="HOUR",
         help="do a full backup at HOUR hours, otherwise do an incremental backup"
