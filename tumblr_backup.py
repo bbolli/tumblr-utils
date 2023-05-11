@@ -1507,7 +1507,7 @@ class ThreadPool:
         self.queue.put(*args, **kwargs)
 
     def wait(self):
-        logger.status('{} remaining posts to save\r'.format(self.queue.qsize()))
+        self._print_remaining(self.queue.qsize())
         self.quit.set()
         while True:
             with self.queue.all_tasks_done:
@@ -1541,12 +1541,19 @@ class ThreadPool:
                 qsize = self.queue.qsize()
 
             if self.quit.is_set() and qsize % REM_POST_INC == 0:
-                logger.status('{} remaining posts to save\r'.format(qsize))
+                self._print_remaining(qsize)
 
             try:
                 work()
             finally:
                 self.queue.task_done()
+
+    @staticmethod
+    def _print_remaining(qsize):
+        if qsize:
+            logger.status('{} remaining posts to save\r'.format(qsize))
+        else:
+            logger.status('Waiting for worker threads to finish\r')
 
 
 if __name__ == '__main__':
