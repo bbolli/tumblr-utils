@@ -648,7 +648,7 @@ class Index:
 
 class TagIndex(Index):
     def __init__(self, blog, name):
-        super(TagIndex, self).__init__(blog, 'tag-archive')
+        super().__init__(blog, 'tag-archive')
         self.name = name
 
 
@@ -1586,7 +1586,7 @@ if __name__ == '__main__':
 
     class TagsCallback(RequestCallback):
         def __call__(self, parser, namespace, values, option_string=None):
-            super(TagsCallback, self).__call__(
+            super().__call__(
                 parser, namespace, TYPE_ANY + ':' + values.replace(',', ':'), option_string,
             )
 

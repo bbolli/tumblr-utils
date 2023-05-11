@@ -69,7 +69,7 @@ else:
 
 class LockedQueue(GenericQueue[T]):
     def __init__(self, lock, maxsize=0):
-        super(LockedQueue, self).__init__(maxsize)
+        super().__init__(maxsize)
         self.mutex = lock
         self.not_empty = threading.Condition(lock)
         self.not_full = threading.Condition(lock)
@@ -246,7 +246,7 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
     class SessionWithTimeout(swt_base):
         def request(self, method, url, **kwargs):
             kwargs.setdefault('timeout', timeout)
-            return super(SessionWithTimeout, self).request(method, url, **kwargs)
+            return super().request(method, url, **kwargs)
 
     session = SessionWithTimeout()
     session.verify = verify

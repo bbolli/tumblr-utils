@@ -104,7 +104,7 @@ class WGHTTPResponse(HTTPResponse):
         self.current_url = kwargs.pop('current_url')
         self.bytes_to_skip = 0
         self.last_read_length = 0
-        super(WGHTTPResponse, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     # Make _init_length publicly usable because its implementation is nice
     def get_content_length(self, meth):
@@ -124,7 +124,7 @@ class WGHTTPResponse(HTTPResponse):
         self.last_read_length = len(data)  # Count only non-skipped data
         if not data:
             return b''
-        return super(WGHTTPResponse, self)._decode(data, decode_content, flush_decoder)  # type: ignore[misc]
+        return super()._decode(data, decode_content, flush_decoder)  # type: ignore[misc]
 
 
 class WGHTTPConnectionPool(HTTPConnectionPool):
@@ -135,11 +135,11 @@ class WGHTTPConnectionPool(HTTPConnectionPool):
         cfh_url = kwargs.pop('cfh_url', None)
         if norm_host in unreachable_hosts:
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
-        super(WGHTTPConnectionPool, self).__init__(host, port, *args, **kwargs)
+        super().__init__(host, port, *args, **kwargs)
 
     def urlopen(self, method, url, *args, **kwargs):
         kwargs['current_url'] = url
-        return super(WGHTTPConnectionPool, self).urlopen(method, url, *args, **kwargs)
+        return super().urlopen(method, url, *args, **kwargs)
 
 
 class WGHTTPSConnectionPool(HTTPSConnectionPool):
@@ -150,30 +150,30 @@ class WGHTTPSConnectionPool(HTTPSConnectionPool):
         cfh_url = kwargs.pop('cfh_url', None)
         if norm_host in unreachable_hosts:
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
-        super(WGHTTPSConnectionPool, self).__init__(host, port, *args, **kwargs)
+        super().__init__(host, port, *args, **kwargs)
 
     def urlopen(self, method, url, *args, **kwargs):
         kwargs['current_url'] = url
-        return super(WGHTTPSConnectionPool, self).urlopen(method, url, *args, **kwargs)
+        return super().urlopen(method, url, *args, **kwargs)
 
 
 class WGPoolManager(PoolManager):
     def __init__(self, num_pools=10, headers=None, **connection_pool_kw):
-        super(WGPoolManager, self).__init__(num_pools, headers, **connection_pool_kw)
+        super().__init__(num_pools, headers, **connection_pool_kw)
         self.cfh_url = None
         self.pool_classes_by_scheme = {'http': WGHTTPConnectionPool, 'https': WGHTTPSConnectionPool}
 
     def connection_from_url(self, url, pool_kwargs=None):
         try:
             self.cfh_url = url
-            return super(WGPoolManager, self).connection_from_url(url, pool_kwargs)  # type: ignore[call-arg]
+            return super().connection_from_url(url, pool_kwargs)  # type: ignore[call-arg]
         finally:
             self.cfh_url = None
 
     def urlopen(self, method, url, redirect=True, **kw):
         try:
             self.cfh_url = url
-            return super(WGPoolManager, self).urlopen(method, url, redirect, **kw)
+            return super().urlopen(method, url, redirect, **kw)
         finally:
             self.cfh_url = None
 
@@ -181,7 +181,7 @@ class WGPoolManager(PoolManager):
         if request_context is None:
             request_context = self.connection_pool_kw.copy()
         request_context['cfh_url'] = self.cfh_url
-        return super(WGPoolManager, self)._new_pool(scheme, host, port, request_context)  # type: ignore[misc]
+        return super()._new_pool(scheme, host, port, request_context)  # type: ignore[misc]
 
 
 poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT)
@@ -467,7 +467,7 @@ def touch(fl, mtime, dir_fd=None):
 class WGError(Exception):
     def __init__(self, logger, url, msg, cause=None):
         causestr = '' if cause is None else '\nCaused by {!r}'.format(cause)
-        super(WGError, self).__init__('Error retrieving resource: {}{}'.format(msg, causestr))
+        super().__init__('Error retrieving resource: {}{}'.format(msg, causestr))
         self.logger = logger
         self.url = url
 
@@ -496,7 +496,7 @@ class WGWrongCodeError(WGBadResponseError):
         msg = 'Unexpected response status: HTTP {} {}{}'.format(
             statcode, statmsg, '' if statcode in (403, 404) else '\nHeaders: {}'.format(headers),
         )
-        super(WGWrongCodeError, self).__init__(logger, url, msg)
+        super().__init__(logger, url, msg)
 
 
 class WGRangeError(WGBadResponseError):
