@@ -103,7 +103,12 @@ class WebCrawler:
             *(cls.quote_unsafe(getattr(parts, p)) for p in ('path', 'query', 'fragment')),
         ))
 
-    def ratelimit_sleep(self, headers):
+    def ratelimit_sleep(self, status_code, headers):
+        if status_code == 420:  # 'Enhance Your Calm' has no suggested delay
+            log(LogLevel.WARN, self.lasturl, 'Rate limited, sleeping for one minute')
+            time.sleep(60)
+            return True
+
         reset = headers.get('X-Rate-Limit-Reset')
         if reset is None:
             return False
@@ -147,7 +152,9 @@ class WebCrawler:
                     and (parsed_uri.path == '/safe-mode' or parsed_uri.path.startswith('/blog/view/'))
                 ):
                     sys.exit(EXIT_SAFE_MODE)
-                if resp.status_code == 429 and try_count < self.TRY_LIMIT and self.ratelimit_sleep(resp.headers):
+                if (resp.status_code in (420, 429) and try_count < self.TRY_LIMIT
+                    and self.ratelimit_sleep(resp.status_code, resp.headers)
+                ):
                     continue
                 if 200 <= resp.status_code < 300:
                     return resp.content.decode('utf-8', errors='ignore')

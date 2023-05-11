@@ -311,6 +311,12 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
         hstat.bytes_read = hstat.restval = 0
         return UErr.RETRFINISHED, doctype
 
+    # HTTP 420 Enhance Your Calm
+    if hstat.statcode == 420:
+        retry_counter.increment(url, hstat, 'Rate limited (HTTP 420 Enhance Your Calm)', 60)
+        logger.info(url, 'Rate limited, sleeping for one minute')
+        return UErr.RETRINCOMPLETE, doctype
+
     if not (doctype & RETROKF):
         e = WGWrongCodeError(logger, url, hstat.statcode, resp.reason, resp.headers)
         # Cloudflare-specific errors
@@ -541,7 +547,7 @@ class RetryCounter:
     def should_retry(self):
         return self.TRY_LIMIT is None or self.count < self.TRY_LIMIT
 
-    def increment(self, url, hstat, cause):
+    def increment(self, url, hstat, cause, sleep_dur=None):
         self.count += 1
         status = 'incomplete' if hstat.bytes_read > hstat.restval else 'failed'
         msg = 'because of {} retrieval: {}'.format(status, cause)
@@ -553,7 +559,10 @@ class RetryCounter:
             )
         trylim = '' if self.TRY_LIMIT is None else '/{}'.format(self.TRY_LIMIT)
         self.logger.info(url, 'Retrying ({}{}) {}'.format(self.count, trylim, msg))
-        time.sleep(min(self.count, self.MAX_RETRY_WAIT))
+
+        if sleep_dur is None:
+            sleep_dur = min(self.count, self.MAX_RETRY_WAIT)
+        time.sleep(sleep_dur)
 
 
 def normalized_host_from_url(url):
