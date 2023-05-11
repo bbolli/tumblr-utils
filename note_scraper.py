@@ -105,6 +105,11 @@ class WebCrawler:
         if reset is None:
             return False
 
+        # there's a comma, but both numbers seem to be the same for now
+        if ',' in reset:
+            reset, tmp = reset.split(',', 1)
+            assert reset == tmp
+
         try:
             reset_time = int(reset)
         except ValueError:
