@@ -1284,8 +1284,9 @@ class TumblrPost:
         file_exists = os.path.exists(path_to(*path_parts))
         if not (cpy_res or file_exists):
             assert wget_retrieve is not None
+            dstpath = open_file(lambda f: f, path_parts)
             try:
-                wget_retrieve(url, open_file(lambda f: f, path_parts), post_timestamp=self.post['timestamp'])
+                wget_retrieve(url, dstpath, post_id=self.ident, post_timestamp=self.post['timestamp'])
             except WGError as e:
                 e.log()
                 return None

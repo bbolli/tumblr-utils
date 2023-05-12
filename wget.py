@@ -6,6 +6,7 @@ import os
 import time
 import warnings
 from argparse import Namespace
+from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from enum import Enum
 from tempfile import NamedTemporaryFile
@@ -188,30 +189,40 @@ poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT)
 
 
 class Logger:
-    def __init__(self, original_url, log):
+    def __init__(self, original_url, post_id, log):
         self.original_url = original_url
+        self.post_id = post_id
         self.log_cb = log
-        self.prev_log_url = None
-
-    def log(self, level, url, msg):
-        qmsg = ''
-        if self.prev_log_url is None:
-            qmsg += '[wget] {}URL is {}\n'.format('' if url == self.original_url else 'Original ', self.original_url)
-            self.prev_log_url = self.original_url
-        if url != self.prev_log_url:
-            qmsg += '[wget] Current redirect URL is {}\n'.format(url)
-            self.prev_log_url = url
-        qmsg += '[wget] {}\n'.format(msg)
-        self.log_cb(level, qmsg)
 
     def info(self, url, msg):
-        self.log(LogLevel.INFO, url, msg)
+        self._log_info(LogLevel.INFO, url, msg)
 
     def warn(self, url, msg):
-        self.log(LogLevel.WARN, url, msg)
+        self._log_info(LogLevel.WARN, url, msg)
 
-    def error(self, url, msg):
-        self.log(LogLevel.ERROR, url, msg)
+    def error(self, url, msg, info):
+        qmsg = '[wget] Error retrieving media\n'
+        qmsg += '  {}\n'.format(msg)
+        if self.post_id is not None:
+            info['Post'] = self.post_id
+
+        url_key = 'URL' if url == self.original_url else 'Original URL'
+        info[url_key] = self.original_url
+        if url != self.original_url:
+            info['Redirect URL'] = url
+
+        for k, v in info.items():
+            qmsg += '  {}: {}\n'.format(k, v)
+
+        self.log_cb(LogLevel.WARN, qmsg)  # wget errors can still be silenced
+
+    def _log_info(self, level, url, msg):
+        qmsg = '[wget] {}\n'.format(msg)
+        qmsg += '  URL{}: {}\n'.format(
+            '' if url == self.original_url else ' (redirect)',
+            url,
+        )
+        self.log_cb(level, qmsg)
 
 
 def gethttp(url, hstat, doctype, logger, retry_counter):
@@ -465,14 +476,23 @@ def touch(fl, mtime, dir_fd=None):
 
 
 class WGError(Exception):
-    def __init__(self, logger, url, msg, cause=None):
-        causestr = '' if cause is None else '\nCaused by {!r}'.format(cause)
-        super().__init__('Error retrieving resource: {}{}'.format(msg, causestr))
+    def __init__(self, logger, url, msg, cause=None, info=None):
         self.logger = logger
         self.url = url
+        self.msg = msg
+        self.cause = cause
+        self.info = info
 
     def log(self):
-        self.logger.warn(self.url, self)
+        info = OrderedDict()
+        if self.cause is not None:
+            info['Caused by'] = repr(self.cause)
+        if self.info is not None:
+            info.update(self.info)
+        self.logger.error(self.url, self.msg, info)
+
+    def __str__(self):
+        return repr(self)
 
 
 class WGMaxRetryError(WGError):
@@ -493,10 +513,11 @@ class WGBadResponseError(WGError):
 
 class WGWrongCodeError(WGBadResponseError):
     def __init__(self, logger, url, statcode, statmsg, headers):
-        msg = 'Unexpected response status: HTTP {} {}{}'.format(
-            statcode, statmsg, '' if statcode in (403, 404) else '\nHeaders: {}'.format(headers),
-        )
-        super().__init__(logger, url, msg)
+        msg = 'Unexpected response status: HTTP {} {}'.format(statcode, statmsg)
+        info = OrderedDict()
+        if statcode not in (403, 404):
+            info['Headers'] = headers
+        super().__init__(logger, url, msg, info=info)
 
 
 class WGRangeError(WGBadResponseError):
@@ -525,8 +546,11 @@ class RetryCounter:
         status = 'incomplete' if hstat.bytes_read > hstat.restval else 'failed'
         msg = 'because of {} retrieval: {}'.format(status, cause)
         if not self.should_retry():
-            self.logger.warn(url, 'Gave up {}'.format(msg))
-            raise WGMaxRetryError(self.logger, url, 'Retrieval failed after {} tries.'.format(self.TRY_LIMIT), cause)
+            raise WGMaxRetryError(
+                self.logger, url,
+                'Retrieval {} after {} tries.'.format(status, self.TRY_LIMIT),
+                cause,
+            )
         trylim = '' if self.TRY_LIMIT is None else '/{}'.format(self.TRY_LIMIT)
         self.logger.info(url, 'Retrying ({}{}) {}'.format(self.count, trylim, msg))
         time.sleep(min(self.count, self.MAX_RETRY_WAIT))
@@ -551,12 +575,13 @@ def _retrieve_loop(
     hstat: HttpStat,
     url: str,
     dest_file: str,
+    post_id: Optional[str],
     post_timestamp: Optional[float],
     adjust_basename: Optional[Callable[[str, BinaryIO], str]],
     options: Namespace,
     log: Callable[[str], None],
 ) -> None:
-    logger = Logger(url, log)
+    logger = Logger(url, post_id, log)
 
     if urlsplit(url).scheme not in ('http', 'https'):
         raise WGBadProtocolError(logger, url, 'Non-HTTP(S) protocols are not implemented.')
@@ -725,10 +750,10 @@ class WgetRetrieveWrapper:
         self.options = options
         self.log = log
 
-    def __call__(self, url, file, post_timestamp=None, adjust_basename=None):
+    def __call__(self, url, file, post_id=None, post_timestamp=None, adjust_basename=None):
         hstat = HttpStat()
         try:
-            _retrieve_loop(hstat, url, file, post_timestamp, adjust_basename, self.options, self.log)
+            _retrieve_loop(hstat, url, file, post_id, post_timestamp, adjust_basename, self.options, self.log)
         finally:
             if hstat.dest_dir is not None:
                 os.close(hstat.dest_dir)
