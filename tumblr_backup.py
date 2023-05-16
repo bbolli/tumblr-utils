@@ -4,7 +4,6 @@
 # standard Python library imports
 import calendar
 import hashlib
-import imghdr
 import itertools
 import json
 import locale
@@ -16,6 +15,7 @@ import shutil
 import sys
 import threading
 import time
+import warnings
 from collections import defaultdict
 from datetime import datetime
 from glob import glob
@@ -88,6 +88,32 @@ except ImportError:
         except ImportError:
             raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
 
+try:
+    import filetype
+except ImportError:
+    with warnings.catch_warnings(record=True) as catcher:
+        import imghdr
+        if any(w.category is DeprecationWarning for w in catcher):
+            print('warning: filetype module not found, using deprecated imghdr', file=sys.stderr)
+
+    # add another JPEG recognizer
+    # see http://www.garykessler.net/library/file_sigs.html
+    def test_jpg(h, f):
+        if h[:3] == b'\xFF\xD8\xFF' and h[3] in b'\xDB\xE0\xE1\xE2\xE3':
+            return 'jpeg'
+
+    imghdr.tests.append(test_jpg)
+
+    def guess_extension(f):
+        ext = imghdr.what(f)
+        if ext == 'jpeg':
+            ext = 'jpg'
+        return ext
+else:
+    def guess_extension(f):
+        kind = filetype.guess(f)
+        return kind.extension if kind else None
+
 # Format of displayed tags
 TAG_FMT = '#{}'
 
@@ -101,14 +127,6 @@ EXIT_NOPOSTS    = 1
 # EXIT_ARGPARSE = 2 -- returned by argparse
 EXIT_INTERRUPT  = 3
 EXIT_ERRORS     = 4
-
-# add another JPEG recognizer
-# see http://www.garykessler.net/library/file_sigs.html
-def test_jpg(h, f):
-    if h[:3] == b'\xFF\xD8\xFF' and h[3] in b'\xDB\xE0\xE1\xE2\xE3':
-        return 'jpg'
-
-imghdr.tests.append(test_jpg)
 
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
@@ -485,7 +503,7 @@ def get_avatar(prev_archive):
 
     def adj_bn(old_bn, f):
         # Give it an extension
-        image_type = imghdr.what(f)
+        image_type = guess_extension(f)
         if image_type:
             return avatar_fpath + '.' + image_type
         return avatar_fpath
