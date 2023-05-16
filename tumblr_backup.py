@@ -22,16 +22,14 @@ from glob import glob
 from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
-from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type,
-                    TypeVar, Union, cast)
+from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type, Union,
+                    cast)
 from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
 from util import (ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, is_dns_working, make_requests_session,
                   no_internet, to_bytes)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
-
-T = TypeVar('T')
 
 if TYPE_CHECKING:
     from typing_extensions import Literal
@@ -154,7 +152,6 @@ try:
 except locale.Error:
     pass
 FILE_ENCODING = 'utf-8'
-TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
 wget_retrieve: Optional[WgetRetrieveWrapper] = None
 disable_note_scraper: Set[str] = set()
