@@ -13,8 +13,7 @@ from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
-from util import (URLLIB3_FROM_PIP, LogLevel, fdatasync, fsync, get_supported_encodings, is_dns_working,
-                  no_internet, setup_urllib3_ssl)
+from util import URLLIB3_FROM_PIP, LogLevel, fdatasync, fsync, is_dns_working, no_internet, setup_urllib3_ssl
 
 if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
@@ -38,7 +37,7 @@ HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((500, 502, 503, 
 HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))  # type: ignore[misc]
 HTTP_CHUNK_SIZE = 1024 * 1024
 
-base_headers = make_headers(keep_alive=True, accept_encoding=list(get_supported_encodings()))
+base_headers = make_headers(keep_alive=True, accept_encoding=True)
 
 
 # Document type flags

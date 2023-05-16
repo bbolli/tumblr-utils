@@ -227,17 +227,6 @@ def setup_urllib3_ssl():
             have_sni = True  # SNI always works
 
 
-def get_supported_encodings():
-    encodings = ['deflate', 'gzip']
-    try:
-        from brotli import brotli  # noqa: F401
-    except ImportError:
-        pass
-    else:
-        encodings.insert(0, 'br')  # brotli takes priority if available
-    return encodings
-
-
 def make_requests_session(session_type, retry, timeout, verify, user_agent, cookiefile):
     if TYPE_CHECKING:
         global swt_base
@@ -250,7 +239,6 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
 
     session = SessionWithTimeout()
     session.verify = verify
-    session.headers['Accept-Encoding'] = ', '.join(get_supported_encodings())
     if user_agent is not None:
         session.headers['User-Agent'] = user_agent
     for adapter in session.adapters.values():
