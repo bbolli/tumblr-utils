@@ -23,7 +23,7 @@ from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type,
-                    TypeVar, Union)
+                    TypeVar, Union, cast)
 from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
@@ -63,7 +63,7 @@ except ImportError:
             youtube_dl = None
 
 try:
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup, Tag
 except ImportError:
     if not TYPE_CHECKING:
         BeautifulSoup = None
@@ -756,10 +756,10 @@ class TumblrBackup:
         for post in posts:
             with open(post, encoding=FILE_ENCODING) as pf:
                 soup = BeautifulSoup(pf, 'lxml')
-            postdate = soup.find('time')['datetime']  # pytype: disable=unsupported-operands
+            postdate = cast(Tag, soup.find('time'))['datetime']
             del soup
             # datetime.fromisoformat does not understand 'Z' suffix
-            yield int(datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ').timestamp())
+            yield int(datetime.strptime(cast(str, postdate), '%Y-%m-%dT%H:%M:%SZ').timestamp())
 
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
@@ -1338,9 +1338,9 @@ class TumblrPost:
             assert self.prev_archive is not None
             with open(join(self.prev_archive, post_dir, self.ident + post_ext)) as post_file:
                 soup = BeautifulSoup(post_file, 'lxml')
-            notes = soup.find('ol', class_='notes')
+            notes = cast(Tag, soup.find('ol', class_='notes'))
             if notes is not None:
-                notes_html = ''.join([n.prettify() for n in notes.find_all('li')])  # pytype: disable=attribute-error
+                notes_html = ''.join([n.prettify() for n in notes.find_all('li')])
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
             # Scrape and save notes
