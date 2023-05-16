@@ -22,14 +22,14 @@ _PATH_IS_ON_VFAT_WORKS = True
 try:
     import psutil
 except ImportError:
-    psutil = None  # type: ignore[no-redef]
+    psutil = None  # type: ignore[assignment]
     _PATH_IS_ON_VFAT_WORKS = False
 
 if os.name == 'nt':
     try:
-        from nt import _getvolumepathname  # pytype: disable=import-error
+        from nt import _getvolumepathname  # type: ignore[import]
     except ImportError:
-        _getvolumepathname = None  # type: ignore[no-redef]
+        _getvolumepathname = None
         _PATH_IS_ON_VFAT_WORKS = False
 
 try:
@@ -38,7 +38,7 @@ try:
 except ImportError:
     try:
         # pip includes urllib3
-        from pip._vendor.urllib3.exceptions import DependencyWarning  # type: ignore[no-redef]
+        from pip._vendor.urllib3.exceptions import DependencyWarning  # type: ignore[assignment]
         URLLIB3_FROM_PIP = True
     except ImportError:
         raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
@@ -219,7 +219,7 @@ def setup_urllib3_ssl():
             if URLLIB3_FROM_PIP:
                 from pip._vendor.urllib3.contrib import pyopenssl
             else:
-                from urllib3.contrib import pyopenssl  # type: ignore[attr-defined]
+                from urllib3.contrib import pyopenssl  # type: ignore[no-redef]
             pyopenssl.inject_into_urllib3()
         except ImportError as e:
             print('Warning: Failed to inject pyOpenSSL: {!r}'.format(e), file=sys.stderr)

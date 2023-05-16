@@ -50,25 +50,29 @@ except ImportError:
 try:
     import pyexiv2
 except ImportError:
-    pyexiv2 = None
+    if not TYPE_CHECKING:
+        pyexiv2 = None
 
 try:
     import yt_dlp as youtube_dl
 except ImportError:
-    try:
-        import youtube_dl
-    except ImportError:
-        youtube_dl = None
+    if not TYPE_CHECKING:
+        try:
+            import youtube_dl
+        except ImportError:
+            youtube_dl = None
 
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    BeautifulSoup = None
+    if not TYPE_CHECKING:
+        BeautifulSoup = None
 
 try:
     import jq
 except ImportError:
-    jq = None
+    if not TYPE_CHECKING:
+        jq = None
 
 # NB: setup_urllib3_ssl has already been called by wget
 
@@ -78,11 +82,11 @@ except ImportError:
     if not TYPE_CHECKING:
         # Import pip._internal.download first to avoid a potential recursive import
         try:
-            from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
+            from pip._internal import download as _  # noqa: F401
         except ImportError:
             pass  # doesn't exist in pip 20.0+
         try:
-            from pip._vendor import requests  # type: ignore[no-redef]
+            from pip._vendor import requests
         except ImportError:
             raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
 
