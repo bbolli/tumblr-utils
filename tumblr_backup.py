@@ -904,7 +904,12 @@ class TumblrBackup:
         return f
 
     @staticmethod
-    def get_post_timestamp(post, BeautifulSoup):
+    def get_post_timestamp(post, BeautifulSoup_):
+        if TYPE_CHECKING:
+            from bs4 import BeautifulSoup
+        else:
+            BeautifulSoup = BeautifulSoup_
+
         with open(post, encoding=FILE_ENCODING) as pf:
             soup = BeautifulSoup(pf, 'lxml')
         postdate = cast(Tag, soup.find('time'))['datetime']
@@ -1480,7 +1485,11 @@ class TumblrPost:
         if options.cookiefile is not None:
             ydl_options['cookiefile'] = options.cookiefile
 
-        youtube_dl = import_youtube_dl()
+        if TYPE_CHECKING:
+            import youtube_dl
+        else:
+            youtube_dl = import_youtube_dl()
+
         ydl = youtube_dl.YoutubeDL(ydl_options)
         ydl.add_default_info_extractors()
         try:
@@ -1689,7 +1698,10 @@ class TumblrPost:
         notes_html = ''
 
         if options.save_notes or options.copy_notes:
-            BeautifulSoup = load_bs4('save notes' if options.save_notes else 'copy notes')
+            if TYPE_CHECKING:
+                from bs4 import BeautifulSoup
+            else:
+                BeautifulSoup = load_bs4('save notes' if options.save_notes else 'copy notes')
 
         if options.copy_notes:
             # Copy notes from prev_archive (or here)
