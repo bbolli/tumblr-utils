@@ -233,9 +233,9 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
     else:
         swt_base = session_type  # type: ignore
     class SessionWithTimeout(swt_base):
-        def request(self, method, url, **kwargs):
+        def request(self, method, url, *args, **kwargs):
             kwargs.setdefault('timeout', timeout)
-            return super().request(method, url, **kwargs)
+            return super().request(method, url, *args, **kwargs)
 
     session = SessionWithTimeout()
     session.verify = verify

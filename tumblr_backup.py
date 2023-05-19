@@ -1282,22 +1282,23 @@ class TumblrPost:
 
     def download_media(self, url, filename):
         parsed_url = urlparse(url, 'http')
-        if parsed_url.scheme not in ('http', 'https') or not parsed_url.hostname:
+        hostname = parsed_url.hostname
+        if parsed_url.scheme not in ('http', 'https') or not hostname:
             return None  # This URL does not follow our basic assumptions
 
         # Make a sane directory to represent the host
         try:
-            hostdir = parsed_url.hostname.encode('idna').decode('ascii')
+            hostname = hostname.encode('idna').decode('ascii')
         except UnicodeError:
-            hostdir = parsed_url.hostname
-        if hostdir in ('.', '..'):
-            hostdir = hostdir.replace('.', '%2E')
+            hostname = hostname
+        if hostname in ('.', '..'):
+            hostname = hostname.replace('.', '%2E')
         if parsed_url.port not in (None, (80 if parsed_url.scheme == 'http' else 443)):
-            hostdir += '{}{}'.format('+' if os.name == 'nt' else ':', parsed_url.port)
+            hostname += '{}{}'.format('+' if os.name == 'nt' else ':', parsed_url.port)
 
         path_parts = [self.media_dir, filename]
         if options.hostdirs:
-            path_parts.insert(1, hostdir)
+            path_parts.insert(1, hostname)
 
         cpy_res = maybe_copy_media(self.prev_archive, path_parts)
         file_exists = os.path.exists(path_to(*path_parts))

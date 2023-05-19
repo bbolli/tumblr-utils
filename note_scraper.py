@@ -7,10 +7,10 @@ import traceback
 import warnings
 from datetime import datetime
 from multiprocessing.queues import SimpleQueue
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, cast
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
                   to_bytes)
@@ -56,7 +56,10 @@ msg_queue: Optional[SimpleQueue[Tuple[int, str]]] = None
 def log(level, url, msg):
     assert msg_queue is not None
     url_msg = ", URL '{}'".format(url) if url != post_url else ''
-    msg_queue.put((level, '[Note Scraper] Post {}{}: {}\n'.format(ident, url_msg, msg)))
+    # see https://github.com/google/pytype/issues/1344#issuecomment-1553500779
+    msg_queue.put(  # pytype: disable=attribute-error
+        (level, '[Note Scraper] Post {}{}: {}\n'.format(ident, url_msg, msg)),
+    )
 
 
 class WebCrawler:
@@ -157,10 +160,10 @@ class WebCrawler:
     @staticmethod
     def get_more_link(soup, base, notes_url):
         global ident
-        element = soup.find('a', class_='more_notes_link')
+        element = cast(Tag, soup.find('a', class_='more_notes_link'))
         if not element:
             return None
-        onclick = element.get_attribute_list('onclick')[0]  # pytype: disable=attribute-error
+        onclick = element.get_attribute_list('onclick')[0]
         if not onclick:
             log(LogLevel.WARN, notes_url, 'No onclick attribute, probably a dashboard-only blog')
             return None
@@ -178,11 +181,11 @@ class WebCrawler:
         return urlunsplit(spl._replace(query=urlencode(query, doseq=True)))
 
     def append_notes(self, soup, notes_list, notes_url):
-        notes = soup.find('ol', class_='notes')
-        if notes is None:
+        notes_ol = cast(Tag, soup.find('ol', class_='notes'))
+        if notes_ol is None:
             log(LogLevel.WARN, notes_url, 'Response HTML does not have a notes list')
             return False
-        notes = notes.find_all('li')  # pytype: disable=attribute-error
+        notes = notes_ol.find_all('li')
         for note in reversed(notes):
             classes = note.get('class', [])
             if 'more_notes_link_container' in classes:
