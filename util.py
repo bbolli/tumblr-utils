@@ -345,7 +345,7 @@ class MultiCondition(threading.Condition):
     def __init__(self, lock):
         super().__init__(lock)
 
-    def wait(self, children, timeout=None):
+    def wait(self, children, timeout=None):  # pytype: disable=signature-mismatch
         assert len(frozenset(id(c) for c in children)) == len(children), 'Children must be unique'
         assert all(c._lock is self._lock for c in children), 'All locks must be the same'  # type: ignore[attr-defined]
 
