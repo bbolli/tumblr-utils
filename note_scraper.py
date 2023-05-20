@@ -27,16 +27,21 @@ setup_urllib3_ssl()
 try:
     import requests
 except ImportError:
-    # Import pip._internal.download first to avoid a potential recursive import
-    try:
-        from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
-    except ImportError:
-        pass  # doesn't exist in pip 20.0+
-    try:
-        from pip._vendor import requests  # type: ignore[no-redef]
-    except ImportError:
-        raise RuntimeError('The requests module is required for note scraping. '
-                           'Please install it with pip or your package manager.')
+    if not TYPE_CHECKING:
+        # Import pip._internal.download first to avoid a potential recursive import
+        try:
+            from pip._internal import download as _  # noqa: F401
+        except ImportError:
+            pass  # doesn't exist in pip 20.0+
+        try:
+            from pip._vendor import requests
+        except ImportError:
+            raise RuntimeError('The requests module is required for note scraping. '
+                               'Please install it with pip or your package manager.')
+        else:
+            from pip._vendor.requests.exceptions import RequestException
+else:
+    from requests.exceptions import RequestException
 
 EXIT_SUCCESS = 0
 EXIT_SAFE_MODE = 2
@@ -253,7 +258,7 @@ def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cooki
             notes = crawler.get_notes(post_url)
         except KeyboardInterrupt:
             sys.exit()  # Ignore these so they don't propogate into the parent
-        except HTTPError as e:
+        except (HTTPError, RequestException) as e:
             if not is_dns_working(timeout=5):
                 sys.exit(EXIT_NO_INTERNET)
             log(LogLevel.ERROR, crawler.lasturl, e)
