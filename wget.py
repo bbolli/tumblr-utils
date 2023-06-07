@@ -287,7 +287,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
     if hstat.restval > 0 and norm_enc(hstat.remote_encoding) != norm_enc(remote_encoding):
         # Retry without restart
         hstat.restval = 0
-        retry_counter.increment(hstat, 'Inconsistent Content-Encoding, must start over')
+        retry_counter.increment(url, hstat, 'Inconsistent Content-Encoding, must start over')
         return UErr.RETRINCOMPLETE, doctype
 
     hstat.remote_encoding = remote_encoding
@@ -345,7 +345,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
         # NB: Unlike wget, we will retry because restarts are expected to succeed (we do not support '-c')
         # The remote file has shrunk, retry without restart
         hstat.restval = 0
-        retry_counter.increment(hstat, 'Resume with Range failed, must start over')
+        retry_counter.increment(url, hstat, 'Resume with Range failed, must start over')
         return UErr.RETRINCOMPLETE, doctype
 
     # The Range request was misunderstood. Bail out.
