@@ -154,7 +154,7 @@ class WebCrawler:
                 try_count += 1
                 parsed_uri = urlparse(resp.url)
                 if (re.match(r'(www\.)?tumblr\.com', parsed_uri.netloc)
-                    and (parsed_uri.path == '/safe-mode' or parsed_uri.path.startswith('/blog/view/'))
+                    and re.match(r'/safe-mode$|/[a-z0-9-]+/[0-9]+(/|$)', parsed_uri.path)
                 ):
                     sys.exit(EXIT_SAFE_MODE)
                 if (resp.status_code in (420, 429) and try_count < self.TRY_LIMIT
