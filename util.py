@@ -26,14 +26,14 @@ _PATH_IS_ON_VFAT_WORKS = True
 try:
     import psutil
 except ImportError:
-    psutil = None  # type: ignore[no-redef]
+    psutil = None  # type: ignore[assignment]
     _PATH_IS_ON_VFAT_WORKS = False
 
 if os.name == 'nt':
     try:
-        from nt import _getvolumepathname  # pytype: disable=import-error
+        from nt import _getvolumepathname  # type: ignore[import]
     except ImportError:
-        _getvolumepathname = None  # type: ignore[no-redef]
+        _getvolumepathname = None
         _PATH_IS_ON_VFAT_WORKS = False
 
 try:
@@ -42,7 +42,7 @@ try:
 except ImportError:
     try:
         # pip includes urllib3
-        from pip._vendor.urllib3.exceptions import DependencyWarning  # type: ignore[no-redef]
+        from pip._vendor.urllib3.exceptions import DependencyWarning  # type: ignore[assignment]
         URLLIB3_FROM_PIP = True
     except ImportError:
         raise RuntimeError('The urllib3 module is required. Please install it with pip or your package manager.')
@@ -73,7 +73,7 @@ else:
 
 class LockedQueue(GenericQueue[T]):
     def __init__(self, lock, maxsize=0):
-        super(LockedQueue, self).__init__(maxsize)
+        super().__init__(maxsize)
         self.mutex = lock
         self.not_empty = threading.Condition(lock)
         self.not_full = threading.Condition(lock)
@@ -230,23 +230,12 @@ def setup_urllib3_ssl():
             if URLLIB3_FROM_PIP:
                 from pip._vendor.urllib3.contrib import pyopenssl
             else:
-                from urllib3.contrib import pyopenssl  # type: ignore[attr-defined]
+                from urllib3.contrib import pyopenssl  # type: ignore[no-redef]
             pyopenssl.inject_into_urllib3()
         except ImportError as e:
             print('Warning: Failed to inject pyOpenSSL: {!r}'.format(e), file=sys.stderr)
         else:
             have_sni = True  # SNI always works
-
-
-def get_supported_encodings():
-    encodings = ['deflate', 'gzip']
-    try:
-        from brotli import brotli  # noqa: F401
-    except ImportError:
-        pass
-    else:
-        encodings.insert(0, 'br')  # brotli takes priority if available
-    return encodings
 
 
 def make_requests_session(session_type, retry, timeout, verify, user_agent, cookiefile):
@@ -255,13 +244,12 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
     else:
         swt_base = session_type  # type: ignore
     class SessionWithTimeout(swt_base):
-        def request(self, method, url, **kwargs):
+        def request(self, method, url, *args, **kwargs):
             kwargs.setdefault('timeout', timeout)
-            return super(SessionWithTimeout, self).request(method, url, **kwargs)
+            return super().request(method, url, *args, **kwargs)
 
     session = SessionWithTimeout()
     session.verify = verify
-    session.headers['Accept-Encoding'] = ', '.join(get_supported_encodings())
     if user_agent is not None:
         session.headers['User-Agent'] = user_agent
     for adapter in session.adapters.values():
@@ -334,15 +322,15 @@ class MultiSeqProxy:
 # Hooks into methods used by threading.Condition.notify
 class NotifierWaiters(WaiterSeq):
     def __iter__(self):
-        return (value[0] for value in super(NotifierWaiters, self).__iter__())
+        return (value[0] for value in super().__iter__())
 
     def __getitem__(self, index):
-        item = super(NotifierWaiters, self).__getitem__(index)
+        item = super().__getitem__(index)
         return WaiterSeq(v[0] for v in item) if isinstance(index, slice) else item[0]  # pytype: disable=not-callable
 
     def remove(self, value):
         try:
-            match = next(x for x in super(NotifierWaiters, self).__iter__() if x[0] == value)
+            match = next(x for x in super().__iter__() if x[0] == value)
         except StopIteration:
             raise ValueError('deque.remove(x): x not in deque')
         for ref in match[1]:
@@ -355,7 +343,7 @@ class NotifierWaiters(WaiterSeq):
 # Supports waiting on multiple threading.Conditions objects simultaneously
 class MultiCondition(threading.Condition):
     def __init__(self, lock):
-        super(MultiCondition, self).__init__(lock)
+        super().__init__(lock)
 
     def wait(self, children, timeout=None):
         assert len(frozenset(id(c) for c in children)) == len(children), 'Children must be unique'
@@ -369,7 +357,7 @@ class MultiCondition(threading.Condition):
                 )
         self._waiters = MultiSeqProxy(tuple(c._waiters for c in children))
 
-        super(MultiCondition, self).wait(timeout)
+        super().wait(timeout)
 
     def notify(self, n=1):
         raise NotImplementedError

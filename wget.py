@@ -6,14 +6,14 @@ import os
 import time
 import warnings
 from argparse import Namespace
+from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from enum import Enum
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
-from util import (URLLIB3_FROM_PIP, LogLevel, fsync, get_supported_encodings, is_dns_working, no_internet, opendir,
-                  setup_urllib3_ssl, try_unlink)
+from util import URLLIB3_FROM_PIP, LogLevel, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl, try_unlink
 
 if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
@@ -34,12 +34,12 @@ setup_urllib3_ssl()
 
 HTTP_TIMEOUT = Timeout(90)
 # Always retry on 503 or 504, but never on connect, which is handled specially
-# Also retry on 500 since Tumblr servers have temporary failures
-HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((500, 503, 504)))
+# Also retry on 500 and 502 since Tumblr servers have temporary failures
+HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((500, 502, 503, 504)))
 HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413, 429))  # type: ignore[misc]
 HTTP_CHUNK_SIZE = 1024 * 1024
 
-base_headers = make_headers(keep_alive=True, accept_encoding=list(get_supported_encodings()))
+base_headers = make_headers(keep_alive=True, accept_encoding=True)
 
 
 # Document type flags
@@ -117,7 +117,7 @@ class WGHTTPResponse(HTTPResponse):
 
         self.bytes_to_skip = 0
         self.last_read_length = 0
-        super(WGHTTPResponse, self).__init__(
+        super().__init__(
             body, headers, status, version, reason, strict, preload_content, decode_content, original_response, pool,
             connection, msg, retries, enforce_content_length, request_method, request_url, auto_close,
         )
@@ -140,7 +140,7 @@ class WGHTTPResponse(HTTPResponse):
         self.last_read_length = len(data)  # Count only non-skipped data
         if not data:
             return b''
-        return super(WGHTTPResponse, self)._decode(data, decode_content, flush_decoder)  # type: ignore[misc]
+        return super()._decode(data, decode_content, flush_decoder)  # type: ignore[misc]
 
 
 class WGHTTPConnectionPool(HTTPConnectionPool):
@@ -151,11 +151,11 @@ class WGHTTPConnectionPool(HTTPConnectionPool):
         cfh_url = kwargs.pop('cfh_url', None)
         if norm_host in unreachable_hosts:
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
-        super(WGHTTPConnectionPool, self).__init__(host, port, *args, **kwargs)
+        super().__init__(host, port, *args, **kwargs)
 
     def urlopen(self, method, url, *args, **kwargs):
         kwargs['current_url'] = url
-        return super(WGHTTPConnectionPool, self).urlopen(method, url, *args, **kwargs)
+        return super().urlopen(method, url, *args, **kwargs)
 
 
 class WGHTTPSConnectionPool(HTTPSConnectionPool):
@@ -166,30 +166,31 @@ class WGHTTPSConnectionPool(HTTPSConnectionPool):
         cfh_url = kwargs.pop('cfh_url', None)
         if norm_host in unreachable_hosts:
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
-        super(WGHTTPSConnectionPool, self).__init__(host, port, *args, **kwargs)
+        super().__init__(host, port, *args, **kwargs)
 
     def urlopen(self, method, url, *args, **kwargs):
         kwargs['current_url'] = url
-        return super(WGHTTPSConnectionPool, self).urlopen(method, url, *args, **kwargs)
+        return super().urlopen(method, url, *args, **kwargs)
 
 
 class WGPoolManager(PoolManager):
     def __init__(self, num_pools=10, headers=None, **connection_pool_kw):
-        super(WGPoolManager, self).__init__(num_pools, headers, **connection_pool_kw)
+        super().__init__(num_pools, headers, **connection_pool_kw)
         self.cfh_url = None
         self.pool_classes_by_scheme = {'http': WGHTTPConnectionPool, 'https': WGHTTPSConnectionPool}
 
     def connection_from_url(self, url, pool_kwargs=None):
         try:
             self.cfh_url = url
-            return super(WGPoolManager, self).connection_from_url(url, pool_kwargs)  # type: ignore[call-arg]
+            return super().connection_from_url(url, pool_kwargs)  # type: ignore[call-arg]
         finally:
             self.cfh_url = None
 
-    def urlopen(self, method, url, redirect=True, **kw):
+    # the urllib3 stubs lie about this method's signature
+    def urlopen(self, method, url, redirect=True, **kw):  # pytype: disable=signature-mismatch
         try:
             self.cfh_url = url
-            return super(WGPoolManager, self).urlopen(method, url, redirect, **kw)
+            return super().urlopen(method, url, redirect, **kw)
         finally:
             self.cfh_url = None
 
@@ -197,37 +198,47 @@ class WGPoolManager(PoolManager):
         if request_context is None:
             request_context = self.connection_pool_kw.copy()
         request_context['cfh_url'] = self.cfh_url
-        return super(WGPoolManager, self)._new_pool(scheme, host, port, request_context)  # type: ignore[misc]
+        return super()._new_pool(scheme, host, port, request_context)  # type: ignore[misc]
 
 
 poolman = WGPoolManager(maxsize=20, timeout=HTTP_TIMEOUT)
 
 
 class Logger:
-    def __init__(self, original_url, log):
+    def __init__(self, original_url, post_id, log):
         self.original_url = original_url
+        self.post_id = post_id
         self.log_cb = log
-        self.prev_log_url = None
-
-    def log(self, level, url, msg):
-        qmsg = ''
-        if self.prev_log_url is None:
-            qmsg += '[wget] {}URL is {}\n'.format('' if url == self.original_url else 'Original ', self.original_url)
-            self.prev_log_url = self.original_url
-        if url != self.prev_log_url:
-            qmsg += '[wget] Current redirect URL is {}\n'.format(url)
-            self.prev_log_url = url
-        qmsg += '[wget] {}\n'.format(msg)
-        self.log_cb(level, qmsg)
 
     def info(self, url, msg):
-        self.log(LogLevel.INFO, url, msg)
+        self._log_info(LogLevel.INFO, url, msg)
 
     def warn(self, url, msg):
-        self.log(LogLevel.WARN, url, msg)
+        self._log_info(LogLevel.WARN, url, msg)
 
-    def error(self, url, msg):
-        self.log(LogLevel.ERROR, url, msg)
+    def error(self, url, msg, info):
+        qmsg = '[wget] Error retrieving media\n'
+        qmsg += '  {}\n'.format(msg)
+        if self.post_id is not None:
+            info['Post'] = self.post_id
+
+        url_key = 'URL' if url == self.original_url else 'Original URL'
+        info[url_key] = self.original_url
+        if url != self.original_url:
+            info['Redirect URL'] = url
+
+        for k, v in info.items():
+            qmsg += '  {}: {}\n'.format(k, v)
+
+        self.log_cb(LogLevel.WARN, qmsg)  # wget errors can still be silenced
+
+    def _log_info(self, level, url, msg):
+        qmsg = '[wget] {}\n'.format(msg)
+        qmsg += '  URL{}: {}\n'.format(
+            '' if url == self.original_url else ' (redirect)',
+            url,
+        )
+        self.log_cb(level, qmsg)
 
 
 def gethttp(url, hstat, doctype, logger, retry_counter):
@@ -292,7 +303,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
     if hstat.restval > 0 and norm_enc(hstat.remote_encoding) != norm_enc(remote_encoding):
         # Retry without restart
         hstat.restval = 0
-        retry_counter.increment(hstat, 'Inconsistent Content-Encoding, must start over')
+        retry_counter.increment(url, hstat, 'Inconsistent Content-Encoding, must start over')
         return UErr.RETRINCOMPLETE, doctype
 
     hstat.remote_encoding = remote_encoding
@@ -315,6 +326,12 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
     if hstat.statcode == 204:
         hstat.bytes_read = hstat.restval = 0
         return UErr.RETRFINISHED, doctype
+
+    # HTTP 420 Enhance Your Calm
+    if hstat.statcode == 420:
+        retry_counter.increment(url, hstat, 'Rate limited (HTTP 420 Enhance Your Calm)', 60)
+        logger.info(url, 'Rate limited, sleeping for one minute')
+        return UErr.RETRINCOMPLETE, doctype
 
     if not (doctype & RETROKF):
         e = WGWrongCodeError(logger, url, hstat.statcode, resp.reason, resp.headers)
@@ -344,7 +361,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
         # NB: Unlike wget, we will retry because restarts are expected to succeed (we do not support '-c')
         # The remote file has shrunk, retry without restart
         hstat.restval = 0
-        retry_counter.increment(hstat, 'Resume with Range failed, must start over')
+        retry_counter.increment(url, hstat, 'Resume with Range failed, must start over')
         return UErr.RETRINCOMPLETE, doctype
 
     # The Range request was misunderstood. Bail out.
@@ -481,14 +498,23 @@ def touch(fl, mtime, dir_fd=None):
 
 
 class WGError(Exception):
-    def __init__(self, logger, url, msg, cause=None):
-        causestr = '' if cause is None else '\nCaused by {!r}'.format(cause)
-        super(WGError, self).__init__('Error retrieving resource: {}{}'.format(msg, causestr))
+    def __init__(self, logger, url, msg, cause=None, info=None):
         self.logger = logger
         self.url = url
+        self.msg = msg
+        self.cause = cause
+        self.info = info
 
     def log(self):
-        self.logger.warn(self.url, self)
+        info = OrderedDict()
+        if self.cause is not None:
+            info['Caused by'] = repr(self.cause)
+        if self.info is not None:
+            info.update(self.info)
+        self.logger.error(self.url, self.msg, info)
+
+    def __str__(self):
+        return repr(self)
 
 
 class WGMaxRetryError(WGError):
@@ -509,10 +535,11 @@ class WGBadResponseError(WGError):
 
 class WGWrongCodeError(WGBadResponseError):
     def __init__(self, logger, url, statcode, statmsg, headers):
-        msg = 'Unexpected response status: HTTP {} {}{}'.format(
-            statcode, statmsg, '' if statcode in (403, 404) else '\nHeaders: {}'.format(headers),
-        )
-        super(WGWrongCodeError, self).__init__(logger, url, msg)
+        msg = 'Unexpected response status: HTTP {} {}'.format(statcode, statmsg)
+        info = OrderedDict()
+        if statcode not in (403, 404):
+            info['Headers'] = headers
+        super().__init__(logger, url, msg, info=info)
         self.statcode = statcode
         self.statmsg = statmsg
 
@@ -538,16 +565,22 @@ class RetryCounter:
     def should_retry(self):
         return self.TRY_LIMIT is None or self.count < self.TRY_LIMIT
 
-    def increment(self, url, hstat, cause):
+    def increment(self, url, hstat, cause, sleep_dur=None):
         self.count += 1
         status = 'incomplete' if hstat.bytes_read > hstat.restval else 'failed'
         msg = 'because of {} retrieval: {}'.format(status, cause)
         if not self.should_retry():
-            self.logger.warn(url, 'Gave up {}'.format(msg))
-            raise WGMaxRetryError(self.logger, url, 'Retrieval failed after {} tries.'.format(self.TRY_LIMIT), cause)
+            raise WGMaxRetryError(
+                self.logger, url,
+                'Retrieval {} after {} tries.'.format(status, self.TRY_LIMIT),
+                cause,
+            )
         trylim = '' if self.TRY_LIMIT is None else '/{}'.format(self.TRY_LIMIT)
         self.logger.info(url, 'Retrying ({}{}) {}'.format(self.count, trylim, msg))
-        time.sleep(min(self.count, self.MAX_RETRY_WAIT))
+
+        if sleep_dur is None:
+            sleep_dur = min(self.count, self.MAX_RETRY_WAIT)
+        time.sleep(sleep_dur)
 
 
 def normalized_host_from_url(url):
@@ -569,12 +602,13 @@ def _retrieve_loop(
     hstat: HttpStat,
     url: str,
     dest_file: str,
+    post_id: Optional[str],
     post_timestamp: Optional[float],
     adjust_basename: Optional[Callable[[str, BinaryIO], str]],
     options: Namespace,
     log: Callable[[str], None],
 ) -> None:
-    logger = Logger(url, log)
+    logger = Logger(url, post_id, log)
 
     if urlsplit(url).scheme not in ('http', 'https'):
         raise WGBadProtocolError(logger, url, 'Non-HTTP(S) protocols are not implemented.')
@@ -761,10 +795,10 @@ class WgetRetrieveWrapper:
         self.options = options
         self.log = log
 
-    def __call__(self, url, file, post_timestamp=None, adjust_basename=None):
+    def __call__(self, url, file, post_id=None, post_timestamp=None, adjust_basename=None):
         hstat = HttpStat()
         try:
-            _retrieve_loop(hstat, url, file, post_timestamp, adjust_basename, self.options, self.log)
+            _retrieve_loop(hstat, url, file, post_id, post_timestamp, adjust_basename, self.options, self.log)
         finally:
             if hstat.dest_dir is not None:
                 os.close(hstat.dest_dir)

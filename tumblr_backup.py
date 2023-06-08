@@ -6,7 +6,6 @@ import calendar
 import contextlib
 import hashlib
 import http.client
-import imghdr
 import itertools
 import json
 import locale
@@ -19,6 +18,7 @@ import sys
 import threading
 import time
 import traceback
+import warnings
 from collections import defaultdict
 from datetime import datetime, timedelta
 from glob import glob
@@ -27,8 +27,8 @@ from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from tempfile import NamedTemporaryFile
 from types import ModuleType
-from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type,
-                    TypeVar, Union)
+from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Set, Tuple, Type, Union,
+                    cast)
 from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
@@ -36,13 +36,13 @@ from util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, L
                   fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir, to_bytes)
 from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
-T = TypeVar('T')
-
 if TYPE_CHECKING:
     from typing_extensions import Literal
+    from bs4 import Tag
 else:
     class Literal(metaclass=FakeGenericMeta):
         pass
+    Tag = None
 
 JSONDict = Dict[str, Any]
 
@@ -55,12 +55,14 @@ except ImportError:
 try:
     import pyexiv2
 except ImportError:
-    pyexiv2 = None
+    if not TYPE_CHECKING:
+        pyexiv2 = None
 
 try:
     import jq
 except ImportError:
-    jq = None
+    if not TYPE_CHECKING:
+        jq = None
 
 # NB: setup_urllib3_ssl has already been called by wget
 
@@ -70,16 +72,42 @@ except ImportError:
     if not TYPE_CHECKING:
         # Import pip._internal.download first to avoid a potential recursive import
         try:
-            from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
+            from pip._internal import download as _  # noqa: F401
         except ImportError:
             pass  # doesn't exist in pip 20.0+
         try:
-            from pip._vendor import requests  # type: ignore[no-redef]
+            from pip._vendor import requests
         except ImportError:
             raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
 
+try:
+    import filetype
+except ImportError:
+    with warnings.catch_warnings(record=True) as catcher:
+        import imghdr
+        if any(w.category is DeprecationWarning for w in catcher):
+            print('warning: filetype module not found, using deprecated imghdr', file=sys.stderr)
+
+    # add another JPEG recognizer
+    # see http://www.garykessler.net/library/file_sigs.html
+    def test_jpg(h, f):
+        if h[:3] == b'\xFF\xD8\xFF' and h[3] in b'\xDB\xE0\xE1\xE2\xE3':
+            return 'jpeg'
+
+    imghdr.tests.append(test_jpg)
+
+    def guess_extension(f):
+        ext = imghdr.what(f)
+        if ext == 'jpeg':
+            ext = 'jpg'
+        return ext
+else:
+    def guess_extension(f):
+        kind = filetype.guess(f)
+        return kind.extension if kind else None
+
 # Imported later if needed
-youtube_dl: Optional[ModuleType] = None
+ytdl_module: Optional[ModuleType] = None
 
 # Format of displayed tags
 TAG_FMT = '#{}'
@@ -94,14 +122,6 @@ EXIT_NOPOSTS    = 1
 # EXIT_ARGPARSE = 2 -- returned by argparse
 EXIT_INTERRUPT  = 3
 EXIT_ERRORS     = 4
-
-# add another JPEG recognizer
-# see http://www.garykessler.net/library/file_sigs.html
-def test_jpg(h, f):
-    if h[:3] == b'\xFF\xD8\xFF' and h[3] in b'\xDB\xE0\xE1\xE2\xE3':
-        return 'jpg'
-
-imghdr.tests.append(test_jpg)
 
 # variable directory names, will be set in TumblrBackup.backup()
 save_folder = ''
@@ -145,7 +165,6 @@ try:
 except locale.Error:
     pass
 FILE_ENCODING = 'utf-8'
-TIME_ENCODING = locale.getlocale(locale.LC_TIME)[1] or FILE_ENCODING
 
 PREV_MUST_MATCH_OPTIONS = ('likes', 'blosxom')
 MEDIA_PATH_OPTIONS = ('dirs', 'hostdirs', 'image_names')
@@ -582,7 +601,7 @@ def get_avatar(prev_archive):
 
     def adj_bn(old_bn, f):
         # Give it an extension
-        image_type = imghdr.what(f)
+        image_type = guess_extension(f)
         if image_type:
             return avatar_fpath + '.' + image_type
         return avatar_fpath
@@ -669,20 +688,22 @@ def check_optional_modules():
 
 
 def import_youtube_dl():
-    global youtube_dl
-    if youtube_dl is not None:
-        return youtube_dl
+    global ytdl_module
+    if ytdl_module is not None:
+        return ytdl_module
 
     try:
-        import yt_dlp as youtube_dl
+        import yt_dlp
     except ImportError:
         pass
     else:
-        return youtube_dl
+        ytdl_module = yt_dlp
+        return ytdl_module
 
     import youtube_dl
 
-    return youtube_dl
+    ytdl_module = youtube_dl
+    return ytdl_module
 
 
 class Index:
@@ -781,7 +802,7 @@ class Index:
 
 class TagIndex(Index):
     def __init__(self, blog, name):
-        super(TagIndex, self).__init__(blog, 'tag-archive')
+        super().__init__(blog, 'tag-archive')
         self.name = name
 
 
@@ -886,9 +907,9 @@ class TumblrBackup:
     def get_post_timestamp(post, BeautifulSoup):
         with open(post, encoding=FILE_ENCODING) as pf:
             soup = BeautifulSoup(pf, 'lxml')
-        postdate = soup.find('time')['datetime']  # pytype: disable=unsupported-operands
+        postdate = cast(Tag, soup.find('time'))['datetime']
         # datetime.fromisoformat does not understand 'Z' suffix
-        return int(datetime.strptime(postdate, '%Y-%m-%dT%H:%M:%SZ').timestamp())
+        return int(datetime.strptime(cast(str, postdate), '%Y-%m-%dT%H:%M:%SZ').timestamp())
 
     @classmethod
     def process_existing_backup(cls, account, prev_archive):
@@ -1565,18 +1586,19 @@ class TumblrPost:
 
     def download_media(self, url, filename=None, offset='', extension=None):
         parsed_url = urlparse(url, 'http')
-        if parsed_url.scheme not in ('http', 'https') or not parsed_url.hostname:
+        hostname = parsed_url.hostname
+        if parsed_url.scheme not in ('http', 'https') or not hostname:
             return None  # This URL does not follow our basic assumptions
 
         # Make a sane directory to represent the host
         try:
-            hostdir = parsed_url.hostname.encode('idna').decode('ascii')
+            hostname = hostname.encode('idna').decode('ascii')
         except UnicodeError:
-            hostdir = parsed_url.hostname
-        if hostdir in ('.', '..'):
-            hostdir = hostdir.replace('.', '%2E')
+            hostname = hostname
+        if hostname in ('.', '..'):
+            hostname = hostname.replace('.', '%2E')
         if parsed_url.port not in (None, (80 if parsed_url.scheme == 'http' else 443)):
-            hostdir += '{}{}'.format('+' if os.name == 'nt' else ':', parsed_url.port)
+            hostname += '{}{}'.format('+' if os.name == 'nt' else ':', parsed_url.port)
 
         def get_path(media_dir, image_names, hostdirs):
             if filename is not None:
@@ -1585,7 +1607,7 @@ class TumblrPost:
                 fname = self.get_filename(parsed_url, image_names, offset)
                 if extension is not None:
                     fname = splitext(fname)[0] + extension
-            parts = (media_dir,) + ((hostdir,) if hostdirs else ()) + (fname,)
+            parts = (media_dir,) + ((hostname,) if hostdirs else ()) + (fname,)
             return parts
 
         path_parts = get_path(self.media_dir, options.image_names, options.hostdirs)
@@ -1620,8 +1642,9 @@ class TumblrPost:
                 return None
             # We don't have the media and we want it
             assert wget_retrieve is not None
+            dstpath = open_file(lambda f: f, path_parts)
             try:
-                wget_retrieve(url, open_file(lambda f: f, path_parts), post_timestamp=self.post['timestamp'])
+                wget_retrieve(url, dstpath, post_id=self.ident, post_timestamp=self.post['timestamp'])
             except WGError as e:
                 e.log()
                 return None
@@ -1678,11 +1701,9 @@ class TumblrPost:
             except FileNotFoundError:
                 pass  # skip
             else:
-                notes = soup.find('ol', class_='notes')
+                notes = cast(Tag, soup.find('ol', class_='notes'))
                 if notes is not None:
-                    notes_html = ''.join([
-                        n.prettify() for n in notes.find_all('li')  # pytype: disable=attribute-error
-                    ])
+                    notes_html = ''.join([n.prettify() for n in notes.find_all('li')])
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
             import note_scraper
@@ -1865,7 +1886,7 @@ class ThreadPool:
 
     def wait(self):
         with multicond:
-            logger.status('{} remaining posts to save\r'.format(self.queue.qsize()))
+            self._print_remaining(self.queue.qsize())
             self.quit_flag = True
             self.quit.notify_all()
             while self.queue.unfinished_tasks:
@@ -1907,7 +1928,7 @@ class ThreadPool:
                 work = self.queue.get(block=False)
                 qsize = self.queue.qsize()
                 if self.quit_flag and qsize % REM_POST_INC == 0:
-                    logger.status('{} remaining posts to save\r'.format(qsize))
+                    self._print_remaining(qsize)
 
             try:
                 success = work()
@@ -1915,6 +1936,13 @@ class ThreadPool:
                 self.queue.task_done()
             if not success:
                 self.errors = True
+
+    @staticmethod
+    def _print_remaining(qsize):
+        if qsize:
+            logger.status('{} remaining posts to save\r'.format(qsize))
+        else:
+            logger.status('Waiting for worker threads to finish\r')
 
 
 if __name__ == '__main__':
@@ -1961,7 +1989,7 @@ if __name__ == '__main__':
 
     class TagsCallback(RequestCallback):
         def __call__(self, parser, namespace, values, option_string=None):
-            super(TagsCallback, self).__call__(
+            super().__call__(
                 parser, namespace, TYPE_ANY + ':' + values.replace(',', ':'), option_string,
             )
 

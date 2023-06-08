@@ -7,10 +7,10 @@ import traceback
 import warnings
 from datetime import datetime
 from multiprocessing.queues import SimpleQueue
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, cast
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
                   to_bytes)
@@ -27,16 +27,21 @@ setup_urllib3_ssl()
 try:
     import requests
 except ImportError:
-    # Import pip._internal.download first to avoid a potential recursive import
-    try:
-        from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
-    except ImportError:
-        pass  # doesn't exist in pip 20.0+
-    try:
-        from pip._vendor import requests  # type: ignore[no-redef]
-    except ImportError:
-        raise RuntimeError('The requests module is required for note scraping. '
-                           'Please install it with pip or your package manager.')
+    if not TYPE_CHECKING:
+        # Import pip._internal.download first to avoid a potential recursive import
+        try:
+            from pip._internal import download as _  # noqa: F401
+        except ImportError:
+            pass  # doesn't exist in pip 20.0+
+        try:
+            from pip._vendor import requests
+        except ImportError:
+            raise RuntimeError('The requests module is required for note scraping. '
+                               'Please install it with pip or your package manager.')
+        else:
+            from pip._vendor.requests.exceptions import RequestException
+else:
+    from requests.exceptions import RequestException
 
 EXIT_SUCCESS = 0
 EXIT_SAFE_MODE = 2
@@ -56,7 +61,10 @@ msg_queue: Optional[SimpleQueue[Tuple[int, str]]] = None
 def log(level, url, msg):
     assert msg_queue is not None
     url_msg = ", URL '{}'".format(url) if url != post_url else ''
-    msg_queue.put((level, '[Note Scraper] Post {}{}: {}\n'.format(ident, url_msg, msg)))
+    # see https://github.com/google/pytype/issues/1344#issuecomment-1553500779
+    msg_queue.put(  # pytype: disable=attribute-error
+        (level, '[Note Scraper] Post {}{}: {}\n'.format(ident, url_msg, msg)),
+    )
 
 
 class WebCrawler:
@@ -100,10 +108,20 @@ class WebCrawler:
             *(cls.quote_unsafe(getattr(parts, p)) for p in ('path', 'query', 'fragment')),
         ))
 
-    def ratelimit_sleep(self, headers):
+    def ratelimit_sleep(self, status_code, headers):
+        if status_code == 420:  # 'Enhance Your Calm' has no suggested delay
+            log(LogLevel.WARN, self.lasturl, 'Rate limited, sleeping for one minute')
+            time.sleep(60)
+            return True
+
         reset = headers.get('X-Rate-Limit-Reset')
         if reset is None:
             return False
+
+        # there's a comma, but both numbers seem to be the same for now
+        if ',' in reset:
+            reset, tmp = reset.split(',', 1)
+            assert reset == tmp
 
         try:
             reset_time = int(reset)
@@ -136,10 +154,12 @@ class WebCrawler:
                 try_count += 1
                 parsed_uri = urlparse(resp.url)
                 if (re.match(r'(www\.)?tumblr\.com', parsed_uri.netloc)
-                    and (parsed_uri.path == '/safe-mode' or parsed_uri.path.startswith('/blog/view/'))
+                    and re.match(r'/safe-mode$|/[a-z0-9-]+/[0-9]+(/|$)', parsed_uri.path)
                 ):
                     sys.exit(EXIT_SAFE_MODE)
-                if resp.status_code == 429 and try_count < self.TRY_LIMIT and self.ratelimit_sleep(resp.headers):
+                if (resp.status_code in (420, 429) and try_count < self.TRY_LIMIT
+                    and self.ratelimit_sleep(resp.status_code, resp.headers)
+                ):
                     continue
                 if 200 <= resp.status_code < 300:
                     return resp.content.decode('utf-8', errors='ignore')
@@ -152,10 +172,10 @@ class WebCrawler:
     @staticmethod
     def get_more_link(soup, base, notes_url):
         global ident
-        element = soup.find('a', class_='more_notes_link')
+        element = cast(Tag, soup.find('a', class_='more_notes_link'))
         if not element:
             return None
-        onclick = element.get_attribute_list('onclick')[0]  # pytype: disable=attribute-error
+        onclick = element.get_attribute_list('onclick')[0]
         if not onclick:
             log(LogLevel.WARN, notes_url, 'No onclick attribute, probably a dashboard-only blog')
             return None
@@ -173,11 +193,11 @@ class WebCrawler:
         return urlunsplit(spl._replace(query=urlencode(query, doseq=True)))
 
     def append_notes(self, soup, notes_list, notes_url):
-        notes = soup.find('ol', class_='notes')
-        if notes is None:
+        notes_ol = cast(Tag, soup.find('ol', class_='notes'))
+        if notes_ol is None:
             log(LogLevel.WARN, notes_url, 'Response HTML does not have a notes list')
             return False
-        notes = notes.find_all('li')  # pytype: disable=attribute-error
+        notes = notes_ol.find_all('li')
         for note in reversed(notes):
             classes = note.get('class', [])
             if 'more_notes_link_container' in classes:
@@ -238,7 +258,7 @@ def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cooki
             notes = crawler.get_notes(post_url)
         except KeyboardInterrupt:
             sys.exit()  # Ignore these so they don't propogate into the parent
-        except HTTPError as e:
+        except (HTTPError, RequestException) as e:
             if not is_dns_working(timeout=5):
                 sys.exit(EXIT_NO_INTERNET)
             log(LogLevel.ERROR, crawler.lasturl, e)
