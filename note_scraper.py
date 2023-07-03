@@ -77,7 +77,7 @@ class WebCrawler:
     _unreserved_marks = b"-_.!~*'()"  # RFC 3986 sec 2.3
     _safe_chars = _ALWAYS_SAFE_BYTES + b'%' + _reserved + _unreserved_marks
 
-    TRY_LIMIT = 2  # For code 429, only give it one extra try
+    TRY_LIMIT = 10  # max attempts when ratelimited
 
     def __init__(self, noverify, user_agent, cookiefile, notes_limit):
         self.notes_limit = notes_limit
