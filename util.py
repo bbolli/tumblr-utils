@@ -2,7 +2,6 @@
 
 import collections
 import errno
-import fcntl
 import os
 import queue
 import shutil
@@ -16,6 +15,9 @@ from functools import total_ordering
 from http.cookiejar import MozillaCookieJar
 from importlib.machinery import PathFinder
 from typing import TYPE_CHECKING, Any, Deque, Dict, Generic, Optional, Tuple, TypeVar
+
+if sys.platform == 'darwin':
+    import fcntl
 
 if TYPE_CHECKING:
     import requests
