@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import fcntl
 import os
 import queue
 import socket
@@ -12,6 +11,9 @@ from enum import Enum
 from functools import total_ordering
 from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Generic, Optional, TypeVar
+
+if sys.platform == 'darwin':
+    import fcntl
 
 if TYPE_CHECKING:
     import requests
