@@ -101,7 +101,6 @@ class WGHTTPResponse(HTTPResponse):
         self._decoder = value
 
     def __init__(self, *args, **kwargs):
-        self.current_url = kwargs.pop('current_url')
         self.bytes_to_skip = 0
         self.last_read_length = 0
         super().__init__(*args, **kwargs)
@@ -137,10 +136,6 @@ class WGHTTPConnectionPool(HTTPConnectionPool):
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
         super().__init__(host, port, *args, **kwargs)
 
-    def urlopen(self, method, url, *args, **kwargs):
-        kwargs['current_url'] = url
-        return super().urlopen(method, url, *args, **kwargs)
-
 
 class WGHTTPSConnectionPool(HTTPSConnectionPool):
     ResponseCls = WGHTTPResponse
@@ -151,10 +146,6 @@ class WGHTTPSConnectionPool(HTTPSConnectionPool):
         if norm_host in unreachable_hosts:
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
         super().__init__(host, port, *args, **kwargs)
-
-    def urlopen(self, method, url, *args, **kwargs):
-        kwargs['current_url'] = url
-        return super().urlopen(method, url, *args, **kwargs)
 
 
 class WGPoolManager(PoolManager):
@@ -241,7 +232,7 @@ def gethttp(url, hstat, doctype, logger, retry_counter, options):
     doctype &= ~RETROKF
 
     resp = urlopen(url, options, request_headers, preload_content=False, enforce_content_length=False)
-    url = hstat.current_url = urljoin(url, resp.current_url)
+    url = hstat.current_url = urljoin(url, resp.geturl())
 
     try:
         err, doctype = process_response(url, hstat, doctype, logger, retry_counter, resp)
