@@ -224,7 +224,8 @@ def setup_urllib3_ssl():
             if URLLIB3_FROM_PIP:
                 from pip._vendor.urllib3.contrib import pyopenssl
             else:
-                from urllib3.contrib import pyopenssl  # type: ignore[no-redef]
+                # TODO: remove attr-defined ignore once we support urllib3 2.x
+                from urllib3.contrib import pyopenssl  # type: ignore[attr-defined,no-redef]
             pyopenssl.inject_into_urllib3()
         except ImportError as e:
             print('Warning: Failed to inject pyOpenSSL: {!r}'.format(e), file=sys.stderr)

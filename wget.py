@@ -580,7 +580,7 @@ def _retrieve_loop(
     post_timestamp: Optional[float],
     adjust_basename: Optional[Callable[[str, BinaryIO], str]],
     options: Namespace,
-    log: Callable[[str], None],
+    log: Callable[[LogLevel, str], None],
 ) -> None:
     logger = Logger(url, post_id, log)
 
