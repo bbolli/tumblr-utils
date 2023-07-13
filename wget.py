@@ -385,6 +385,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
         resp.decoder = hstat.decoder  # Resume the previous decoder state -- Content-Encoding is weird
 
     hstat.init_part_file()  # We're about to write to part_file, make sure it exists
+    assert hstat.part_file is not None
 
     try:
         for chunk in resp.stream(HTTP_CHUNK_SIZE, decode_content=True):
