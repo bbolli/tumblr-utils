@@ -104,16 +104,12 @@ class WGHTTPResponse(HTTPResponse):
 
     def __init__(self, body="", headers=None, status=0, version=0, reason=None, strict=0, preload_content=True,
                  decode_content=True, original_response=None, pool=None, connection=None, msg=None, retries=None,
-                 enforce_content_length=False, request_method=None, request_url=None, auto_close=True, **kwargs):
+                 enforce_content_length=False, request_method=None, request_url=None, auto_close=True):
         # Copy original Content-Length for _init_length
         if not isinstance(headers, HTTPHeaderDict):
             headers = HTTPHeaderDict(headers)
         if 'Content-Length' not in headers and 'X-Archive-Orig-Content-Length' in headers:
             headers['Content-Length'] = headers['X-Archive-Orig-Content-Length']
-
-        # Current URL for redirect tracking
-        self.current_url = kwargs.pop('current_url')
-        assert not kwargs
 
         self.bytes_to_skip = 0
         self.last_read_length = 0
@@ -153,10 +149,6 @@ class WGHTTPConnectionPool(HTTPConnectionPool):
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
         super().__init__(host, port, *args, **kwargs)
 
-    def urlopen(self, method, url, *args, **kwargs):
-        kwargs['current_url'] = url
-        return super().urlopen(method, url, *args, **kwargs)
-
 
 class WGHTTPSConnectionPool(HTTPSConnectionPool):
     ResponseCls = WGHTTPResponse
@@ -167,10 +159,6 @@ class WGHTTPSConnectionPool(HTTPSConnectionPool):
         if norm_host in unreachable_hosts:
             raise WGUnreachableHostError(None, cfh_url, 'Host {} is ignored.'.format(norm_host))
         super().__init__(host, port, *args, **kwargs)
-
-    def urlopen(self, method, url, *args, **kwargs):
-        kwargs['current_url'] = url
-        return super().urlopen(method, url, *args, **kwargs)
 
 
 class WGPoolManager(PoolManager):
@@ -241,7 +229,7 @@ class Logger:
         self.log_cb(level, qmsg)
 
 
-def gethttp(url, hstat, doctype, logger, retry_counter):
+def gethttp(url, hstat, doctype, logger, retry_counter, options):
     if hstat.current_url is not None:
         url = hstat.current_url  # The most recent location is cached
 
@@ -256,8 +244,8 @@ def gethttp(url, hstat, doctype, logger, retry_counter):
 
     doctype &= ~RETROKF
 
-    resp = urlopen(url, headers=request_headers, preload_content=False, enforce_content_length=False)
-    url = hstat.current_url = urljoin(url, resp.current_url)
+    resp = urlopen(url, options, request_headers, preload_content=False, enforce_content_length=False)
+    url = hstat.current_url = urljoin(url, resp.geturl())
 
     try:
         err, doctype = process_response(url, hstat, doctype, logger, retry_counter, resp)
@@ -401,6 +389,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
         resp.decoder = hstat.decoder  # Resume the previous decoder state -- Content-Encoding is weird
 
     hstat.init_part_file()  # We're about to write to part_file, make sure it exists
+    assert hstat.part_file is not None
 
     try:
         for chunk in resp.stream(HTTP_CHUNK_SIZE, decode_content=True):
@@ -639,7 +628,7 @@ def _retrieve_loop(
         hstat.restval = hstat.bytes_read
 
         try:
-            err, doctype = gethttp(url, hstat, doctype, logger, retry_counter)
+            err, doctype = gethttp(url, hstat, doctype, logger, retry_counter, options)
         except MaxRetryError as e:
             raise WGMaxRetryError(logger, url, 'urllib3 reached a retry limit.', e)
         except HTTPError as e:
@@ -774,16 +763,16 @@ def setup_wget(ssl_verify, user_agent):
 
 
 # This is a simple urllib3-based urlopen function.
-def urlopen(url, method='GET', headers=None, **kwargs):
+def urlopen(url, options, headers=None, **kwargs):
     req_headers = base_headers.copy()
     if headers is not None:
         req_headers.update(headers)
 
     while True:
         try:
-            return poolman.request(method, url, headers=req_headers, retries=HTTP_RETRY, **kwargs)
+            return poolman.request('GET', url, headers=req_headers, retries=HTTP_RETRY, **kwargs)
         except HTTPError:
-            if is_dns_working(timeout=5):
+            if is_dns_working(timeout=5, check=options.use_dns_check):
                 raise
             # Having no internet is a temporary system error
             no_internet.signal()

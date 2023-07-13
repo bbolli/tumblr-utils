@@ -487,7 +487,7 @@ class ApiParser:
                         continue
                     return doc, status, resp.reason if doc is None else http.client.responses.get(status, '(unknown)')
             except HTTPError:
-                if not is_dns_working(timeout=5):
+                if not is_dns_working(timeout=5, check=options.use_dns_check):
                     no_internet.signal()
                     continue
                 raise
@@ -629,7 +629,7 @@ def get_style(prev_archive):
 
     url = 'https://%s/' % blog_name
     try:
-        resp = urlopen(url)
+        resp = urlopen(url, options)
         page_data = resp.data
     except HTTPError as e:
         logger.error('URL is {}\nError retrieving style: {}\n'.format(url, e))
@@ -1726,7 +1726,8 @@ class TumblrPost:
                 ns_msg_queue: SimpleQueue[Tuple[LogLevel, str]] = multiprocessing.SimpleQueue()
                 try:
                     args = (ns_stdout_wr, ns_msg_queue, self.url, self.ident,
-                            options.no_ssl_verify, options.user_agent, options.cookiefile, options.notes_limit)
+                            options.no_ssl_verify, options.user_agent, options.cookiefile, options.notes_limit,
+                            options.use_dns_check)
                     process = multiprocessing.Process(target=note_scraper.main, args=args)
                     process.start()
                 except:
@@ -2085,6 +2086,8 @@ if __name__ == '__main__':
                         help="don't set local timestamps from HTTP headers")
     parser.add_argument('--hostdirs', action='store_true', help='Generate host-prefixed directories for media')
     parser.add_argument('--user-agent', help='User agent string to use with HTTP requests')
+    parser.add_argument('--skip-dns-check', action='store_false', dest='use_dns_check',
+                        help='Skip DNS checks for internet access')
     parser.add_argument('--threads', type=int, default=20, help='number of threads to use for post retrieval')
     postexist_group.add_argument('--continue', action='store_true', dest='resume',
                                  help='Continue an incomplete first backup')

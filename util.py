@@ -102,7 +102,10 @@ KNOWN_GOOD_NAMESERVER = '8.8.8.8'
 DNS_QUERY = b'\xf1\xe1\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06google\x03com\x00\x00\x01\x00\x01'
 
 
-def is_dns_working(timeout=None):
+def is_dns_working(timeout=None, check=True):
+    if not check:
+        return True  # assume internet is OK
+
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             if timeout is not None:
