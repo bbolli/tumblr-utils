@@ -225,7 +225,7 @@ class Logger:
         self.log_cb(level, qmsg)
 
 
-def gethttp(url, hstat, doctype, logger, retry_counter):
+def gethttp(url, hstat, doctype, logger, retry_counter, options):
     if hstat.current_url is not None:
         url = hstat.current_url  # The most recent location is cached
 
@@ -240,7 +240,7 @@ def gethttp(url, hstat, doctype, logger, retry_counter):
 
     doctype &= ~RETROKF
 
-    resp = urlopen(url, headers=request_headers, preload_content=False, enforce_content_length=False)
+    resp = urlopen(url, options, request_headers, preload_content=False, enforce_content_length=False)
     url = hstat.current_url = urljoin(url, resp.current_url)
 
     try:
@@ -624,7 +624,7 @@ def _retrieve_loop(
         hstat.restval = hstat.bytes_read
 
         try:
-            err, doctype = gethttp(url, hstat, doctype, logger, retry_counter)
+            err, doctype = gethttp(url, hstat, doctype, logger, retry_counter, options)
         except MaxRetryError as e:
             raise WGMaxRetryError(logger, url, 'urllib3 reached a retry limit.', e)
         except HTTPError as e:
@@ -738,16 +738,16 @@ def setup_wget(ssl_verify, user_agent):
 
 
 # This is a simple urllib3-based urlopen function.
-def urlopen(url, method='GET', headers=None, **kwargs):
+def urlopen(url, options, headers=None, **kwargs):
     req_headers = base_headers.copy()
     if headers is not None:
         req_headers.update(headers)
 
     while True:
         try:
-            return poolman.request(method, url, headers=req_headers, retries=HTTP_RETRY, **kwargs)
+            return poolman.request('GET', url, headers=req_headers, retries=HTTP_RETRY, **kwargs)
         except HTTPError:
-            if is_dns_working(timeout=5):
+            if is_dns_working(timeout=5, check=options.use_dns_check):
                 raise
             # Having no internet is a temporary system error
             no_internet.signal()

@@ -240,7 +240,7 @@ class WebCrawler:
         return ''.join(notes_list)
 
 
-def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cookiefile, notes_limit):
+def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cookiefile, notes_limit, use_dns_check):
     global post_url, ident, msg_queue
     msg_queue, post_url, ident = msg_queue_, post_url_, ident_
 
@@ -259,7 +259,7 @@ def main(stdout_conn, msg_queue_, post_url_, ident_, noverify, user_agent, cooki
         except KeyboardInterrupt:
             sys.exit()  # Ignore these so they don't propogate into the parent
         except (HTTPError, RequestException) as e:
-            if not is_dns_working(timeout=5):
+            if not is_dns_working(timeout=5, check=use_dns_check):
                 sys.exit(EXIT_NO_INTERNET)
             log(LogLevel.ERROR, crawler.lasturl, e)
             sys.exit()
