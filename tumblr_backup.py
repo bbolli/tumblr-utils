@@ -18,7 +18,6 @@ import time
 import warnings
 from collections import defaultdict
 from datetime import datetime
-from glob import glob
 from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
@@ -483,12 +482,35 @@ footer, article footer a { font-size: small; color: #999; }
 ''')
 
 
+def find_files(path, match=None):
+    try:
+        it = os.scandir(path)
+    except FileNotFoundError:
+        return  # ignore nonexistent dir
+    with it:
+        yield from (e.path for e in it if match is None or match(e.name))
+
+
+def find_post_files():
+    path = path_to(post_dir)
+    if not options.dirs:
+        yield from find_files(path, lambda n: n.endswith(post_ext))
+        return
+
+    indexes = (join(e, dir_index) for e in find_files(path))
+    yield from filter(os.path.exists, indexes)
+
+
+def match_avatar(name):
+    return name.startswith(avatar_base + '.')
+
+
 def get_avatar(prev_archive):
     if prev_archive is not None:
         # Copy old avatar, if present
-        avatar_glob = glob(join(prev_archive, theme_dir, avatar_base + '.*'))
-        if avatar_glob:
-            src = avatar_glob[0]
+        avatar_matches = find_files(join(prev_archive, theme_dir), match_avatar)
+        src = next(avatar_matches, None)
+        if src is not None:
             path_parts = (theme_dir, split(src)[-1])
             cpy_res = maybe_copy_media(prev_archive, path_parts)
             if cpy_res:
@@ -498,7 +520,8 @@ def get_avatar(prev_archive):
     avatar_dest = avatar_fpath = open_file(lambda f: f, (theme_dir, avatar_base))
 
     # Remove old avatars
-    if glob(join(theme_dir, avatar_base + '.*')):
+    avatar_matches = find_files(theme_dir, match_avatar)
+    if next(avatar_matches, None) is not None:
         return  # Do not clobber
 
     def adj_bn(old_bn, f):
@@ -678,8 +701,7 @@ class Indices:
         self.tags = {}
 
     def build_index(self):
-        filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
-        for post in (LocalPost(f) for f in glob(path_to(post_dir, filter_))):
+        for post in map(LocalPost, find_post_files()):
             self.main_index.add_post(post)
             if options.tag_index:
                 for tag, name in post.tags:
@@ -745,9 +767,10 @@ class TumblrBackup:
 <header>
 ''' % (FILE_ENCODING, self.title, css_rel, body_class)
         if avatar:
-            f = glob(path_to(theme_dir, avatar_base + '.*'))
-            if f:
-                h += '<img src={} alt=Avatar>\n'.format(urlpathjoin(root_rel, theme_dir, split(f[0])[1]))
+            avatar_matches = find_files(path_to(theme_dir), match_avatar)
+            avatar_path = next(avatar_matches, None)
+            if avatar_path is not None:
+                h += '<img src={} alt=Avatar>\n'.format(urlpathjoin(root_rel, theme_dir, split(avatar_path)[1]))
         if title:
             h += '<h1>%s</h1>\n' % title
         if subtitle:
@@ -806,8 +829,7 @@ class TumblrBackup:
         # get the highest post id already saved
         ident_max = None
         if options.incremental:
-            filter_ = join('*', dir_index) if options.dirs else '*' + post_ext
-            post_glob = glob(path_to(post_dir, filter_))
+            post_glob = list(find_post_files())
             if not post_glob:
                 pass  # No posts to read
             elif options.likes:
