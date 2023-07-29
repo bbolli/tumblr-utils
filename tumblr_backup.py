@@ -189,6 +189,10 @@ def load_bs4(reason):
         from bs4 import BeautifulSoup
     except ImportError:
         raise RuntimeError("Cannot {} without module 'bs4'".format(reason))
+    try:
+        import lxml  # noqa: F401
+    except ImportError:
+        raise RuntimeError("Cannot {} without module 'lxml'".format(reason))
     return BeautifulSoup
 
 
