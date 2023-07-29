@@ -906,6 +906,7 @@ class TumblrBackup:
         self.pa_options: Optional[JSONDict] = None
         self.media_list_file: Optional[TextIO] = None
         self.mlf_seen: Set[int] = set()
+        self.mlf_lock = threading.Lock()
 
     def exit_code(self):
         if self.failed_blogs or self.postfail_blogs:
@@ -1077,10 +1078,11 @@ class TumblrBackup:
         return oldest_tstamp, pa_options, write_fro
 
     def record_media(self, ident: int, urls: Set[str]) -> None:
-        if self.media_list_file is not None and ident not in self.mlf_seen:
-            json.dump(dict(post=ident, media=sorted(urls)), self.media_list_file, separators=(',', ':'))
-            self.media_list_file.write('\n')
-            self.mlf_seen.add(ident)
+        with self.mlf_lock:
+            if self.media_list_file is not None and ident not in self.mlf_seen:
+                json.dump(dict(post=ident, media=sorted(urls)), self.media_list_file, separators=(',', ':'))
+                self.media_list_file.write('\n')
+                self.mlf_seen.add(ident)
 
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
