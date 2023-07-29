@@ -175,6 +175,15 @@ disable_note_scraper: Set[str] = set()
 disablens_lock = threading.Lock()
 
 
+def check_bs4(reason):
+    if BeautifulSoup is None:
+        raise RuntimeError("Cannot {} without module 'bs4'".format(reason))
+    try:
+        import lxml  # noqa: F401
+    except ImportError:
+        raise RuntimeError("Cannot {} without module 'lxml'".format(reason))
+
+
 class Logger:
     def __init__(self):
         self.lock = threading.Lock()
@@ -834,8 +843,7 @@ class TumblrBackup:
                 pass  # No posts to read
             elif options.likes:
                 # Read every post to find the newest timestamp we've saved.
-                if BeautifulSoup is None:
-                    raise RuntimeError("Incremental likes backup: module 'bs4' is not installed")
+                check_bs4('backup likes incrementally')
                 logger.warn('Finding newest liked post (may take a while)\n', account=True)
                 ident_max = max(self.get_post_timestamps(post_glob))
             else:
@@ -1751,14 +1759,12 @@ if __name__ == '__main__':
     if options.cookiefile is not None and not os.access(options.cookiefile, os.R_OK):
         parser.error('--cookiefile: file cannot be read')
     if options.save_notes:
-        if BeautifulSoup is None:
-            parser.error("--save-notes: module 'bs4' is not installed")
+        check_bs4('save notes')
         import note_scraper
     if options.copy_notes:
         if not options.prev_archives:
             parser.error('--copy-notes requires --prev-archives')
-        if BeautifulSoup is None:
-            parser.error("--copy-notes: module 'bs4' is not installed")
+        check_bs4('copy notes')
     if options.notes_limit is not None:
         if not options.save_notes:
             parser.error('--notes-limit requires --save-notes')
