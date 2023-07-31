@@ -1,3 +1,10 @@
+# Archiving
+
+I made some adjustments to this script several years ago to handle downloading
+likes. I haven't kept up with it. However, a handful of folks have watched,
+starred, or otherwise referenced this repository/fork before, so I'm leaving it
+up, archived, for posterity.
+
 # tumblr-utils
 
 This is a collection of utilities dealing with Tumblr blogs.
