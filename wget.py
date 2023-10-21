@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import errno
 import functools
 import itertools
 import os
@@ -13,17 +14,20 @@ from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
-from util import URLLIB3_FROM_PIP, LogLevel, fdatasync, fsync, is_dns_working, no_internet, setup_urllib3_ssl
+from util import (URLLIB3_FROM_PIP, LogLevel, enospc, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl,
+                  try_unlink)
 
 if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from urllib3 import Retry as Retry
+    from urllib3._collections import HTTPHeaderDict
     from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
     from urllib3.exceptions import HTTPError as HTTPError
     from urllib3.util import make_headers
 else:
     from pip._vendor.urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
     from pip._vendor.urllib3 import Retry as Retry
+    from pip._vendor.urllib3._collections import HTTPHeaderDict
     from pip._vendor.urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
     from pip._vendor.urllib3.exceptions import HTTPError as HTTPError
     from pip._vendor.urllib3.util import make_headers
@@ -100,10 +104,21 @@ class WGHTTPResponse(HTTPResponse):
     def decoder(self, value):
         self._decoder = value
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, body="", headers=None, status=0, version=0, reason=None, strict=0, preload_content=True,
+                 decode_content=True, original_response=None, pool=None, connection=None, msg=None, retries=None,
+                 enforce_content_length=False, request_method=None, request_url=None, auto_close=True):
+        # Copy original Content-Length for _init_length
+        if not isinstance(headers, HTTPHeaderDict):
+            headers = HTTPHeaderDict(headers)
+        if 'Content-Length' not in headers and 'X-Archive-Orig-Content-Length' in headers:
+            headers['Content-Length'] = headers['X-Archive-Orig-Content-Length']
+
         self.bytes_to_skip = 0
         self.last_read_length = 0
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            body, headers, status, version, reason, strict, preload_content, decode_content, original_response, pool,
+            connection, msg, retries, enforce_content_length, request_method, request_url, auto_close,
+        )
 
     # Make _init_length publicly usable because its implementation is nice
     def get_content_length(self, meth):
@@ -262,7 +277,7 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
 
     hstat.last_modified = resp.headers.get('Last-Modified')
     if hstat.last_modified is None:
-        hstat.last_modified = resp.headers.get('X-Archive-Orig-last-modified')
+        hstat.last_modified = resp.headers.get('X-Archive-Orig-Last-Modified')
 
     if hstat.last_modified is None:
         hstat.remote_time = None
@@ -397,6 +412,8 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
 
         if hstat.bytes_read == hstat.restval:
             raise  # No data read
+        if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+            raise  # Handled specialy in outer except block
         if not retry_counter.should_retry():
             raise  # This won't be retried
 
@@ -516,6 +533,8 @@ class WGWrongCodeError(WGBadResponseError):
         if statcode not in (403, 404):
             info['Headers'] = headers
         super().__init__(logger, url, msg, info=info)
+        self.statcode = statcode
+        self.statmsg = statmsg
 
 
 class WGRangeError(WGBadResponseError):
@@ -594,15 +613,8 @@ def _retrieve_loop(
     doctype = 0
     dest_dirname, dest_basename = os.path.split(dest_file)
 
-    flags = os.O_RDONLY
-    try:
-        flags |= os.O_DIRECTORY
-    except AttributeError:
-        # Fallback, some systems don't support O_DIRECTORY
-        dest_dirname += os.path.sep
-
     if os.name == 'posix':  # Opening directories is a POSIX feature
-        hstat.dest_dir = os.open(dest_dirname, flags)
+        hstat.dest_dir = opendir(dest_dirname, os.O_RDONLY)
     hstat.set_part_file_supplier(functools.partial(
         lambda pfx, dir_: NamedTemporaryFile('wb', prefix=pfx, dir=dir_, delete=False),
         '.{}.'.format(dest_basename), dest_dirname,
@@ -610,6 +622,10 @@ def _retrieve_loop(
 
     # THE loop
 
+    using_internet_archive = False
+    ia_fallback_cause = None
+    orig_url = url
+    orig_doctype = doctype
     retry_counter = RetryCounter(logger)
     while True:
         # Behave as if force_full_retrieve is always enabled
@@ -630,10 +646,42 @@ def _retrieve_loop(
 
             retry_counter.increment(url, hstat, repr(e))
             continue
+        except OSError as e:
+            if e.errno != errno.ENOSPC:
+                raise
+
+            # Being low on disk space is a temporary system error, don't count against the server
+            enospc.signal()
+            continue
         except WGUnreachableHostError as e:
             # Set the logger for unreachable host errors thrown from WGHTTP(S)ConnectionPool
             if e.logger is None:
                 e.logger = logger
+            raise
+        except WGWrongCodeError as e:
+            if (options.internet_archive
+                and not using_internet_archive
+                and hstat.statcode in (403, 404)
+                and urlsplit(orig_url).netloc.endswith('.tumblr.com')  # type: ignore[arg-type]
+            ):
+                using_internet_archive = True
+                ia_fallback_cause = (e.args[0], e.statcode, e.statmsg)
+                url = 'https://web.archive.org/web/0/{}'.format(orig_url)  # type: ignore[assignment,str-bytes-safe]
+                doctype = orig_doctype
+                retry_counter.reset()
+                continue
+            if using_internet_archive and hstat.statcode == 404:
+                # Not available at the Internet Archive, report the original error
+                assert options.internet_archive
+                assert ia_fallback_cause is not None
+                msg, statcode, statmsg = ia_fallback_cause
+                oe = Exception.__new__(WGWrongCodeError)
+                Exception.__init__(oe, msg)
+                oe.logger = logger
+                oe.url = orig_url
+                oe.statcode = statcode
+                oe.statmsg = statmsg
+                raise oe
             raise
         finally:
             if hstat.current_url is not None:
@@ -652,6 +700,12 @@ def _retrieve_loop(
 
         # We shouldn't have read more than Content-Length bytes
         assert hstat.contlen in (None, hstat.bytes_read)
+
+        if using_internet_archive:
+            assert options.internet_archive
+            assert ia_fallback_cause is not None
+            _, statcode, statmsg = ia_fallback_cause
+            logger.info(orig_url, 'Downloaded from Internet Archive due to HTTP Error {} {}'.format(statcode, statmsg))
 
         # Normal return path - we wrote a local file
         assert hstat.part_file is not None
@@ -707,17 +761,7 @@ def _retrieve_loop(
             os.replace(os.path.basename(pfname), new_dest_basename,
                        src_dir_fd=hstat.dest_dir, dst_dir_fd=hstat.dest_dir)
 
-        # Sync the directory and return
-        if hstat.dest_dir is not None:
-            fdatasync(hstat.dest_dir)
         return
-
-
-def try_unlink(path):
-    try:
-        os.unlink(path)
-    except FileNotFoundError:
-        pass  # ignored
 
 
 def setup_wget(ssl_verify, user_agent):

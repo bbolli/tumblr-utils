@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import collections
+import errno
 import os
 import queue
+import shutil
 import socket
 import sys
 import threading
@@ -10,7 +13,8 @@ import warnings
 from enum import Enum
 from functools import total_ordering
 from http.cookiejar import MozillaCookieJar
-from typing import TYPE_CHECKING, Generic, Optional, TypeVar
+from importlib.machinery import PathFinder
+from typing import TYPE_CHECKING, Any, Deque, Dict, Generic, Optional, Tuple, TypeVar
 
 if sys.platform == 'darwin':
     import fcntl
@@ -136,13 +140,20 @@ class WaitOnMainThread:
             if self.flag is None:
                 sys.exit(1)
 
-    # Call on main thread when signaled or idle.
-    def check(self):
+    # Call on main thread when signaled or idle. If the lock is held, pass release=True.
+    def check(self, release=False):
         assert self.cond is not None
         if self.flag is False:
             return
 
-        self._do_wait()
+        if release:
+            saved_state = lock_release_save(self.cond)
+            try:
+                self._do_wait()
+            finally:
+                lock_acquire_restore(self.cond, saved_state)
+        else:
+            self._do_wait()
 
         with self.cond:
             self.flag = False
@@ -190,7 +201,19 @@ class NoInternet(WaitOnMainThread):
             sleep_time = min(sleep_time * 2, 900)
 
 
+class Enospc(WaitOnMainThread):
+    @staticmethod
+    def _wait():
+        if not os.isatty(sys.stdin.fileno()):
+            # Pausing or consuming input does no good during unattended execution.
+            # We have no hope of recovering, so raise an uncaught exception.
+            raise RuntimeError(OSError(errno.ENOSPC, os.strerror(errno.ENOSPC)))
+        print('Error: No space left on device. Press Enter to try again...', file=sys.stderr)
+        input()
+
+
 no_internet = NoInternet()
+enospc = Enospc()
 
 
 # Set up ssl for urllib3. This should be called before using urllib3 or importing requests.
@@ -292,3 +315,185 @@ def fdatasync(fd):
     if hasattr(os, 'fdatasync'):
         return os.fdatasync(fd)
     fsync(fd)
+
+
+if TYPE_CHECKING:
+    WaiterSeq = Deque[Any]
+else:
+    WaiterSeq = collections.deque
+
+
+# Minimal implementation of a sum of mutable sequences
+class MultiSeqProxy:
+    def __init__(self, subseqs):
+        self.subseqs = subseqs
+
+    def append(self, value):
+        for sub in self.subseqs:
+            sub.append((value, self.subseqs))
+
+    def remove(self, value):
+        for sub in self.subseqs:
+            sub.remove((value, self.subseqs))
+
+
+# Hooks into methods used by threading.Condition.notify
+class NotifierWaiters(WaiterSeq):
+    def __iter__(self):
+        return (value[0] for value in super().__iter__())
+
+    def __getitem__(self, index):
+        item = super().__getitem__(index)
+        return WaiterSeq(v[0] for v in item) if isinstance(index, slice) else item[0]  # pytype: disable=not-callable
+
+    def remove(self, value):
+        try:
+            match = next(x for x in super().__iter__() if x[0] == value)
+        except StopIteration:
+            raise ValueError('deque.remove(x): x not in deque')
+        for ref in match[1]:
+            try:
+                super(NotifierWaiters, ref).remove(match)  # Remove waiter from known location
+            except ValueError:
+                raise RuntimeError('Unexpected missing waiter!')
+
+
+# Supports waiting on multiple threading.Conditions objects simultaneously
+class MultiCondition(threading.Condition):
+    def __init__(self, lock):
+        super().__init__(lock)
+
+    def wait(self, children, timeout=None):  # pytype: disable=signature-mismatch
+        assert len(frozenset(id(c) for c in children)) == len(children), 'Children must be unique'
+        assert all(c._lock is self._lock for c in children), 'All locks must be the same'  # type: ignore[attr-defined]
+
+        # Modify children so their notify methods do cleanup
+        for child in children:
+            if not isinstance(child._waiters, NotifierWaiters):
+                child._waiters = NotifierWaiters(
+                    ((w, (child._waiters,)) for w in child._waiters),
+                )
+        self._waiters = MultiSeqProxy(tuple(c._waiters for c in children))
+
+        super().wait(timeout)
+
+    def notify(self, n=1):
+        raise NotImplementedError
+
+    def notify_all(self):
+        raise NotImplementedError
+
+    notifyAll = notify_all
+
+
+def lock_is_owned(lock):
+    try:
+        return lock._is_owned()
+    except AttributeError:
+        if lock.acquire(0):
+            lock.release()
+            return False
+        return True
+
+
+def lock_release_save(lock):
+    try:
+        return lock._release_save()  # pytype: disable=attribute-error
+    except AttributeError:
+        lock.release()  # No state to save
+        return None
+
+
+def lock_acquire_restore(lock, state):
+    try:
+        lock._acquire_restore(state)  # pytype: disable=attribute-error
+    except AttributeError:
+        lock.acquire()  # Ignore saved state
+
+
+ACParams = Tuple[Tuple[Any, ...], Dict[str, Any]]  # (args, kwargs)
+
+
+class AsyncCallable:
+    request: LockedQueue[Optional[ACParams]]
+    response: LockedQueue[Any]
+
+    def __init__(self, lock, fun, name=None):
+        self.lock = lock
+        self.fun = fun
+        self.request = LockedQueue(lock, maxsize=1)
+        self.response = LockedQueue(lock, maxsize=1)
+        self.quit_flag = False
+        self.thread = threading.Thread(target=self.run_thread, name=name, daemon=True)
+        self.thread.start()
+
+    def run_thread(self):
+        while not self.quit_flag:
+            request = self.request.get()
+            if request is None:
+                break  # quit sentinel
+            args, kwargs = request
+            response = self.fun(*args, **kwargs)
+            self.response.put(response)
+
+    def put(self, *args, **kwargs):
+        self.request.put((args, kwargs))
+
+    def get(self, *args, **kwargs):
+        return self.response.get(*args, **kwargs)
+
+    def quit(self):
+        self.quit_flag = True
+        # Make sure the thread wakes up
+        try:
+            self.request.put(None, block=False)
+        except queue.Full:
+            pass
+        self.thread.join()
+
+
+def opendir(dir_, flags):
+    try:
+        flags |= os.O_DIRECTORY
+    except AttributeError:
+        dir_ += os.path.sep  # Fallback, some systems don't support O_DIRECTORY
+    return os.open(dir_, flags)
+
+
+def try_unlink(path):
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass  # ignored
+
+
+def _copy_file_range(src, dst):
+    if not hasattr(os, 'copy_file_range'):
+        return False
+
+    with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
+        infd, outfd = fsrc.fileno(), fdst.fileno()
+        blocksize = max(os.fstat(infd).st_size, 2 ** 23)  # min 8MiB
+        if sys.maxsize < 2 ** 32:  # 32-bit architecture
+            blocksize = min(blocksize, 2 ** 30)  # max 1GiB
+
+        try:
+            while True:
+                bytes_copied = os.copy_file_range(infd, outfd, blocksize)  # type: ignore[attr-defined]
+                if not bytes_copied:
+                    return True  # EOF
+        except OSError as e:
+            if e.errno == errno.EXDEV:
+                return False  # Different devices (pre Linux 5.3)
+            e.filename, e.filename2 = src, dst
+            raise e
+
+
+def copyfile(src, dst):
+    if _copy_file_range(src, dst):
+        return dst
+    return shutil.copyfile(src, dst)
+
+
+def have_module(name):
+    return PathFinder.find_spec(name) is not None
