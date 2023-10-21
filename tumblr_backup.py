@@ -371,7 +371,7 @@ class ApiParser:
             logger.warn('Reading liked timestamps from saved responses (may take a while)\n', account=True)
 
         if options.idents is None:
-            respfiles = (
+            respfiles: Iterable[str] = (
                 e.path for e in os.scandir(join(prev_archive, 'json'))
                 if e.name.endswith('.json') and e.is_file()
             )
