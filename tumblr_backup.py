@@ -358,6 +358,10 @@ def parse_period_date(period):
     return [p_start, p_stop]
 
 
+def get_posts_key() -> str:
+    return 'liked_posts' if options.likes else 'posts'
+
+
 class ApiParser:
     TRY_LIMIT = 2
     session: Optional[requests.Session] = None
@@ -431,7 +435,12 @@ class ApiParser:
                 first_post = next(self._iter_prev())
             except StopIteration:
                 return None
-            return {'posts': [first_post], 'blog': dict(first_post['blog'], posts=len(self.prev_resps))}
+            r = {get_posts_key(): [first_post], 'blog': first_post['blog'].copy()}
+            if options.likes:
+                r['liked_count'] = len(self.prev_resps)
+            else:
+                r['blog']['posts'] = len(self.prev_resps)
+            return r
 
         resp = self.apiparse(1)
         if self.dashboard_only_blog and resp and resp['posts']:
@@ -468,7 +477,7 @@ class ApiParser:
                     self._last_mode = 'offset'
                     self._last_offset = start
                 posts = list(itertools.islice(it, None, count))
-            return {'posts': posts}
+            return {get_posts_key(): posts}
 
         if self.dashboard_only_blog:
             base = 'https://www.tumblr.com/svc/indash_blog'
@@ -1400,7 +1409,7 @@ class TumblrBackup:
                 if not res:
                     break
 
-                if options.likes:
+                if options.likes and prev_archive is None:
                     next_ = resp['_links'].get('next')
                     if next_ is None:
                         logger.info('Backup complete: Found end of likes\n', account=True)
