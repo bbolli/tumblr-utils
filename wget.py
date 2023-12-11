@@ -5,6 +5,7 @@ import functools
 import itertools
 import os
 import time
+import traceback
 import warnings
 from argparse import Namespace
 from collections import OrderedDict
@@ -623,7 +624,7 @@ def _retrieve_loop(
     # THE loop
 
     using_internet_archive = False
-    ia_fallback_cause = None
+    ia_fallback_cause: Optional[WGWrongCodeError] = None
     orig_url = url
     orig_doctype = doctype
     retry_counter = RetryCounter(logger)
@@ -665,23 +666,16 @@ def _retrieve_loop(
                 and urlsplit(orig_url).netloc.endswith('.tumblr.com')  # type: ignore[arg-type]
             ):
                 using_internet_archive = True
-                ia_fallback_cause = (e.args[0], e.statcode, e.statmsg)
+                traceback.clear_frames(e.__traceback__)  # prevent reference cycle
+                ia_fallback_cause = e
                 url = 'https://web.archive.org/web/0/{}'.format(orig_url)  # type: ignore[assignment,str-bytes-safe]
                 doctype = orig_doctype
                 retry_counter.reset()
                 continue
             if using_internet_archive and hstat.statcode == 404:
                 # Not available at the Internet Archive, report the original error
-                assert options.internet_archive
                 assert ia_fallback_cause is not None
-                msg, statcode, statmsg = ia_fallback_cause
-                oe = Exception.__new__(WGWrongCodeError)
-                Exception.__init__(oe, msg)
-                oe.logger = logger
-                oe.url = orig_url
-                oe.statcode = statcode
-                oe.statmsg = statmsg
-                raise oe
+                raise ia_fallback_cause from None
             raise
         finally:
             if hstat.current_url is not None:
@@ -702,10 +696,11 @@ def _retrieve_loop(
         assert hstat.contlen in (None, hstat.bytes_read)
 
         if using_internet_archive:
-            assert options.internet_archive
             assert ia_fallback_cause is not None
-            _, statcode, statmsg = ia_fallback_cause
-            logger.info(orig_url, 'Downloaded from Internet Archive due to HTTP Error {} {}'.format(statcode, statmsg))
+            c = ia_fallback_cause
+            logger.info(
+                orig_url, 'Downloaded from Internet Archive due to HTTP Error {} {}'.format(c.statcode, c.statmsg),
+            )
 
         # Normal return path - we wrote a local file
         assert hstat.part_file is not None
