@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # builtin modules
@@ -37,11 +36,11 @@ from xml.sax.saxutils import escape
 import platformdirs
 
 # internal modules
-from util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, MultiCondition, copyfile,
-                  enospc, fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir,
-                  to_bytes)
-from wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
-from is_reblog import post_is_reblog
+from .util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, MultiCondition, copyfile,
+                   enospc, fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir,
+                   to_bytes)
+from .wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
+from .is_reblog import post_is_reblog
 
 if TYPE_CHECKING:
     from typing_extensions import Literal

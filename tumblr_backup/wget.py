@@ -15,8 +15,8 @@ from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
-from util import (URLLIB3_FROM_PIP, LogLevel, enospc, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl,
-                  try_unlink)
+from .util import (URLLIB3_FROM_PIP, LogLevel, enospc, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl,
+                   try_unlink)
 
 if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout

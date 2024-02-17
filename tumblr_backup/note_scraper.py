@@ -12,8 +12,8 @@ from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
-from util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
-                  to_bytes)
+from .util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
+                   to_bytes)
 
 if TYPE_CHECKING or not URLLIB3_FROM_PIP:
     from urllib3 import Retry, Timeout
