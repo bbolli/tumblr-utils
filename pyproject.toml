@@ -1,0 +1,31 @@
+[project]
+name = "tumblr-backup"
+version = "0.0.1"
+description = "An advanced tool for backing up Tumblr blogs."
+requires-python = ">=3.6"
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "platformdirs~=4.2",
+    "requests~=2.31",
+    "urllib3~=1.26",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/cebtenzzre/tumblr-utils"
+"Bug Reports" = "https://github.com/cebtenzzre/tumblr-utils/issues"
+"Source" = "https://github.com/cebtenzzre/tumblr-utils"
+
+[build-system]
+requires = ["setuptools>=43.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
