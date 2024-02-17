@@ -1,2 +1,3 @@
 urllib3<2
 requests
+platformdirs~=4.2

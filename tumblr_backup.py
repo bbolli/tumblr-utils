@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# standard Python library imports
+# builtin modules
 import calendar
 import contextlib
 import errno
@@ -24,6 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
+from pathlib import Path
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from tempfile import NamedTemporaryFile
 from types import ModuleType
@@ -32,6 +33,10 @@ from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, I
 from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
+# third-party modules
+import platformdirs
+
+# internal modules
 from util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, MultiCondition, copyfile,
                   enospc, fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir,
                   to_bytes)
@@ -47,11 +52,6 @@ else:
     Tag = None
 
 JSONDict = Dict[str, Any]
-
-try:
-    from settings import DEFAULT_BLOGS
-except ImportError:
-    DEFAULT_BLOGS = []
 
 # extra optional packages
 try:
@@ -158,9 +158,6 @@ REM_POST_INC = 10
 # Always retry on 503 or 504, but never on connect or 429, the latter handled specially
 HTTP_RETRY = Retry(3, connect=False, status_forcelist=frozenset((503, 504)))
 HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))  # type: ignore[misc]
-
-# get your own API key at https://www.tumblr.com/oauth/apps
-API_KEY = ''
 
 # ensure the right date/time format
 try:
@@ -2143,6 +2140,25 @@ if __name__ == '__main__':
     if hasattr(signal, 'SIGHUP'):
         signal.signal(signal.SIGHUP, handle_term_signal)
 
+
+    config_dir = platformdirs.user_config_dir('tumblr-backup', roaming=True, ensure_exists=True)
+    config_file = Path(config_dir) / 'config.json'
+
+    if '--set-api-key' in sys.argv[1:]:
+        # special argument parsing
+        opt, *args = sys.argv[1:]
+        if opt != '--set-api-key' or len(args) != 1:
+            print('tumblr_backup: invalid usage', file=sys.stderr)
+            sys.exit(1)
+        api_key, = args
+        with open(config_file, 'r+') as f:
+            cfg = json.load(f)
+            cfg['oauth_consumer_key'] = api_key
+            f.seek(0)
+            json.dump(cfg, f, indent=4)
+        sys.exit()
+
+
     no_internet.setup(main_thread_lock)
     enospc.setup(main_thread_lock)
 
@@ -2282,8 +2298,7 @@ if __name__ == '__main__':
                         help="Just print some info for each blog, don't make a backup")
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
-    blogs = options.blogs or DEFAULT_BLOGS
-    del options.blogs
+    blogs = options.blogs
 
     if not blogs:
         parser.error('Missing blog-name')
@@ -2346,10 +2361,20 @@ if __name__ == '__main__':
 
     check_optional_modules()
 
-    if not API_KEY:
-        sys.stderr.write('''\
-Missing API_KEY; please get your own API key at
-https://www.tumblr.com/oauth/apps\n''')
+    try:
+        with open(config_file) as f:
+            API_KEY = json.load(f)['oauth_consumer_key']
+    except (FileNotFoundError, KeyError):
+        API_KEY = None
+
+    if API_KEY is None:
+        print(f"""\
+API key not set. To use tumblr-backup:
+1. Go to https://www.tumblr.com/oauth/apps and create an app if you don't have one already.
+2. Copy the "OAuth Consumer Key" from the app you created.
+3. Run `tumblr_backup.py --set-api-key API_KEY`, where API_KEY is the key that you just copied.""",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     wget_retrieve = WgetRetrieveWrapper(options, logger.log)
