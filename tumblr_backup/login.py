@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # Credit to johanneszab for the C# implementation in TumblThree.
 # Credit to MrEldritch for the initial Python port.
 # Cleaned up and split off by Cebtenzzre.
