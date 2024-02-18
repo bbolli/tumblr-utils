@@ -2,6 +2,7 @@
 name = "tumblr-backup"
 version = "0.0.1"
 description = "An advanced tool for backing up Tumblr blogs."
+readme = "README.md"
 requires-python = ">=3.6"
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
