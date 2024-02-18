@@ -10,38 +10,15 @@ from multiprocessing.queues import SimpleQueue
 from typing import TYPE_CHECKING, List, Optional, Tuple, cast
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
+import requests
 from bs4 import BeautifulSoup, Tag
+from requests.exceptions import RequestException
+from urllib3 import Retry, Timeout
+from urllib3.exceptions import HTTPError, InsecureRequestWarning
 
-from .util import (ConnectionFile, LogLevel, URLLIB3_FROM_PIP, is_dns_working, make_requests_session, setup_urllib3_ssl,
-                   to_bytes)
-
-if TYPE_CHECKING or not URLLIB3_FROM_PIP:
-    from urllib3 import Retry, Timeout
-    from urllib3.exceptions import HTTPError, InsecureRequestWarning
-else:
-    from pip._vendor.urllib3 import Retry, Timeout
-    from pip._vendor.urllib3.exceptions import HTTPError, InsecureRequestWarning
+from .util import ConnectionFile, LogLevel, is_dns_working, make_requests_session, setup_urllib3_ssl, to_bytes
 
 setup_urllib3_ssl()
-
-try:
-    import requests
-except ImportError:
-    if not TYPE_CHECKING:
-        # Import pip._internal.download first to avoid a potential recursive import
-        try:
-            from pip._internal import download as _  # noqa: F401
-        except ImportError:
-            pass  # doesn't exist in pip 20.0+
-        try:
-            from pip._vendor import requests
-        except ImportError:
-            raise RuntimeError('The requests module is required for note scraping. '
-                               'Please install it with pip or your package manager.')
-        else:
-            from pip._vendor.requests.exceptions import RequestException
-else:
-    from requests.exceptions import RequestException
 
 EXIT_SUCCESS = 0
 EXIT_SAFE_MODE = 2

@@ -33,7 +33,9 @@ from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
 # third-party modules
+import filetype
 import platformdirs
+import requests
 
 # internal modules
 from .util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, MultiCondition, copyfile,
@@ -64,48 +66,6 @@ try:
 except ImportError:
     if not TYPE_CHECKING:
         jq = None
-
-# NB: setup_urllib3_ssl has already been called by wget
-
-try:
-    import requests
-except ImportError:
-    if not TYPE_CHECKING:
-        # Import pip._internal.download first to avoid a potential recursive import
-        try:
-            from pip._internal import download as _  # noqa: F401
-        except ImportError:
-            pass  # doesn't exist in pip 20.0+
-        try:
-            from pip._vendor import requests
-        except ImportError:
-            raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
-
-try:
-    import filetype
-except ImportError:
-    with warnings.catch_warnings(record=True) as catcher:
-        import imghdr
-        if any(w.category is DeprecationWarning for w in catcher):
-            print('warning: filetype module not found, using deprecated imghdr', file=sys.stderr)
-
-    # add another JPEG recognizer
-    # see http://www.garykessler.net/library/file_sigs.html
-    def test_jpg(h, f):
-        if h[:3] == b'\xFF\xD8\xFF' and h[3] in b'\xDB\xE0\xE1\xE2\xE3':
-            return 'jpeg'
-
-    imghdr.tests.append(test_jpg)
-
-    def guess_extension(f):
-        ext = imghdr.what(f)
-        if ext == 'jpeg':
-            ext = 'jpg'
-        return ext
-else:
-    def guess_extension(f):
-        kind = filetype.guess(f)
-        return kind.extension if kind else None
 
 # Imported later if needed
 ytdl_module: Optional[ModuleType] = None
@@ -702,9 +662,9 @@ def get_avatar(prev_archive):
 
     def adj_bn(old_bn, f):
         # Give it an extension
-        image_type = guess_extension(f)
-        if image_type:
-            return avatar_fpath + '.' + image_type
+        kind = filetype.guess(f)
+        if kind:
+            return avatar_fpath + '.' + kind.extension
         return avatar_fpath
 
     # Download the image

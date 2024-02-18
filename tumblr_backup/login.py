@@ -15,18 +15,7 @@ import sys
 from getpass import getpass
 from http.cookiejar import MozillaCookieJar
 
-try:
-    import requests
-except ImportError:
-    # Import pip._internal.download first to avoid a potential recursive import
-    try:
-        from pip._internal import download as _  # type: ignore[attr-defined] # noqa: F401
-    except ImportError:
-        pass  # doesn't exist in pip 20.0+
-    try:
-        from pip._vendor import requests  # type: ignore[no-redef]
-    except ImportError:
-        raise RuntimeError('The requests module is required. Please install it with pip or your package manager.')
+import requests
 
 
 def get_api_token():

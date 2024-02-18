@@ -16,10 +16,18 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
+    "filetype~=1.2",
     "platformdirs~=4.2",
     "requests~=2.31",
     "urllib3~=1.26",
 ]
+
+[project.optional-dependencies]
+exif = ["py3exiv2~=0.12"]
+jq = ["jq~=1.6"]
+notes = ["beautifulsoup4~=4.12", "lxml~=5.1"]
+video = ["yt_dlp>=2023.12.30"]
+all = ["tumblr-backup[exif,jq,notes,video]"]
 
 [project.urls]
 "Homepage" = "https://github.com/cebtenzzre/tumblr-utils"
