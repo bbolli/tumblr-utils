@@ -23,21 +23,6 @@ if TYPE_CHECKING:
     import requests
     swt_base = requests.Session
 
-_PATH_IS_ON_VFAT_WORKS = True
-
-try:
-    import psutil
-except ImportError:
-    psutil = None  # type: ignore[assignment]
-    _PATH_IS_ON_VFAT_WORKS = False
-
-if os.name == 'nt':
-    try:
-        from nt import _getvolumepathname  # type: ignore[import]
-    except ImportError:
-        _getvolumepathname = None
-        _PATH_IS_ON_VFAT_WORKS = False
-
 
 def to_bytes(string, encoding='utf-8', errors='strict'):
     if isinstance(string, bytes):

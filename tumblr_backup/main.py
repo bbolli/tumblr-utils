@@ -17,7 +17,6 @@ import sys
 import threading
 import time
 import traceback
-import warnings
 from collections import defaultdict
 from datetime import datetime, timedelta
 from multiprocessing.queues import SimpleQueue
@@ -26,8 +25,8 @@ from pathlib import Path
 from posixpath import basename as urlbasename, join as urlpathjoin, splitext as urlsplitext
 from tempfile import NamedTemporaryFile
 from types import ModuleType
-from typing import (TYPE_CHECKING, Any, Callable, DefaultDict, Dict, Iterable, Iterator, List, Optional, Set, TextIO,
-                    Tuple, Type, Union, cast)
+from typing import (TYPE_CHECKING, Any, Callable, ContextManager, DefaultDict, Dict, Iterable, Iterator, List, Optional,
+                    Set, TextIO, Tuple, Type, Union, cast)
 from urllib.parse import quote, urlencode, urlparse
 from xml.sax.saxutils import escape
 
@@ -133,6 +132,10 @@ BACKUP_CHANGING_OPTIONS = (
     'use_server_timestamps', 'user_agent', 'no_get', 'internet_archive', 'media_list', 'idents',
 )
 
+parser: argparse.ArgumentParser
+options: argparse.Namespace
+orig_options: Dict[str, Any]
+API_KEY: str
 wget_retrieve: Optional[WgetRetrieveWrapper] = None
 main_thread_lock = threading.RLock()
 multicond = MultiCondition(main_thread_lock)
@@ -1310,6 +1313,7 @@ class TumblrBackup:
             remaining_idents = options.idents.copy()
             count_estimate = len(remaining_idents)
 
+        mlf: Optional[ContextManager[TextIO]]
         if options.media_list:
             mlf = open_text('media.json', mode='r+')
             self.media_list_file = mlf.__enter__()
@@ -1834,7 +1838,7 @@ class TumblrPost:
                     notes_html = ''.join([n.prettify() for n in notes.find_all('li')])
 
         if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
-            import note_scraper
+            from . import note_scraper
 
             # Scrape and save notes
             while True:
@@ -2082,7 +2086,7 @@ class ThreadPool:
 
 
 def main():
-    global options, orig_options, API_KEY, wget_retrieve
+    global parser, options, orig_options, API_KEY, wget_retrieve
 
     # The default of 'fork' can cause deadlocks, even on Linux
     # See https://bugs.python.org/issue40399
@@ -2323,14 +2327,11 @@ def main():
         with open(config_file) as f:
             API_KEY = json.load(f)['oauth_consumer_key']
     except (FileNotFoundError, KeyError):
-        API_KEY = None
-
-    if API_KEY is None:
         print(f"""\
 API key not set. To use tumblr-backup:
 1. Go to https://www.tumblr.com/oauth/apps and create an app if you don't have one already.
 2. Copy the "OAuth Consumer Key" from the app you created.
-3. Run `tumblr-backup --set-api-key API_KEY`, where API_KEY is the key that you just copied.""",
+3. Run `{Path(sys.argv[0]).name} --set-api-key API_KEY`, where API_KEY is the key that you just copied.""",
             file=sys.stderr,
         )
         return 1

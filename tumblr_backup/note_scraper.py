@@ -5,7 +5,7 @@ import traceback
 import warnings
 from datetime import datetime
 from multiprocessing.queues import SimpleQueue
-from typing import TYPE_CHECKING, List, Optional, Tuple, cast
+from typing import List, Optional, Tuple, cast
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 import requests

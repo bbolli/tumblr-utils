@@ -10,7 +10,7 @@ from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from enum import Enum
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Optional
+from typing import Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
 from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
@@ -88,7 +88,7 @@ class WGHTTPResponse(HTTPResponse):
     # Make decoder public for saving and restoring the decoder state
     @property
     def decoder(self):
-        return self._decoder
+        return self._decoder  # pytype: disable=attribute-error
 
     @decoder.setter
     def decoder(self, value):
