@@ -2108,7 +2108,7 @@ def main():
         # special argument parsing
         opt, *args = sys.argv[1:]
         if opt != '--set-api-key' or len(args) != 1:
-            print('tumblr_backup: invalid usage', file=sys.stderr)
+            print(f'{Path(sys.argv[0]).name}: invalid usage', file=sys.stderr)
             return 1
         api_key, = args
         with open(config_file, 'r+') as f:
@@ -2330,7 +2330,7 @@ def main():
 API key not set. To use tumblr-backup:
 1. Go to https://www.tumblr.com/oauth/apps and create an app if you don't have one already.
 2. Copy the "OAuth Consumer Key" from the app you created.
-3. Run `tumblr_backup.py --set-api-key API_KEY`, where API_KEY is the key that you just copied.""",
+3. Run `tumblr-backup --set-api-key API_KEY`, where API_KEY is the key that you just copied.""",
             file=sys.stderr,
         )
         return 1

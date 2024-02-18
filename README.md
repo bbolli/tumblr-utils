@@ -6,20 +6,21 @@ This is a fork of bbolli's
 [tumblr-utils](https://github.com/bbolli/tumblr-utils), with a focus on
 tumblr\_backup.py. It adds Python 3 compatibility, various bug fixes, a few
 enhancements to normal operation, support for dashboard-only blogs, and several
-other features - see the output of `tumblr_backup.py --help` for the full list
-of options.
+other features - see the output of `tumblr-backup --help` for the full list of
+options.
 
 ---
 
 ## 0. Description
 
-`tumblr_backup.py` is a script that backs up your [Tumblr](http://tumblr.com)
-blog locally.
+tumblr-backup is a script that backs up your [Tumblr](http://tumblr.com) blog
+locally.
 
-The backup includes all images both from inline text as well as photo posts. An index links to
-monthly pages, which contain all the posts from the respective month with links
-to single post pages. Command line options select which posts to backup and set
-the output format. The audio and video files can also be saved.
+The backup includes all images both from inline text as well as photo posts. An
+index links to monthly pages, which contain all the posts from the respective
+month with links to single post pages. Command line options select which posts
+to backup and set the output format. The audio and video files can also be
+saved.
 
 By default, all posts of a blog are backed up in minimally styled HTML5.
 
@@ -33,7 +34,7 @@ You can see an example of its output [on my home page](http://drbeat.li/tumblr).
    there; most values entered don't matter.
 3. `tumblr-backup --set-api-key API_KEY`, where API\_KEY is the OAuth Consumer
    Token from the app created in the previous step.
-4. Run `tumblr-backup_blog-name` as often as you like manually or from a cron
+4. Run `tumblr-backup blog-name` as often as you like manually or from a cron
    job.
 
 There are several optional dependencies that enable additional features:
@@ -174,7 +175,7 @@ on HTTP errors.
 
 ## 3. Operation
 
-By default, `tumblr_backup` backs up all posts in HTML format.
+By default, tumblr-backup backs up all posts in HTML format.
 
 The generated directory structure looks like this:
 
@@ -241,8 +242,8 @@ The directories look like this:
                 style.css - the blog’s style sheet
 
 The modification time of the single post pages is set to the post’s timestamp.
-`tumblr_backup` applies a simple style to the saved pages. All generated pages
-are [HTML5](http://html5.org).
+tumblr-backup applies a simple style to the saved pages. All generated pages are
+[HTML5](http://html5.org).
 
 The index pages are recreated from scratch after every backup, based on the
 existing single post pages. Normally, the index and monthly pages are in
@@ -252,10 +253,10 @@ and `-r` can be used to reverse the order.
 Option `--tag-index` creates a tag index for each tag used in the posts.
 It can be reached through the "Tag index" link in the main index.
 
-If you want to use a custom CSS file, call it `custom.css`, put it in the
-backup folder and do a complete backup. Without a custom CSS file,
-`tumblr_backup` saves a default style sheet in `backup.css`. The blog's style
-sheet itself is always saved in `theme/style.css`.
+If you want to use a custom CSS file, call it `custom.css`, put it in the backup
+folder and do a complete backup. Without a custom CSS file, tumblr-backup saves
+a default style sheet in `backup.css`. The blog's style sheet itself is always
+saved in `theme/style.css`.
 
 It you want to override just a few default styles, create the file
 `override.css` in the backup folder. This file is included automatically by the
@@ -264,8 +265,8 @@ default style sheet. You may have to mark your overriding styles with
 style sheet.
 
 Tumblr saves some image files without extension. This probably saves a few
-billion bytes in their database. `tumblr_backup` restores the image extensions.
-If an image is already backed up, it is not downloaded again. If an image is
+billion bytes in their database. tumblr-backup restores the image extensions. If
+an image is already backed up, it is not downloaded again. If an image is
 re-uploaded/edited, the old image is kept in the backup, but no post links to
 it. The format of the image file names can be selected with the `-I` option.
 
@@ -283,22 +284,22 @@ three possibilities:
 2. `-e ''` adds just the post's tags
 3. `-e -` removes all keywords from the image
 
-In incremental backup mode, `tumblr_backup` saves only posts that have higher
-ids than the highest id saved locally. Note that posts that are edited after
-being backed up are not backed up again with this option.
+In incremental backup mode, tumblr-backup saves only posts that have higher ids
+than the highest id saved locally. Note that posts that are edited after being
+backed up are not backed up again with this option.
 
-In JSON backup mode, the original JSON source returned by the Tumblr API is saved
-under the `json/` folder in addition to the HTML format.
+In JSON backup mode, the original JSON source returned by the Tumblr API is
+saved under the `json/` folder in addition to the HTML format.
 
 Automatic archive mode `-a` is designed to be used from an hourly cron script.
 It normally makes an incremental backup except if the current hour is the one
-given as argument. In this case, `tumblr_backup` will make a full backup. An
-example invocation is `tumblr_backup.py -qa4` to do a full backup at 4 in the
+given as argument. In this case, tumblr-backup will make a full backup. An
+example invocation is `tumblr-backup -qa4` to do a full backup at 4 in the
 morning. This option obviates the need for shell script logic to determine what
-options to pass. If you don't want cron to send a mail if no new posts have
-been backed up, use this crontab entry:
+options to pass. If you don't want cron to send a mail if no new posts have been
+backed up, use this crontab entry:
 
-    0 * * * * tumblr_backup -qa4 <blog-name> || test $? -eq 1
+    0 * * * * tumblr-backup -qa4 <blog-name> || test $? -eq 1
 
 This changes the exit code 1 to 0.
 
@@ -309,11 +310,11 @@ downloaded; instead, the image links point back to the original image on
 Tumblr. The posts are saved in the current folder with a `.txt` extension. The
 index is not updated.
 
-In order to limit the set of backed up posts, use the `-n` and `-s` options.
-The most recent post is always number 0, so the option `-n 200` would select
-the 200 most recent posts. Calling `tumblr_backup -n 100 -s 200` would skip the
-200 most recent posts and backup the next 100. `-n 1` is the fastest way to
-rebuild the index pages.
+In order to limit the set of backed up posts, use the `-n` and `-s` options. The
+most recent post is always number 0, so the option `-n 200` would select the 200
+most recent posts. Calling `tumblr-backup -n 100 -s 200` would skip the 200 most
+recent posts and backup the next 100. `-n 1` is the fastest way to rebuild the
+index pages.
 
 The option `-T` limits the backup to posts of the given type. `-t` saves only
 posts with the given tags. `-Q` combines both: it accepts comma-separated
@@ -332,8 +333,8 @@ posts matching all criteria will be backed up.
 All options use only public Tumblr APIs, so you can use the program to backup
 blogs that you don’t own.
 
-`tumblr_backup` is developed and tested on Linux and OS X. If you want to run
-it under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)
+tumblr-backup is developed and tested on Linux and OS X. If you want to run it
+under Windows, I suggest to try the excellent [Cygwin](http://cygwin.com)
 environment.
 
 
