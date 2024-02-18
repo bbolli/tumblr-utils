@@ -16,7 +16,7 @@ from http.cookiejar import MozillaCookieJar
 import requests
 
 
-def get_api_token():
+def get_api_token(session):
     r = session.get('https://www.tumblr.com/login')
     if r.status_code != 200:
         raise ValueError('Response has non-200 status: HTTP {} {}'.format(r.status_code, r.reason))
@@ -28,7 +28,7 @@ def get_api_token():
 
 
 def tumblr_login(session, login, password):
-    api_token = get_api_token()
+    api_token = get_api_token(session)
 
     headers = {
         'Authorization': 'Bearer {}'.format(api_token),
@@ -47,7 +47,7 @@ def tumblr_login(session, login, password):
     # We now have the necessary cookies loaded into our session.
 
 
-if __name__ == '__main__':
+def main():
     cookiefile, = sys.argv[1:]
 
     print('Enter the credentials for your Tumblr account.')

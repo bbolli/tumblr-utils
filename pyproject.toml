@@ -36,6 +36,7 @@ all = ["tumblr-backup[exif,jq,notes,video]"]
 
 [project.scripts]
 tumblr-backup = "tumblr_backup.main:main"
+tb-login = "tumblr_backup.login:main"
 
 [build-system]
 requires = ["setuptools>=43.0.0", "wheel"]
