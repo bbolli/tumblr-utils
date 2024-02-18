@@ -1,4 +1,5 @@
 # builtin modules
+import argparse
 import calendar
 import contextlib
 import errno
@@ -2080,7 +2081,9 @@ class ThreadPool:
             logger.status('Waiting for worker threads to finish\r')
 
 
-if __name__ == '__main__':
+def main():
+    global options, orig_options, API_KEY, wget_retrieve
+
     # The default of 'fork' can cause deadlocks, even on Linux
     # See https://bugs.python.org/issue40399
     if 'forkserver' in multiprocessing.get_all_start_methods():
@@ -2106,20 +2109,18 @@ if __name__ == '__main__':
         opt, *args = sys.argv[1:]
         if opt != '--set-api-key' or len(args) != 1:
             print('tumblr_backup: invalid usage', file=sys.stderr)
-            sys.exit(1)
+            return 1
         api_key, = args
         with open(config_file, 'r+') as f:
             cfg = json.load(f)
             cfg['oauth_consumer_key'] = api_key
             f.seek(0)
             json.dump(cfg, f, indent=4)
-        sys.exit()
+        return 0
 
 
     no_internet.setup(main_thread_lock)
     enospc.setup(main_thread_lock)
-
-    import argparse
 
     class CSVCallback(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
@@ -2332,7 +2333,7 @@ API key not set. To use tumblr-backup:
 3. Run `tumblr_backup.py --set-api-key API_KEY`, where API_KEY is the key that you just copied.""",
             file=sys.stderr,
         )
-        sys.exit(1)
+        return 1
 
     wget_retrieve = WgetRetrieveWrapper(options, logger.log)
     setup_wget(not options.no_ssl_verify, options.user_agent)
@@ -2344,10 +2345,10 @@ API key not set. To use tumblr-backup:
             logger.backup_account = account
             tb.backup(account, options.prev_archives[i] if options.prev_archives else None)
     except KeyboardInterrupt:
-        sys.exit(EXIT_INTERRUPT)
+        return EXIT_INTERRUPT
 
     if tb.failed_blogs:
         logger.warn('Failed to back up {}\n'.format(', '.join(tb.failed_blogs)))
     if tb.postfail_blogs:
         logger.warn('One or more posts failed to save for {}\n'.format(', '.join(tb.postfail_blogs)))
-    sys.exit(tb.exit_code())
+    return tb.exit_code()

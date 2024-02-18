@@ -34,6 +34,9 @@ all = ["tumblr-backup[exif,jq,notes,video]"]
 "Bug Reports" = "https://github.com/cebtenzzre/tumblr-utils/issues"
 "Source" = "https://github.com/cebtenzzre/tumblr-utils"
 
+[project.scripts]
+tumblr-backup = "tumblr_backup.main:main"
+
 [build-system]
 requires = ["setuptools>=43.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
