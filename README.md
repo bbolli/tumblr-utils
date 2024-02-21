@@ -64,6 +64,7 @@ There are several optional dependencies that enable additional features:
 
 ### Options
 
+```
 positional arguments:
   blogs
 
@@ -147,8 +148,8 @@ options:
   --id-file FILE        file containing a list of post IDs to save, one per
                         line
   --json-info           Just print some info for each blog, don't make a
-                        backup### Arguments
-
+                        backup
+```
 
 ### Arguments
 
