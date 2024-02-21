@@ -1192,7 +1192,8 @@ class TumblrBackup:
         if write_fro:
             # Blog directory gets created here
             with open_text('.first_run_options') as f:
-                f.write(json.dumps(orig_options))
+                json.dump(orig_options, f)
+                f.write('\n')
 
         def build_index():
             logger.status('Getting avatar and style\r')
@@ -2115,11 +2116,21 @@ def main():
             print(f'{Path(sys.argv[0]).name}: invalid usage', file=sys.stderr)
             return 1
         api_key, = args
-        with open(config_file, 'r+') as f:
-            cfg = json.load(f)
+
+        try:
+            fd = os.open(config_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            file_exists = False
+        except FileExistsError:
+            fd = os.open(config_file, os.O_RDWR, 0o644)
+            file_exists = True
+
+        with open(fd, 'r+') as f:
+            cfg = json.load(f) if file_exists else {}
             cfg['oauth_consumer_key'] = api_key
             f.seek(0)
+            f.truncate()
             json.dump(cfg, f, indent=4)
+            f.write('\n')
         return 0
 
 
