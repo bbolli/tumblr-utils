@@ -17,7 +17,9 @@ import sys
 import threading
 import time
 import traceback
+from argparse import Namespace
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from multiprocessing.queues import SimpleQueue
 from os.path import join, split, splitext
@@ -132,10 +134,6 @@ BACKUP_CHANGING_OPTIONS = (
     'use_server_timestamps', 'user_agent', 'no_get', 'internet_archive', 'media_list', 'idents',
 )
 
-parser: argparse.ArgumentParser
-options: argparse.Namespace
-orig_options: Dict[str, Any]
-API_KEY: str
 wget_retrieve: Optional[WgetRetrieveWrapper] = None
 main_thread_lock = threading.RLock()
 multicond = MultiCondition(main_thread_lock)
@@ -159,13 +157,15 @@ def load_bs4(reason):
 
 
 class Logger:
-    def __init__(self):
+    def __init__(self, quiet=False, file=sys.stdout):
+        self.quiet = quiet
+        self.file = file
         self.lock = threading.Lock()
         self.backup_account: Optional[str] = None
         self.status_msg: Optional[str] = None
 
     def log(self, level: LogLevel, msg: str, account: bool = False) -> None:
-        if options.quiet and level < LogLevel.WARN:
+        if self.quiet and level < LogLevel.WARN:
             return
         with self.lock:
             for line in msg.splitlines(True):
@@ -200,7 +200,7 @@ class Logger:
         msg, term = msg[:idx], msg[idx:]
 
         pad = ' ' * (80 - len(msg))  # Pad to 80 chars
-        print(msg + pad + term, end='', file=sys.stderr if options.json_info else sys.stdout)
+        print(msg + pad + term, end='', file=self.file)
 
 
 logger = Logger()
@@ -276,7 +276,7 @@ def strftime(fmt, t=None):
     return time.strftime(fmt, t)
 
 
-def get_api_url(account):
+def get_api_url(account: str, likes: bool) -> str:
     """construct the tumblr API URL"""
     global blog_name
     blog_name = account
@@ -285,7 +285,7 @@ def get_api_url(account):
     if '.' not in account:
         blog_name += '.tumblr.com'
     return 'https://api.tumblr.com/v2/blog/%s/%s' % (
-        blog_name, 'likes' if options.likes else 'posts'
+        blog_name, 'likes' if likes else 'posts'
     )
 
 
@@ -316,17 +316,19 @@ def parse_period_date(period):
     return [p_start, p_stop]
 
 
-def get_posts_key() -> str:
-    return 'liked_posts' if options.likes else 'posts'
+def get_posts_key(likes: bool) -> str:
+    return 'liked_posts' if likes else 'posts'
 
 
 class ApiParser:
     TRY_LIMIT = 2
     session: Optional[requests.Session] = None
+    api_key: Optional[str] = None
 
-    def __init__(self, base, account):
+    def __init__(self, base: str, account: str, options: Namespace):
         self.base = base
         self.account = account
+        self.options = options
         self.prev_resps: Optional[List[str]] = None
         self.dashboard_only_blog: Optional[bool] = None
         self._prev_iter: Optional[Iterator[JSONDict]] = None
@@ -334,14 +336,17 @@ class ApiParser:
         self._last_offset: Optional[int] = None
 
     @classmethod
-    def setup(cls):
+    def setup(
+        cls, api_key: str, no_ssl_verify: bool, user_agent: str, cookiefile: Union[str, os.PathLike[str]],
+    ) -> None:
+        cls.api_key = api_key
         cls.session = make_requests_session(
             requests.Session, HTTP_RETRY, HTTP_TIMEOUT,
-            not options.no_ssl_verify, options.user_agent, options.cookiefile,
+            not no_ssl_verify, user_agent, cookiefile,
         )
 
     def read_archive(self, prev_archive):
-        if options.reuse_json:
+        if self.options.reuse_json:
             prev_archive = save_folder
         elif prev_archive is None:
             return True
@@ -350,17 +355,17 @@ class ApiParser:
             with open(path, encoding=FILE_ENCODING) as jf:
                 return json.load(jf)
 
-        if options.likes:
+        if self.options.likes:
             logger.warn('Reading liked timestamps from saved responses (may take a while)\n', account=True)
 
-        if options.idents is None:
+        if self.options.idents is None:
             respfiles: Iterable[str] = (
                 e.path for e in os.scandir(join(prev_archive, 'json'))
                 if e.name.endswith('.json') and e.is_file()
             )
         else:
             respfiles = []
-            for ident in options.idents:
+            for ident in self.options.idents:
                 resp = join(prev_archive, 'json', str(ident) + '.json')
                 if not os.path.isfile(resp):
                     logger.error("post '{}' not found\n".format(ident), account=True)
@@ -370,7 +375,7 @@ class ApiParser:
         self.prev_resps = sorted(
             respfiles,
             key=lambda p: (
-                read_resp(p)['liked_timestamp'] if options.likes
+                read_resp(p)['liked_timestamp'] if self.options.likes
                 else int(os.path.basename(p)[:-5])
             ),
             reverse=True,
@@ -393,8 +398,8 @@ class ApiParser:
                 first_post = next(self._iter_prev())
             except StopIteration:
                 return None
-            r = {get_posts_key(): [first_post], 'blog': first_post['blog'].copy()}
-            if options.likes:
+            r = {get_posts_key(self.options.likes): [first_post], 'blog': first_post['blog'].copy()}
+            if self.options.likes:
                 r['liked_count'] = len(self.prev_resps)
             else:
                 r['blog']['posts'] = len(self.prev_resps)
@@ -407,6 +412,8 @@ class ApiParser:
         return resp
 
     def apiparse(self, count, start=0, before=None, ident=None) -> Optional[JSONDict]:
+        assert self.api_key is not None
+
         if self.prev_resps is not None:
             if self._prev_iter is None:
                 self._prev_iter = self._iter_prev()
@@ -426,7 +433,7 @@ class ApiParser:
                     self._last_mode = 'before'
                     self._last_offset = before
                     it = itertools.dropwhile(
-                        lambda p: p['liked_timestamp' if options.likes else 'timestamp'] >= before,
+                        lambda p: p['liked_timestamp' if self.options.likes else 'timestamp'] >= before,
                         it,
                     )
                 else:
@@ -435,7 +442,7 @@ class ApiParser:
                     self._last_mode = 'offset'
                     self._last_offset = start
                 posts = list(itertools.islice(it, None, count))
-            return {get_posts_key(): posts}
+            return {get_posts_key(self.options.likes): posts}
 
         if self.dashboard_only_blog:
             base = 'https://www.tumblr.com/svc/indash_blog'
@@ -447,7 +454,7 @@ class ApiParser:
             }
         else:
             base = self.base
-            params = {'api_key': API_KEY, 'limit': count, 'reblog_info': 'true'}
+            params = {'api_key': self.api_key, 'limit': count, 'reblog_info': 'true'}
             headers = None
         if ident is not None:
             params['post_id' if self.dashboard_only_blog else 'id'] = ident
@@ -466,13 +473,13 @@ class ApiParser:
 
         if not 200 <= status < 300:
             # Detect dashboard-only blogs by the error codes
-            if status == 404 and self.dashboard_only_blog is None and not (doc is None or options.likes):
+            if status == 404 and self.dashboard_only_blog is None and not (doc is None or self.options.likes):
                 errors = doc.get('errors', ())
                 if len(errors) == 1 and errors[0].get('code') == 4012:
                     self.dashboard_only_blog = True
                     logger.info('Found dashboard-only blog, trying svc API\n', account=True)
                     return self.apiparse(count, start)  # Recurse once
-            if status == 403 and options.likes:
+            if status == 403 and self.options.likes:
                 logger.error('HTTP 403: Most likely {} does not have public likes.\n'.format(self.account))
                 return None
             logger.error('URL is {}?{}\n[FATAL] {} API repsonse: HTTP {} {}\n{}'.format(
@@ -483,7 +490,7 @@ class ApiParser:
             ))
             if status == 401 and self.dashboard_only_blog:
                 logger.error("This is a dashboard-only blog, so you probably don't have the right cookies.{}\n".format(
-                    '' if options.cookiefile else ' Try --cookiefile.',
+                    '' if self.options.cookiefile else ' Try --cookiefile.',
                 ))
             return None
         if doc is None:
@@ -526,7 +533,7 @@ class ApiParser:
                         continue
                     return doc, status, resp.reason if doc is None else http.client.responses.get(status, '(unknown)')
             except HTTPError:
-                if not is_dns_working(timeout=5, check=options.use_dns_check):
+                if not is_dns_working(timeout=5, check=self.options.use_dns_check):
                     no_internet.signal()
                     continue
                 raise
@@ -577,7 +584,7 @@ class ApiParser:
         return True
 
 
-def add_exif(image_name, tags):
+def add_exif(image_name: str, tags: Set[str], exif: Set[str]) -> None:
     assert pyexiv2 is not None
     try:
         metadata = pyexiv2.ImageMetadata(image_name)
@@ -586,14 +593,14 @@ def add_exif(image_name, tags):
         logger.error('Error reading metadata for image {!r}: {!r}\n'.format(image_name, e))
         return
     KW_KEY = 'Iptc.Application2.Keywords'
-    if '-' in options.exif:  # remove all tags
+    if '-' in exif:  # remove all tags
         if KW_KEY in metadata.iptc_keys:
             del metadata[KW_KEY]
     else:  # add tags
         if KW_KEY in metadata.iptc_keys:
             tags |= set(metadata[KW_KEY].value)
-        tags = [tag.strip().lower() for tag in tags | options.exif if tag]
-        metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, tags)
+        taglist = [tag.strip().lower() for tag in tags | exif if tag]
+        metadata[KW_KEY] = pyexiv2.IptcTag(KW_KEY, taglist)
     try:
         metadata.write()
     except OSError as e:
@@ -627,9 +634,9 @@ def find_files(path, match=None):
         yield from (e.path for e in it if match is None or match(e.name))
 
 
-def find_post_files():
+def find_post_files(dirs: bool) -> Iterator[str]:
     path = path_to(post_dir)
-    if not options.dirs:
+    if not dirs:
         yield from find_files(path, lambda n: n.endswith(post_ext))
         return
 
@@ -641,7 +648,7 @@ def match_avatar(name):
     return name.startswith(avatar_base + '.')
 
 
-def get_avatar(prev_archive):
+def get_avatar(prev_archive: Union[str, os.PathLike[str]], no_get: bool) -> None:
     if prev_archive is not None:
         # Copy old avatar, if present
         avatar_matches = find_files(join(prev_archive, theme_dir), match_avatar)
@@ -651,7 +658,7 @@ def get_avatar(prev_archive):
             cpy_res = maybe_copy_media(prev_archive, path_parts)
             if cpy_res:
                 return  # We got the avatar
-    if options.no_get:
+    if no_get:
         return  # Don't download the avatar
 
     url = 'https://api.tumblr.com/v2/blog/%s/avatar' % blog_name
@@ -677,7 +684,7 @@ def get_avatar(prev_archive):
         e.log()
 
 
-def get_style(prev_archive):
+def get_style(prev_archive: Union[str, os.PathLike[str]], no_get: bool, use_dns_check: bool) -> None:
     """Get the blog's CSS by brute-forcing it from the home page.
     The v2 API has no method for getting the style directly.
     See https://groups.google.com/d/msg/tumblr-api/f-rRH6gOb6w/sAXZIeYx5AUJ"""
@@ -687,12 +694,12 @@ def get_style(prev_archive):
         cpy_res = maybe_copy_media(prev_archive, path_parts)
         if cpy_res:
             return  # We got the style
-    if options.no_get:
+    if no_get:
         return  # Don't download the style
 
     url = 'https://%s/' % blog_name
     try:
-        resp = urlopen(url, options)
+        resp = urlopen(url, use_dns_check=use_dns_check)
         page_data = resp.data
     except HTTPError as e:
         logger.error('URL is {}\nError retrieving style: {}\n'.format(url, e))
@@ -736,7 +743,7 @@ def maybe_copy_media(prev_archive, path_parts, pa_path_parts=None):
     return True  # Copied
 
 
-def check_optional_modules():
+def check_optional_modules(options: Namespace) -> None:
     if options.exif:
         if pyexiv2 is None:
             raise RuntimeError("--exif: module 'pyexiv2' is not installed")
@@ -773,8 +780,16 @@ def import_youtube_dl():
 class Index:
     index: DefaultDict[int, DefaultDict[int, List['LocalPost']]]
 
-    def __init__(self, blog, body_class='index'):
+    def __init__(
+        self, blog: 'TumblrBackup', posts_per_page: int, dirs: bool, reverse_month: bool, reverse_index: bool,
+        tag_index: bool, body_class: str = 'index'
+    ):
         self.blog = blog
+        self.posts_per_page = posts_per_page
+        self.dirs_option = dirs
+        self.reverse_month = reverse_month
+        self.reverse_index = reverse_index
+        self.tag_index = tag_index
         self.body_class = body_class
         self.index = defaultdict(lambda: defaultdict(list))
 
@@ -783,17 +798,17 @@ class Index:
 
     def save_index(self, index_dir='.', title=None):
         archives = sorted(((y, m) for y in self.index for m in self.index[y]),
-            reverse=options.reverse_month
+            reverse=self.reverse_month
         )
         subtitle = self.blog.title if title else self.blog.subtitle
         title = title or self.blog.title
         with open_text(index_dir, dir_index) as idx:
             idx.write(self.blog.header(title, self.body_class, subtitle, avatar=True))
-            if options.tag_index and self.body_class == 'index':
+            if self.tag_index and self.body_class == 'index':
                 idx.write('<p><a href={}>Tag index</a></p>\n'.format(
                     urlpathjoin(tag_index_dir, dir_index)
                 ))
-            for year in sorted(self.index.keys(), reverse=options.reverse_index):
+            for year in sorted(self.index.keys(), reverse=self.reverse_index):
                 self.save_year(idx, archives, index_dir, year)
             idx.write('<footer><p>Generated on %s by <a href=https://github.com/'
                 'bbolli/tumblr-utils>tumblr-utils</a>.</p></footer>\n' % strftime('%x %X')
@@ -801,7 +816,7 @@ class Index:
 
     def save_year(self, idx, archives, index_dir, year):
         idx.write('<h3>%s</h3>\n<ul>\n' % year)
-        for month in sorted(self.index[year].keys(), reverse=options.reverse_index):
+        for month in sorted(self.index[year].keys(), reverse=self.reverse_index):
             tm = time.localtime(time.mktime((year, month, 3, 0, 0, 0, 0, 0, -1)))
             month_name = self.save_month(archives, index_dir, year, month, tm)
             idx.write('    <li><a href={} title="{} post(s)">{}</a></li>\n'.format(
@@ -810,9 +825,9 @@ class Index:
         idx.write('</ul>\n\n')
 
     def save_month(self, archives, index_dir, year, month, tm):
-        posts = sorted(self.index[year][month], key=lambda x: x.date, reverse=options.reverse_month)
+        posts = sorted(self.index[year][month], key=lambda x: x.date, reverse=self.reverse_month)
         posts_month = len(posts)
-        posts_page = options.posts_per_page if options.posts_per_page >= 1 else posts_month
+        posts_page = self.posts_per_page if self.posts_per_page >= 1 else posts_month
 
         def pages_per_month(y, m):
             posts_m = len(self.index[y][m])
@@ -833,9 +848,9 @@ class Index:
             archive = [self.blog.header(strftime('%B %Y', tm), body_class='archive')]
             archive.extend(p.get_post(self.body_class == 'tag-archive') for p in posts[start:start + posts_page])
 
-            suffix = '/' if options.dirs else post_ext
+            suffix = '/' if self.dirs_option else post_ext
             file_name = FILE_FMT % (year, month, page, suffix)
-            if options.dirs:
+            if self.dirs_option:
                 base = urlpathjoin(save_dir, archive_dir)
                 arch = open_text(index_dir, archive_dir, file_name, dir_index)
             else:
@@ -865,30 +880,48 @@ class Index:
 
 
 class TagIndex(Index):
-    def __init__(self, blog, name):
-        super().__init__(blog, 'tag-archive')
+    def __init__(
+        self, name: str, blog: 'TumblrBackup', posts_per_page: int, dirs: bool, reverse_month: bool,
+        reverse_index: bool, tag_index: bool,
+    ):
+        super().__init__(blog, posts_per_page, dirs=dirs, reverse_month=reverse_month, reverse_index=reverse_index,
+                         tag_index=tag_index, body_class='tag-archive')
         self.name = name
 
 
 class Indices:
-    def __init__(self, blog):
+    def __init__(
+        self, blog: 'TumblrBackup', posts_per_page: int, dirs: bool, reverse_month: bool, reverse_index: bool,
+        tag_index: bool,
+    ):
         self.blog = blog
-        self.main_index = Index(blog)
-        self.tags = {}
+        self.posts_per_page = posts_per_page
+        self.dirs_option = dirs
+        self.reverse_month = reverse_month
+        self.reverse_index = reverse_index
+        self.tag_index = tag_index
+        self.main_index = Index(blog, posts_per_page, dirs=dirs, reverse_month=reverse_month,
+                                reverse_index=reverse_index, tag_index=tag_index)
+        self.tags: Dict[str, TagIndex] = {}
 
     def build_index(self):
-        for post in map(LocalPost, find_post_files()):
+        posts = (LocalPost(p, self.tag_index) for p in find_post_files(self.dirs_option))
+        for post in posts:
             self.main_index.add_post(post)
-            if options.tag_index:
+            if self.tag_index:
                 for tag, name in post.tags:
                     if tag not in self.tags:
-                        self.tags[tag] = TagIndex(self.blog, name)
+                        self.tags[tag] = TagIndex(
+                            name, self.blog, self.posts_per_page, dirs=self.dirs_option,
+                            reverse_month=self.reverse_month, reverse_index=self.reverse_index,
+                            tag_index=self.tag_index,
+                        )
                     self.tags[tag].name = name
                     self.tags[tag].add_post(post)
 
     def save_index(self):
         self.main_index.save_index()
-        if options.tag_index:
+        if self.tag_index:
             self.save_tag_index()
 
     def save_tag_index(self):
@@ -910,9 +943,12 @@ class Indices:
 
 
 class TumblrBackup:
-    def __init__(self):
-        self.failed_blogs = []
-        self.postfail_blogs = []
+    def __init__(self, options: Namespace, orig_options: Dict[str, Any], get_arg_default: Callable[[str], Any]):
+        self.options = options
+        self.orig_options = orig_options
+        self.get_arg_default = get_arg_default
+        self.failed_blogs: List[str] = []
+        self.postfail_blogs: List[str] = []
         self.total_count = 0
         self.post_count = 0
         self.filter_skipped = 0
@@ -926,7 +962,7 @@ class TumblrBackup:
     def exit_code(self):
         if self.failed_blogs or self.postfail_blogs:
             return EXIT_ERRORS
-        if self.total_count == 0 and not options.json_info:
+        if self.total_count == 0 and not self.options.json_info:
             return EXIT_NOPOSTS
         return EXIT_SUCCESS
 
@@ -983,8 +1019,7 @@ class TumblrBackup:
         # datetime.fromisoformat does not understand 'Z' suffix
         return int(datetime.strptime(cast(str, postdate), '%Y-%m-%dT%H:%M:%SZ').timestamp())
 
-    @classmethod
-    def process_existing_backup(cls, account, prev_archive):
+    def process_existing_backup(self, account, prev_archive):
         complete_backup = os.path.exists(path_to('.complete'))
         try:
             with open(path_to('.first_run_options'), encoding=FILE_ENCODING) as f:
@@ -992,17 +1027,18 @@ class TumblrBackup:
         except FileNotFoundError:
             first_run_options = None
 
+        @dataclass(frozen=True)
         class Options:
-            def __init__(self, fro): self.fro = fro
-            def differs(self, opt): return opt not in self.fro or orig_options[opt] != self.fro[opt]
+            fro: Dict[str, Any]
+            orig: Dict[str, Any]
+            def differs(self, opt): return opt not in self.fro or self.orig[opt] != self.fro[opt]
             def first(self, opts): return {opt: self.fro.get(opt, '<not present>') for opt in opts}
-            @staticmethod
-            def this(opts): return {opt: orig_options[opt] for opt in opts}
+            def this(self, opts): return {opt: self.orig[opt] for opt in opts}
 
         # These options must always match
         backdiff_nondef = None
         if first_run_options is not None:
-            opts = Options(first_run_options)
+            opts = Options(first_run_options, self.orig_options)
             mustmatchdiff = tuple(filter(opts.differs, MUST_MATCH_OPTIONS))
             if mustmatchdiff:
                 raise RuntimeError('{}: The script was given {} but the existing backup was made with {}'.format(
@@ -1012,21 +1048,21 @@ class TumblrBackup:
             if complete_backup:
                 # Complete archives may be added to with different options
                 if (
-                    options.resume
+                    self.options.resume
                     and first_run_options.get('count') is None
-                    and (orig_options['period'] or [0, 0])[0] >= (first_run_options.get('period') or [0, 0])[0]
+                    and (self.orig_options['period'] or [0, 0])[0] >= (first_run_options.get('period') or [0, 0])[0]
                 ):
                     raise RuntimeError('{}: Cannot continue complete backup that was not stopped early with --count or '
                                        '--period'.format(account))
-            elif options.resume:
-                backdiff_nondef = tuple(opt for opt in backdiff if orig_options[opt] != parser.get_default(opt))
-                if backdiff_nondef and not options.ignore_diffopt:
+            elif self.options.resume:
+                backdiff_nondef = tuple(opt for opt in backdiff if self.orig_options[opt] != self.get_arg_default(opt))
+                if backdiff_nondef and not self.options.ignore_diffopt:
                     raise RuntimeError('{}: The script was given {} but the existing backup was made with {}. You may '
                                        'skip this check with --ignore-diffopt.'.format(
                                             account, opts.this(backdiff_nondef), opts.first(backdiff_nondef)))
             elif not backdiff:
                 raise RuntimeError('{}: Found incomplete archive, try --continue'.format(account))
-            elif not options.ignore_diffopt:
+            elif not self.options.ignore_diffopt:
                 raise RuntimeError('{}: Refusing to make a different backup (with {} instead of {}) over an incomplete '
                                    'archive. Delete the old backup to start fresh, or skip this check with '
                                    '--ignore-diffopt (optionally with --continue).'.format(
@@ -1042,29 +1078,29 @@ class TumblrBackup:
 
             # These options must always match
             if pa_options is not None:
-                pa_opts = Options(pa_options)
+                pa_opts = Options(pa_options, self.orig_options)
                 mustmatchdiff = tuple(filter(pa_opts.differs, PREV_MUST_MATCH_OPTIONS))
                 if mustmatchdiff:
                     raise RuntimeError('{}: The script was given {} but the previous archive was made with {}'.format(
                         account, pa_opts.this(mustmatchdiff), pa_opts.first(mustmatchdiff)))
 
         oldest_tstamp = None
-        if options.resume or not complete_backup:
+        if self.options.resume or not complete_backup:
             # Read every post to find the oldest timestamp already saved
-            post_glob = list(find_post_files())
-            if not options.resume:
+            post_glob = list(find_post_files(self.options.dirs))
+            if not self.options.resume:
                 pass  # No timestamp needed but may want to know if posts are present
             elif not post_glob:
                 raise RuntimeError('{}: Cannot continue empty backup'.format(account))
             else:
                 logger.warn('Found incomplete backup.\n', account=True)
                 BeautifulSoup = load_bs4('continue incomplete backup')
-                if options.likes:
+                if self.options.likes:
                     logger.warn('Finding oldest liked post (may take a while)\n', account=True)
-                    oldest_tstamp = min(cls.get_post_timestamp(post, BeautifulSoup) for post in post_glob)
+                    oldest_tstamp = min(self.get_post_timestamp(post, BeautifulSoup) for post in post_glob)
                 else:
                     post_min = min(post_glob, key=lambda f: int(splitext(split(f)[1])[0]))
-                    oldest_tstamp = cls.get_post_timestamp(post_min, BeautifulSoup)
+                    oldest_tstamp = self.get_post_timestamp(post_min, BeautifulSoup)
                 logger.info(
                     'Backing up posts before timestamp={} ({})\n'.format(oldest_tstamp, time.ctime(oldest_tstamp)),
                     account=True,
@@ -1075,11 +1111,11 @@ class TumblrBackup:
             # Load saved options, unless they were overridden with --ignore-diffopt
             for opt in BACKUP_CHANGING_OPTIONS:
                 if opt not in backdiff_nondef:
-                    setattr(options, opt, first_run_options[opt])
+                    setattr(self.options, opt, first_run_options[opt])
         else:
             # Load original options
             for opt in BACKUP_CHANGING_OPTIONS:
-                setattr(options, opt, orig_options[opt])
+                setattr(self.options, opt, self.orig_options[opt])
             if first_run_options is None and not (complete_backup or post_glob):
                 # Presumably this is the initial backup of this blog
                 write_fro = True
@@ -1088,7 +1124,7 @@ class TumblrBackup:
             # Fallback assumptions
             logger.warn('Warning: Unknown media path options for previous archive, assuming they match ours\n',
                         account=True)
-            pa_options = {opt: getattr(options, opt) for opt in MEDIA_PATH_OPTIONS}
+            pa_options = {opt: getattr(self.options, opt) for opt in MEDIA_PATH_OPTIONS}
 
         return oldest_tstamp, pa_options, write_fro
 
@@ -1102,21 +1138,21 @@ class TumblrBackup:
     def backup(self, account, prev_archive):
         """makes single files and an index for every post on a public Tumblr blog account"""
 
-        base = get_api_url(account)
+        base = get_api_url(account, likes=self.options.likes)
 
         # make sure there are folders to save in
         global save_folder, media_folder, post_ext, post_dir, save_dir, have_custom_css
-        if options.json_info:
+        if self.options.json_info:
             pass  # Not going to save anything
-        elif options.blosxom:
+        elif self.options.blosxom:
             save_folder = root_folder
             post_ext = '.txt'
             post_dir = os.curdir
             post_class: Type[TumblrPost] = BlosxomPost
         else:
-            save_folder = join(root_folder, options.outdir or account)
+            save_folder = join(root_folder, self.options.outdir or account)
             media_folder = path_to(media_dir)
-            if options.dirs:
+            if self.options.dirs:
                 post_ext = ''
                 save_dir = '../..'
             post_class = TumblrPost
@@ -1126,18 +1162,18 @@ class TumblrBackup:
         self.filter_skipped = 0
 
         oldest_tstamp, self.pa_options, write_fro = self.process_existing_backup(account, prev_archive)
-        check_optional_modules()
+        check_optional_modules(self.options)
 
-        if options.idents:
+        if self.options.idents:
             # Normalize idents
-            options.idents.sort(reverse=True)
+            self.options.idents.sort(reverse=True)
 
-        if options.incremental or options.resume:
-            post_glob = list(find_post_files())
+        if self.options.incremental or self.options.resume:
+            post_glob = list(find_post_files(self.options.dirs))
 
         ident_max = None
-        if options.incremental and post_glob:
-            if options.likes:
+        if self.options.incremental and post_glob:
+            if self.options.likes:
                 # Read every post to find the newest timestamp already saved
                 logger.warn('Finding newest liked post (may take a while)\n', account=True)
                 BeautifulSoup = load_bs4('backup likes incrementally')
@@ -1149,14 +1185,14 @@ class TumblrBackup:
                 ident_max = max(int(splitext(split(f)[1])[0]) for f in post_glob)
                 logger.info('Backing up posts after id={}\n'.format(ident_max), account=True)
 
-        if options.resume:
+        if self.options.resume:
             # Update skip and count based on where we left off
-            options.skip = 0
+            self.options.skip = 0
             self.post_count = len(post_glob)
 
         logger.status('Getting basic information\r')
 
-        api_parser = ApiParser(base, account)
+        api_parser = ApiParser(base, account, self.options)
         if not api_parser.read_archive(prev_archive):
             self.failed_blogs.append(account)
             return
@@ -1166,7 +1202,7 @@ class TumblrBackup:
             return
 
         # collect all the meta information
-        if options.likes:
+        if self.options.likes:
             if not resp.get('blog', {}).get('share_likes', True):
                 logger.error('{} does not have public likes\n'.format(account))
                 self.failed_blogs.append(account)
@@ -1181,7 +1217,7 @@ class TumblrBackup:
         self.title = escape(blog.get('title', account))
         self.subtitle = blog.get('description', '')
 
-        if options.json_info:
+        if self.options.json_info:
             posts = resp[posts_key]
             info = {'uuid': blog.get('uuid'),
                     'post_count': count_estimate,
@@ -1192,17 +1228,20 @@ class TumblrBackup:
         if write_fro:
             # Blog directory gets created here
             with open_text('.first_run_options') as f:
-                json.dump(orig_options, f)
+                json.dump(self.orig_options, f)
                 f.write('\n')
 
         def build_index():
             logger.status('Getting avatar and style\r')
-            get_avatar(prev_archive)
-            get_style(prev_archive)
+            get_avatar(prev_archive, no_get=self.options.no_get)
+            get_style(prev_archive, no_get=self.options.no_get, use_dns_check=self.options.use_dns_check)
             if not have_custom_css:
                 save_style()
             logger.status('Building index\r')
-            ix = Indices(self)
+            ix = Indices(
+                self, self.options.posts_per_page, dirs=self.options.dirs, reverse_month=self.options.reverse_month,
+                reverse_index=self.options.reverse_index, tag_index=self.options.tag_index,
+            )
             ix.build_index()
             ix.save_index()
 
@@ -1224,7 +1263,7 @@ class TumblrBackup:
                     if sf is not None:
                         os.close(sf)
 
-        if not options.blosxom and options.count == 0:
+        if not self.options.blosxom and self.options.count == 0:
             build_index()
             return
 
@@ -1232,16 +1271,16 @@ class TumblrBackup:
         TumblrPost.post_header = self.header(body_class='post')
 
         jq_filter = request_sets = None
-        if options.filter is not None:
+        if self.options.filter is not None:
             assert jq is not None
-            jq_filter = jq.compile(options.filter)
-        if options.request is not None:
-            request_sets = {typ: set(tags) for typ, tags in options.request.items()}
+            jq_filter = jq.compile(self.options.filter)
+        if self.options.request is not None:
+            request_sets = {typ: set(tags) for typ, tags in self.options.request.items()}
 
         # start the thread pool
-        backup_pool = ThreadPool()
+        backup_pool = ThreadPool(self.options.threads)
 
-        before = options.period[1] if options.period else None
+        before = self.options.period[1] if self.options.period else None
         if oldest_tstamp is not None:
             before = oldest_tstamp if before is None else min(before, oldest_tstamp)
         if before is not None and api_parser.dashboard_only_blog:
@@ -1249,12 +1288,12 @@ class TumblrBackup:
 
         # returns whether any posts from this batch were saved
         def _backup(posts):
-            def sort_key(x): return x['liked_timestamp'] if options.likes else int(x['id'])
+            def sort_key(x): return x['liked_timestamp'] if self.options.likes else int(x['id'])
             oldest_date = None
             for p in sorted(posts, key=sort_key, reverse=True):
                 no_internet.check()
                 enospc.check()
-                post = post_class(p, account, prev_archive, self.pa_options, self.record_media)
+                post = post_class(p, self.options, account, prev_archive, self.pa_options, self.record_media)
                 oldest_date = post.date
                 if before is not None and post.date >= before:
                     if api_parser.dashboard_only_blog:
@@ -1263,10 +1302,10 @@ class TumblrBackup:
                         post.date, before))
                 if ident_max is None:
                     pass  # No limit
-                elif (p['liked_timestamp'] if options.likes else int(post.ident)) <= ident_max:
+                elif (p['liked_timestamp'] if self.options.likes else int(post.ident)) <= ident_max:
                     logger.info('Stopping backup: Incremental backup complete\n', account=True)
                     return False, oldest_date
-                if options.period and post.date < options.period[0]:
+                if self.options.period and post.date < self.options.period[0]:
                     logger.info('Stopping backup: Reached end of period\n', account=True)
                     return False, oldest_date
                 if next_ident is not None and int(post.ident) != next_ident:
@@ -1278,9 +1317,9 @@ class TumblrBackup:
                     tags = request_sets[post.typ]
                     if not (TAG_ANY in tags or tags & {t.lower() for t in post.tags}):
                         continue
-                if options.no_reblog and post_is_reblog(p):
+                if self.options.no_reblog and post_is_reblog(p):
                     continue
-                if options.only_reblog and not post_is_reblog(p):
+                if self.options.only_reblog and not post_is_reblog(p):
                     continue
                 if jq_filter:
                     try:
@@ -1290,7 +1329,7 @@ class TumblrBackup:
                     if not matches:
                         self.filter_skipped += 1
                         continue
-                if os.path.exists(path_to(*post.get_path())) and options.no_post_clobber:
+                if os.path.exists(path_to(*post.get_path())) and self.options.no_post_clobber:
                     continue  # Post exists and no-clobber enabled
 
                 with multicond:
@@ -1302,20 +1341,20 @@ class TumblrBackup:
                     backup_pool.add_work(post.save_post)
 
                 self.post_count += 1
-                if options.count and self.post_count >= options.count:
-                    logger.info('Stopping backup: Reached limit of {} posts\n'.format(options.count), account=True)
+                if self.options.count and self.post_count >= self.options.count:
+                    logger.info('Stopping backup: Reached limit of {} posts\n'.format(self.options.count), account=True)
                     return False, oldest_date
             return True, oldest_date
 
         api_thread = AsyncCallable(main_thread_lock, api_parser.apiparse, 'API Thread')
 
         next_ident: Optional[int] = None
-        if options.idents is not None:
-            remaining_idents = options.idents.copy()
+        if self.options.idents is not None:
+            remaining_idents = self.options.idents.copy()
             count_estimate = len(remaining_idents)
 
         mlf: Optional[ContextManager[TextIO]]
-        if options.media_list:
+        if self.options.media_list:
             mlf = open_text('media.json', mode='r+')
             self.media_list_file = mlf.__enter__()
             self.mlf_seen.clear()
@@ -1328,16 +1367,16 @@ class TumblrBackup:
         try:
             # Get the JSON entries from the API, which we can only do for MAX_POSTS posts at once.
             # Posts "arrive" in reverse chronological order. Post #0 is the most recent one.
-            i = options.skip
+            i = self.options.skip
 
             while True:
                 # find the upper bound
                 logger.status('Getting {}posts {} to {}{}\r'.format(
-                    'liked ' if options.likes else '', i, i + MAX_POSTS - 1,
+                    'liked ' if self.options.likes else '', i, i + MAX_POSTS - 1,
                     '' if count_estimate is None else ' (of {} expected)'.format(count_estimate),
                 ))
 
-                if options.idents is not None:
+                if self.options.idents is not None:
                     try:
                         next_ident = remaining_idents.pop(0)
                     except IndexError:
@@ -1369,7 +1408,7 @@ class TumblrBackup:
                 if not res:
                     break
 
-                if options.likes and prev_archive is None:
+                if self.options.likes and prev_archive is None:
                     next_ = resp['_links'].get('next')
                     if next_ is None:
                         logger.info('Backup complete: Found end of likes\n', account=True)
@@ -1381,7 +1420,7 @@ class TumblrBackup:
                         oldest_date -= 1
                     before = oldest_date
 
-                if options.idents is None:
+                if self.options.idents is None:
                     i += MAX_POSTS
                 else:
                     i += 1
@@ -1401,13 +1440,13 @@ class TumblrBackup:
             self.postfail_blogs.append(account)
 
         # postprocessing
-        if not options.blosxom and self.post_count:
+        if not self.options.blosxom and self.post_count:
             build_index()
 
         logger.status(None)
         skipped_msg = (', {} did not match filter'.format(self.filter_skipped)) if self.filter_skipped else ''
         logger.warn(
-            '{} {}posts backed up{}\n'.format(self.post_count, 'liked ' if options.likes else '', skipped_msg),
+            '{} {}posts backed up{}\n'.format(self.post_count, 'liked ' if self.options.likes else '', skipped_msg),
             account=True,
         )
         self.total_count += self.post_count
@@ -1419,12 +1458,14 @@ class TumblrPost:
     def __init__(
         self,
         post: JSONDict,
+        options: Namespace,
         backup_account: str,
         prev_archive: Optional[str],
         pa_options: Optional[JSONDict],
         record_media: Callable[[int, Set[str]], None],
     ) -> None:
         self.post = post
+        self.options = options
         self.backup_account = backup_account
         self.prev_archive = prev_archive
         self.pa_options = pa_options
@@ -1470,11 +1511,11 @@ class TumblrPost:
         def append_try(elt, fmt='%s'):
             elt = get_try(elt)
             if elt:
-                if options.save_images:
+                if self.options.save_images:
                     elt = re.sub(r'''(?i)(<img\s(?:[^>]*\s)?src\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_image, elt
                     )
-                if options.save_video or options.save_video_tumblr:
+                if self.options.save_video or self.options.save_video_tumblr:
                     # Handle video element poster attribute
                     elt = re.sub(r'''(?i)(<video\s(?:[^>]*\s)?poster\s*=\s*["'])(.*?)(["'][^>]*>)''',
                         self.get_inline_video_poster, elt
@@ -1495,7 +1536,7 @@ class TumblrPost:
             for offset, p in enumerate(post['photos'], start=1):
                 o = p['alt_sizes'][0] if 'alt_sizes' in p else p['original_size']
                 src = o['url']
-                if options.save_images:
+                if self.options.save_images:
                     src = self.get_image_url(src, offset if is_photoset else 0)
                 append(escape(src), '<img alt="" src="%s">')
                 if url:
@@ -1516,10 +1557,10 @@ class TumblrPost:
 
         elif self.typ == 'video':
             src = ''
-            if (options.save_video or options.save_video_tumblr) \
+            if (self.options.save_video or self.options.save_video_tumblr) \
                     and post['video_type'] == 'tumblr':
                 src = self.get_media_url(post['video_url'], '.mp4')
-            elif options.save_video:
+            elif self.options.save_video:
                 src = self.get_youtube_url(self.url)
                 if not src:
                     logger.warn('Unable to download video in post #{}\n'.format(self.ident))
@@ -1543,7 +1584,7 @@ class TumblrPost:
 
             src = None
             audio_url = get_try('audio_url') or get_try('audio_source_url')
-            if options.save_audio:
+            if self.options.save_audio:
                 if post['audio_type'] == 'tumblr':
                     if audio_url.startswith('https://a.tumblr.com/'):
                         src = self.get_media_url(audio_url, '.mp3')
@@ -1601,8 +1642,8 @@ class TumblrPost:
             'fragment_retries': 3000,
             'ignoreerrors': True,
         }
-        if options.cookiefile is not None:
-            ydl_options['cookiefile'] = options.cookiefile
+        if self.options.cookiefile is not None:
+            ydl_options['cookiefile'] = self.options.cookiefile
 
         if TYPE_CHECKING:
             import youtube_dl
@@ -1638,8 +1679,8 @@ class TumblrPost:
         the original URL in case of download errors."""
         saved_name = self.download_media(image_url, offset='_o%s' % offset if offset else '')
         if saved_name is not None:
-            if options.exif and saved_name.endswith('.jpg'):
-                add_exif(join(self.media_folder, saved_name), set(self.tags))
+            if self.options.exif and saved_name.endswith('.jpg'):
+                add_exif(join(self.media_folder, saved_name), set(self.tags), self.options.exif)
             return urlpathjoin(self.media_url, saved_name)
         return image_url
 
@@ -1687,7 +1728,7 @@ class TumblrPost:
         saved_name = None
         if '.tumblr.com' in video_url:
             saved_name = self.get_media_url(video_url, '.mp4')
-        elif options.save_video:
+        elif self.options.save_video:
             saved_name = self.get_youtube_url(video_url)
         if saved_name is None:
             return match.group(0)
@@ -1738,7 +1779,7 @@ class TumblrPost:
             parts = (media_dir,) + ((hostname,) if hostdirs else ()) + (fname,)
             return parts
 
-        path_parts = get_path(self.media_dir, options.image_names, options.hostdirs)
+        path_parts = get_path(self.media_dir, self.options.image_names, self.options.hostdirs)
         media_path = path_to(*path_parts)
 
         # prevent racing of existence check and download
@@ -1768,7 +1809,7 @@ class TumblrPost:
             cpy_res = maybe_copy_media(self.prev_archive, path_parts, pa_path_parts)
         file_exists = os.path.exists(media_path)
         if not (cpy_res or file_exists):
-            if options.no_get:
+            if self.options.no_get:
                 return None
             # We don't have the media and we want it
             assert wget_retrieve is not None
@@ -1791,10 +1832,10 @@ class TumblrPost:
 
     def get_post(self):
         """returns this post in HTML"""
-        typ = ('liked-' if options.likes else '') + self.typ
+        typ = ('liked-' if self.options.likes else '') + self.typ
         post = self.post_header + '<article class=%s id=p-%s>\n' % (typ, self.ident)
         post += '<header>\n'
-        if options.likes:
+        if self.options.likes:
             post += '<p><a href=\"https://{0}.tumblr.com/\" class=\"tumblr_blog\">{0}</a>:</p>\n'.format(self.creator)
         post += '<p><time datetime=%s>%s</time>\n' % (self.isodate, strftime('%x %X', self.tm))
         post += '<a class=llink href={}>¶</a>\n'.format(urlpathjoin(save_dir, post_dir, self.llink))
@@ -1818,15 +1859,15 @@ class TumblrPost:
 
         notes_html = ''
 
-        if options.save_notes or options.copy_notes:
+        if self.options.save_notes or self.options.copy_notes:
             if TYPE_CHECKING:
                 from bs4 import BeautifulSoup
             else:
-                BeautifulSoup = load_bs4('save notes' if options.save_notes else 'copy notes')
+                BeautifulSoup = load_bs4('save notes' if self.options.save_notes else 'copy notes')
 
-        if options.copy_notes:
+        if self.options.copy_notes:
             # Copy notes from prev_archive (or here)
-            prev_archive = save_folder if options.reuse_json else self.prev_archive
+            prev_archive = save_folder if self.options.reuse_json else self.prev_archive
             assert prev_archive is not None
             try:
                 with open(join(prev_archive, post_dir, self.ident + post_ext)) as post_file:
@@ -1838,7 +1879,7 @@ class TumblrPost:
                 if notes is not None:
                     notes_html = ''.join([n.prettify() for n in notes.find_all('li')])
 
-        if options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
+        if self.options.save_notes and self.backup_account not in disable_note_scraper and not notes_html.strip():
             from . import note_scraper
 
             # Scrape and save notes
@@ -1846,9 +1887,11 @@ class TumblrPost:
                 ns_stdout_rd, ns_stdout_wr = multiprocessing.Pipe(duplex=False)
                 ns_msg_queue: SimpleQueue[Tuple[LogLevel, str]] = multiprocessing.SimpleQueue()
                 try:
-                    args = (ns_stdout_wr, ns_msg_queue, self.url, self.ident,
-                            options.no_ssl_verify, options.user_agent, options.cookiefile, options.notes_limit,
-                            options.use_dns_check)
+                    args = (
+                        ns_stdout_wr, ns_msg_queue, self.url, self.ident, self.options.no_ssl_verify,
+                        self.options.user_agent, self.options.cookiefile, self.options.notes_limit,
+                        self.options.use_dns_check,
+                    )
                     process = multiprocessing.Process(target=note_scraper.main, args=args)
                     process.start()
                 except:
@@ -1916,11 +1959,11 @@ class TumblrPost:
         return '<a href=%s>%s</a>\n' % (url, tag_disp)
 
     def get_path(self):
-        return (post_dir, self.ident, dir_index) if options.dirs else (post_dir, self.file_name)
+        return (post_dir, self.ident, dir_index) if self.options.dirs else (post_dir, self.file_name)
 
     def save_post(self):
         """saves this post locally"""
-        if options.json and not options.reuse_json:
+        if self.options.json and not self.options.reuse_json:
             with open_text(json_dir, self.ident + '.json') as f:
                 f.write(self.get_json_content())
         path_parts = self.get_path()
@@ -1961,9 +2004,9 @@ class BlosxomPost(TumblrPost):
 
 
 class LocalPost:
-    def __init__(self, post_file):
+    def __init__(self, post_file: str, tag_index: bool):
         self.post_file = post_file
-        if options.tag_index:
+        if tag_index:
             with open(post_file, encoding=FILE_ENCODING) as f:
                 post = f.read()
             # extract all URL-encoded tags
@@ -2002,13 +2045,13 @@ class LocalPost:
 class ThreadPool:
     queue: LockedQueue[Callable[[], None]]
 
-    def __init__(self, max_queue=1000):
+    def __init__(self, threads: int, max_queue: int = 1000):
         self.queue = LockedQueue(main_thread_lock, max_queue)
         self.quit = threading.Condition(main_thread_lock)
         self.quit_flag = False
         self.abort_flag = False
         self.errors = False
-        self.threads = [threading.Thread(target=self.handler) for _ in range(options.threads)]
+        self.threads = [threading.Thread(target=self.handler) for _ in range(threads)]
         for t in self.threads:
             t.start()
 
@@ -2087,7 +2130,7 @@ class ThreadPool:
 
 
 def main():
-    global parser, options, orig_options, API_KEY, wget_retrieve
+    global wget_retrieve
 
     # The default of 'fork' can cause deadlocks, even on Linux
     # See https://bugs.python.org/issue40399
@@ -2271,17 +2314,21 @@ def main():
                         help="Just print some info for each blog, don't make a backup")
     parser.add_argument('blogs', nargs='*')
     options = parser.parse_args()
-    blogs = options.blogs
 
+    blogs = options.blogs
     if not blogs:
         parser.error('Missing blog-name')
+
+    logger.quiet = options.quiet
+    if options.json_info:
+        options.quiet = True
+        logger.file = sys.stderr
+
     if options.auto is not None and options.auto != time.localtime().tm_hour:
         options.incremental = True
     if options.resume or options.incremental:
         # Do not clobber or count posts that were already backed up
         options.no_post_clobber = True
-    if options.json_info:
-        options.quiet = True
     if options.count is not None and options.count < 0:
         parser.error('--count: count must not be negative')
     if options.count == 0 and (options.incremental or options.auto is not None):
@@ -2332,11 +2379,11 @@ def main():
     # NB: this is done after setting implied options
     orig_options = vars(options).copy()
 
-    check_optional_modules()
+    check_optional_modules(options)
 
     try:
         with open(config_file) as f:
-            API_KEY = json.load(f)['oauth_consumer_key']
+            api_key = json.load(f)['oauth_consumer_key']
     except (FileNotFoundError, KeyError):
         print(f"""\
 API key not set. To use tumblr-backup:
@@ -2347,11 +2394,11 @@ API key not set. To use tumblr-backup:
         )
         return 1
 
-    wget_retrieve = WgetRetrieveWrapper(options, logger.log)
+    wget_retrieve = WgetRetrieveWrapper(logger.log, options)
     setup_wget(not options.no_ssl_verify, options.user_agent)
 
-    ApiParser.setup()
-    tb = TumblrBackup()
+    ApiParser.setup(api_key, options.no_ssl_verify, options.user_agent, options.cookiefile)
+    tb = TumblrBackup(options, orig_options, parser.get_default)
     try:
         for i, account in enumerate(blogs):
             logger.backup_account = account

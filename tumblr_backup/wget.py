@@ -12,10 +12,11 @@ from enum import Enum
 from http.client import HTTPConnection as _HTTPConnection
 from http.client import ResponseNotReady
 from tempfile import NamedTemporaryFile
-from typing import Any, BinaryIO, Callable, Optional
+from typing import Any, BinaryIO, Callable, Dict, Optional, Set
 from urllib.parse import urljoin, urlsplit
 
-from urllib3 import HTTPConnectionPool, HTTPHeaderDict, HTTPResponse, HTTPSConnectionPool, PoolManager
+from urllib3 import (BaseHTTPResponse, HTTPConnectionPool, HTTPHeaderDict, HTTPResponse, HTTPSConnectionPool,
+                     PoolManager)
 from urllib3 import Retry as Retry
 from urllib3 import Timeout, make_headers
 from urllib3.connection import HTTPConnection, HTTPSConnection, _url_from_connection
@@ -280,7 +281,7 @@ class Logger:
         self.log_cb(level, qmsg)
 
 
-def gethttp(url, hstat, doctype, logger, retry_counter, options):
+def gethttp(url, hstat, doctype, logger, retry_counter, use_dns_check):
     if hstat.current_url is not None:
         url = hstat.current_url  # The most recent location is cached
 
@@ -295,7 +296,7 @@ def gethttp(url, hstat, doctype, logger, retry_counter, options):
 
     doctype &= ~RETROKF
 
-    resp = urlopen(url, options, request_headers, preload_content=False, enforce_content_length=False)
+    resp = urlopen(url, use_dns_check, request_headers, preload_content=False, enforce_content_length=False)
     url = hstat.current_url = urljoin(url, resp.geturl())
 
     try:
@@ -590,7 +591,7 @@ class WGRangeError(WGBadResponseError):
     pass
 
 
-unreachable_hosts = set()
+unreachable_hosts: Set[str] = set()
 
 
 class RetryCounter:
@@ -647,8 +648,10 @@ def _retrieve_loop(
     post_id: Optional[str],
     post_timestamp: Optional[float],
     adjust_basename: Optional[Callable[[str, BinaryIO], str]],
-    options: Namespace,
     log: Callable[[LogLevel, str], None],
+    use_dns_check: bool,
+    use_internet_archive: bool,
+    use_server_timestamps: bool,
 ) -> None:
     logger = Logger(url, post_id, log)
 
@@ -681,7 +684,7 @@ def _retrieve_loop(
         hstat.restval = hstat.bytes_read
 
         try:
-            err, doctype = gethttp(url, hstat, doctype, logger, retry_counter, options)
+            err, doctype = gethttp(url, hstat, doctype, logger, retry_counter, use_dns_check)
         except MaxRetryError as e:
             raise WGMaxRetryError(logger, url, 'urllib3 reached a retry limit.', e)
         except HTTPError as e:
@@ -708,7 +711,7 @@ def _retrieve_loop(
                 e.logger = logger
             raise
         except WGWrongCodeError as e:
-            if (options.internet_archive
+            if (use_internet_archive
                 and not using_internet_archive
                 and hstat.statcode in (403, 404)
                 and urlsplit(orig_url).netloc.endswith('.tumblr.com')  # type: ignore[arg-type]
@@ -760,7 +763,7 @@ def _retrieve_loop(
         else:
             os.chmod(hstat.part_file.name, 0o644)
 
-        if options.use_server_timestamps and hstat.remote_time is None:
+        if use_server_timestamps and hstat.remote_time is None:
             logger.warn(url, 'Warning: Last-Modified header is {}'
                        .format('missing' if hstat.last_modified is None
                                else 'invalid: {}'.format(hstat.last_modified)))
@@ -769,7 +772,7 @@ def _retrieve_loop(
         hstat.part_file.flush()
 
         # Set the timestamp on the local file
-        if (options.use_server_timestamps
+        if (use_server_timestamps
             and (hstat.remote_time is not None or post_timestamp is not None)
             and hstat.contlen in (None, hstat.bytes_read)
         ):
@@ -817,7 +820,7 @@ def setup_wget(ssl_verify, user_agent):
 
 
 # This is a simple urllib3-based urlopen function.
-def urlopen(url, options, headers=None, **kwargs):
+def urlopen(url, use_dns_check: bool, headers: Optional[Dict[str, str]] = None, **kwargs) -> BaseHTTPResponse:
     req_headers = base_headers.copy()
     if headers is not None:
         req_headers.update(headers)
@@ -826,7 +829,7 @@ def urlopen(url, options, headers=None, **kwargs):
         try:
             return poolman.request('GET', url, headers=req_headers, retries=HTTP_RETRY, **kwargs)
         except HTTPError:
-            if is_dns_working(timeout=5, check=options.use_dns_check):
+            if is_dns_working(timeout=5, check=use_dns_check):
                 raise
             # Having no internet is a temporary system error
             no_internet.signal()
@@ -834,14 +837,18 @@ def urlopen(url, options, headers=None, **kwargs):
 
 # This functor is the primary API of this module.
 class WgetRetrieveWrapper:
-    def __init__(self, options, log):
-        self.options = options
+    def __init__(self, log: Callable[[LogLevel, str], None], options: Namespace):
         self.log = log
+        self.options = options
 
     def __call__(self, url, file, post_id=None, post_timestamp=None, adjust_basename=None):
         hstat = HttpStat()
         try:
-            _retrieve_loop(hstat, url, file, post_id, post_timestamp, adjust_basename, self.options, self.log)
+            _retrieve_loop(
+                hstat, url, file, post_id, post_timestamp, adjust_basename, self.log,
+                use_dns_check=self.options.use_dns_check, use_internet_archive=self.options.internet_archive,
+                use_server_timestamps=self.options.use_server_timestamps,
+            )
         finally:
             if hstat.dest_dir is not None:
                 os.close(hstat.dest_dir)
