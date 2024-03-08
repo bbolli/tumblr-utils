@@ -9,16 +9,20 @@ from argparse import Namespace
 from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from enum import Enum
+from http.client import HTTPConnection as _HTTPConnection
+from http.client import ResponseNotReady
 from tempfile import NamedTemporaryFile
 from typing import Any, BinaryIO, Callable, Optional
 from urllib.parse import urljoin, urlsplit
 
-from urllib3 import HTTPConnectionPool, HTTPResponse, HTTPSConnectionPool, PoolManager, Timeout
+from urllib3 import HTTPConnectionPool, HTTPHeaderDict, HTTPResponse, HTTPSConnectionPool, PoolManager
 from urllib3 import Retry as Retry
-from urllib3._collections import HTTPHeaderDict
-from urllib3.exceptions import ConnectTimeoutError, InsecureRequestWarning, MaxRetryError, PoolError
+from urllib3 import Timeout, make_headers
+from urllib3.connection import HTTPConnection, HTTPSConnection, _url_from_connection
+from urllib3.exceptions import ConnectTimeoutError, HeaderParsingError
 from urllib3.exceptions import HTTPError as HTTPError
-from urllib3.util import make_headers
+from urllib3.exceptions import InsecureRequestWarning, MaxRetryError, PoolError
+from urllib3.util.response import assert_header_parsing
 
 from .util import LogLevel, enospc, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl, try_unlink
 
@@ -94,9 +98,11 @@ class WGHTTPResponse(HTTPResponse):
     def decoder(self, value):
         self._decoder = value
 
-    def __init__(self, body="", headers=None, status=0, version=0, reason=None, strict=0, preload_content=True,
-                 decode_content=True, original_response=None, pool=None, connection=None, msg=None, retries=None,
-                 enforce_content_length=False, request_method=None, request_url=None, auto_close=True):
+    def __init__(
+        self, body="", headers=None, status=0, version=0, reason=None, preload_content=True, decode_content=True,
+        original_response=None, pool=None, connection=None, msg=None, retries=None, enforce_content_length=False,
+        request_method=None, request_url=None, auto_close=True,
+    ):
         # Copy original Content-Length for _init_length
         if not isinstance(headers, HTTPHeaderDict):
             headers = HTTPHeaderDict(headers)
@@ -106,13 +112,17 @@ class WGHTTPResponse(HTTPResponse):
         self.bytes_to_skip = 0
         self.last_read_length = 0
         super().__init__(
-            body, headers, status, version, reason, strict, preload_content, decode_content, original_response, pool,
+            body, headers, status, version, reason, preload_content, decode_content, original_response, pool,
             connection, msg, retries, enforce_content_length, request_method, request_url, auto_close,
         )
 
     # Make _init_length publicly usable because its implementation is nice
     def get_content_length(self, meth):
         return self._init_length(meth)  # type: ignore[attr-defined]
+
+    def _init_decoder(self) -> None:
+        self.last_read_length = 0
+        super()._init_decoder()
 
     # Wrap _decode to do some extra processing of the content-encoded entity data.
     def _decode(self, data, decode_content, flush_decoder):
@@ -125,14 +135,63 @@ class WGHTTPResponse(HTTPResponse):
             data = data[self.bytes_to_skip:]
             self.bytes_to_skip = 0
 
-        self.last_read_length = len(data)  # Count only non-skipped data
+        self.last_read_length += len(data)  # Count only non-skipped data
         if not data:
-            return b''
+            data = b''
+            if flush_decoder:
+                data += self._flush_decoder()
+            return data
         return super()._decode(data, decode_content, flush_decoder)  # type: ignore[misc]
 
 
+class WGHTTPConnection(HTTPConnection):
+    def getresponse(self) -> WGHTTPResponse:  # type: ignore[override]
+        # Raise the same error as http.client.HTTPConnection
+        if self._response_options is None:
+            raise ResponseNotReady()
+
+        # Reset this attribute for being used again.
+        resp_options = self._response_options
+        self._response_options = None
+
+        # Since the connection's timeout value may have been updated
+        # we need to set the timeout on the socket.
+        self.sock.settimeout(self.timeout)
+
+        # Get the response from http.client.HTTPConnection
+        httplib_response = _HTTPConnection.getresponse(self)
+
+        try:
+            assert_header_parsing(httplib_response.msg)
+        except (HeaderParsingError, TypeError) as hpe:
+            print('Failed to parse headers (url={}): {}'.format(
+                _url_from_connection(self, resp_options.request_url), hpe,
+            ))
+            traceback.print_exc()
+
+        headers = HTTPHeaderDict(httplib_response.msg.items())
+
+        return WGHTTPResponse(
+            body=httplib_response,
+            headers=headers,
+            status=httplib_response.status,
+            version=httplib_response.version,
+            reason=httplib_response.reason,
+            preload_content=resp_options.preload_content,
+            decode_content=resp_options.decode_content,
+            original_response=httplib_response,
+            enforce_content_length=resp_options.enforce_content_length,
+            request_method=resp_options.request_method,
+            request_url=resp_options.request_url,
+        )
+
+
+class WGHTTPSConnection(WGHTTPConnection, HTTPSConnection):
+    pass
+
+
 class WGHTTPConnectionPool(HTTPConnectionPool):
-    ResponseCls = WGHTTPResponse
+    ConnectionCls = WGHTTPConnection
 
     def __init__(self, host, port=None, *args, **kwargs):
         norm_host = normalized_host(self.scheme, host, port)
@@ -143,7 +202,7 @@ class WGHTTPConnectionPool(HTTPConnectionPool):
 
 
 class WGHTTPSConnectionPool(HTTPSConnectionPool):
-    ResponseCls = WGHTTPResponse
+    ConnectionCls = WGHTTPSConnection
 
     def __init__(self, host, port=None, *args, **kwargs):
         norm_host = normalized_host(self.scheme, host, port)
