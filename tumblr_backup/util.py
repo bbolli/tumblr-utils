@@ -215,8 +215,7 @@ def setup_urllib3_ssl():
     # Inject PyOpenSSL if the linked OpenSSL has no SNI
     if not have_sni:
         try:
-            # TODO: remove attr-defined ignore once we support urllib3 2.x
-            from urllib3.contrib import pyopenssl  # type: ignore[attr-defined,no-redef]
+            from urllib3.contrib import pyopenssl
             pyopenssl.inject_into_urllib3()
         except ImportError as e:
             print('Warning: Failed to inject pyOpenSSL: {!r}'.format(e), file=sys.stderr)
