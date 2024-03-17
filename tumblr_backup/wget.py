@@ -9,20 +9,16 @@ from argparse import Namespace
 from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from enum import Enum
-from http.client import HTTPConnection as _HTTPConnection
-from http.client import ResponseNotReady
+from http.client import HTTPConnection as _HTTPConnection, ResponseNotReady
 from tempfile import NamedTemporaryFile
 from typing import Any, BinaryIO, Callable, Dict, Optional, Set
 from urllib.parse import urljoin, urlsplit
 
 from urllib3 import (BaseHTTPResponse, HTTPConnectionPool, HTTPHeaderDict, HTTPResponse, HTTPSConnectionPool,
-                     PoolManager)
-from urllib3 import Retry as Retry
-from urllib3 import Timeout, make_headers
+                     PoolManager, Retry as Retry, Timeout, make_headers)
 from urllib3.connection import HTTPConnection, HTTPSConnection, _url_from_connection
-from urllib3.exceptions import ConnectTimeoutError, HeaderParsingError
-from urllib3.exceptions import HTTPError as HTTPError
-from urllib3.exceptions import InsecureRequestWarning, MaxRetryError, PoolError
+from urllib3.exceptions import (ConnectTimeoutError, HeaderParsingError, HTTPError as HTTPError, InsecureRequestWarning,
+                                MaxRetryError, PoolError)
 from urllib3.util.response import assert_header_parsing
 
 from .util import LogLevel, enospc, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl, try_unlink

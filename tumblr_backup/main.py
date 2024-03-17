@@ -38,15 +38,15 @@ import platformdirs
 import requests
 
 # internal modules
+from .is_reblog import post_is_reblog
 from .util import (AsyncCallable, ConnectionFile, FakeGenericMeta, LockedQueue, LogLevel, MultiCondition, copyfile,
                    enospc, fdatasync, fsync, have_module, is_dns_working, make_requests_session, no_internet, opendir,
                    to_bytes)
-from .wget import HTTPError, HTTP_TIMEOUT, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
-from .is_reblog import post_is_reblog
+from .wget import HTTP_TIMEOUT, HTTPError, Retry, WGError, WgetRetrieveWrapper, setup_wget, touch, urlopen
 
 if TYPE_CHECKING:
-    from typing_extensions import Literal
     from bs4 import Tag
+    from typing_extensions import Literal
 else:
     class Literal(metaclass=FakeGenericMeta):
         pass
