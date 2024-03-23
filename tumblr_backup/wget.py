@@ -16,7 +16,7 @@ from urllib.parse import urljoin, urlsplit
 
 from urllib3 import (BaseHTTPResponse, HTTPConnectionPool, HTTPHeaderDict, HTTPResponse, HTTPSConnectionPool,
                      PoolManager, Retry as Retry, Timeout, make_headers)
-from urllib3.connection import HTTPConnection, HTTPSConnection, _url_from_connection
+from urllib3.connection import HTTPConnection, HTTPSConnection, _url_from_connection  # noqa: WPS450
 from urllib3.exceptions import (ConnectTimeoutError, HeaderParsingError, HTTPError as HTTPError, InsecureRequestWarning,
                                 MaxRetryError, PoolError)
 from urllib3.util.response import assert_header_parsing
@@ -86,17 +86,8 @@ class HttpStat:
 class WGHTTPResponse(HTTPResponse):
     REDIRECT_STATUSES = [300] + HTTPResponse.REDIRECT_STATUSES
 
-    # Make decoder public for saving and restoring the decoder state
-    @property
-    def decoder(self):
-        return self._decoder  # pytype: disable=attribute-error
-
-    @decoder.setter
-    def decoder(self, value):
-        self._decoder = value
-
     def __init__(
-        self, body="", headers=None, status=0, version=0, reason=None, preload_content=True, decode_content=True,
+        self, body='', headers=None, status=0, version=0, reason=None, preload_content=True, decode_content=True,
         original_response=None, pool=None, connection=None, msg=None, retries=None, enforce_content_length=False,
         request_method=None, request_url=None, auto_close=True,
     ):
@@ -112,6 +103,15 @@ class WGHTTPResponse(HTTPResponse):
             body, headers, status, version, reason, preload_content, decode_content, original_response, pool,
             connection, msg, retries, enforce_content_length, request_method, request_url, auto_close,
         )
+
+    # Make decoder public for saving and restoring the decoder state
+    @property
+    def decoder(self):
+        return self._decoder  # pytype: disable=attribute-error
+
+    @decoder.setter
+    def decoder(self, value):
+        self._decoder = value
 
     # Make _init_length publicly usable because its implementation is nice
     def get_content_length(self, meth):
@@ -403,8 +403,10 @@ def process_response(url, hstat, doctype, logger, retry_counter, resp):
     # The Range request was misunderstood. Bail out.
     # Unlike wget, we bail hard with no retry, because this indicates a broken or unreasonable server.
     if contrange not in (0, hstat.restval):
-        raise WGRangeError(logger, url, 'Server provided unexpected Content-Range: Requested {}, got {}'
-                           .format(hstat.restval, contrange))
+        raise WGRangeError(
+            logger, url,
+            f'Server provided unexpected Content-Range: Requested {hstat.restval}, got {contrange}',
+        )
     # HTTP 206 Partial Contents
     if hstat.statcode == 206 and hstat.restval > 0 and contrange == 0:
         if crange_header is None:
@@ -707,7 +709,8 @@ def _retrieve_loop(
                 e.logger = logger
             raise
         except WGWrongCodeError as e:
-            if (use_internet_archive
+            if (
+                use_internet_archive
                 and not using_internet_archive
                 and hstat.statcode in (403, 404)
                 and urlsplit(orig_url).netloc.endswith('.tumblr.com')  # type: ignore[arg-type]
@@ -760,15 +763,15 @@ def _retrieve_loop(
             os.chmod(hstat.part_file.name, 0o644)
 
         if use_server_timestamps and hstat.remote_time is None:
-            logger.warn(url, 'Warning: Last-Modified header is {}'
-                       .format('missing' if hstat.last_modified is None
-                               else 'invalid: {}'.format(hstat.last_modified)))
+            status = 'missing' if hstat.last_modified is None else f'invalid: {hstat.last_modified}'
+            logger.warn(url, f'Warning: Last-Modified header is {status}')
 
         # Flush the userspace buffer so mtime isn't updated
         hstat.part_file.flush()
 
         # Set the timestamp on the local file
-        if (use_server_timestamps
+        if (
+            use_server_timestamps
             and (hstat.remote_time is not None or post_timestamp is not None)
             and hstat.contlen in (None, hstat.bytes_read)
         ):

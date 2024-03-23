@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import warnings
+from abc import ABC, abstractmethod
 from enum import Enum
 from functools import total_ordering
 from http.cookiejar import MozillaCookieJar
@@ -92,7 +93,7 @@ def is_dns_working(timeout=None, check=True):
     return True
 
 
-class WaitOnMainThread:
+class WaitOnMainThread(ABC):
     def __init__(self):
         self.cond: Optional[threading.Condition] = None
         self.flag: Optional[bool] = False
@@ -157,6 +158,7 @@ class WaitOnMainThread:
             raise
 
     @staticmethod
+    @abstractmethod
     def _wait():
         raise NotImplementedError
 
@@ -228,6 +230,7 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
         global swt_base
     else:
         swt_base = session_type  # type: ignore
+
     class SessionWithTimeout(swt_base):
         def request(self, method, url, *args, **kwargs):
             kwargs.setdefault('timeout', timeout)
@@ -307,7 +310,7 @@ class MultiSeqProxy:
 # Hooks into methods used by threading.Condition.notify
 class NotifierWaiters(WaiterSeq):
     def __iter__(self):
-        return (value[0] for value in super().__iter__())
+        return (value[0] for value in super(NotifierWaiters, self).__iter__())
 
     def __getitem__(self, index):
         item = super().__getitem__(index)
@@ -315,7 +318,7 @@ class NotifierWaiters(WaiterSeq):
 
     def remove(self, value):
         try:
-            match = next(x for x in super().__iter__() if x[0] == value)
+            match = next(x for x in super(NotifierWaiters, self).__iter__() if x[0] == value)
         except StopIteration:
             raise ValueError('deque.remove(x): x not in deque')
         for ref in match[1]:
@@ -327,7 +330,7 @@ class NotifierWaiters(WaiterSeq):
 
 # Supports waiting on multiple threading.Conditions objects simultaneously
 class MultiCondition(threading.Condition):
-    def __init__(self, lock):
+    def __init__(self, lock):  # noqa: WPS612
         super().__init__(lock)
 
     def wait(self, children, timeout=None):  # pytype: disable=signature-mismatch
@@ -350,7 +353,7 @@ class MultiCondition(threading.Condition):
     def notify_all(self):
         raise NotImplementedError
 
-    notifyAll = notify_all
+    notifyAll = notify_all  # noqa: N815
 
 
 def lock_is_owned(lock):

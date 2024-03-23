@@ -11,7 +11,7 @@ def _check_posted_note(doc: Dict[str, Any]) -> bool:
     return bool(
         n['type'] == 'posted'
         and n['timestamp'] < doc['timestamp']  # sometimes a later reblog is credited
-        and n['blog_uuid'] != doc['blog']['uuid']
+        and n['blog_uuid'] != doc['blog']['uuid'],
     )
 
 
@@ -31,7 +31,7 @@ def _check_content(doc: Dict[str, Any], pred: Callable[[str], bool], name: str) 
     return bool(
         reblog_info
         and (name == 'via' or not reblog_info['tree_html'])
-        and pred(reblog_info['comment'])
+        and pred(reblog_info['comment']),
     )
 
 
@@ -68,7 +68,7 @@ BQ_RE = re.compile(
     r'>'
       r'[^<>]*'  # poster-editable
     r'</a>:'
-    r'(?![^\S\n]*[^<\s])'
+    r'(?![^\S\n]*[^<\s])',
 )
 BQ_RE2 = re.compile(r'(<p>)+[a-z0-9-]+:</p>\n*<blockquote>')
 
@@ -84,7 +84,7 @@ def bqpred(c: str) -> bool:
     return bool(
         'tumblr_blog' in (m.group('classes') or '').split(' ')
         or m.group('blogpost') or m.group('priv') or m.group('bname0')
-        or ((m.group('blogco') or m.group('bname1')) and re.search(r'<blockquote[ >]', c))
+        or ((m.group('blogco') or m.group('bname1')) and re.search(r'<blockquote[ >]', c)),
     )
 
 

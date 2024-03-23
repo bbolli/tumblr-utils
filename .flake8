@@ -1,0 +1,89 @@
+# vim: set syntax=dosini:
+[flake8]
+exclude = .*,__pycache__
+max-line-length = 120
+
+# B001 Do not use bare `except:`
+# C408 Unnecessary dict call - rewrite as a literal
+# D,DAR: this project has incomplete documentation
+# E221 multiple spaces before operator
+# E303 too many blank lines
+# E722 do not use bare 'except'
+# E741 ambiguous variable name
+# E800 Found commented out code
+# N801 class name 'open_outfile' should use CapWords convention
+# N806 variable in function should be lowercase
+# P101 format string does contain unindexed parameters
+# S101 Use of assert detected
+# S324 Use of weak MD5 hash for security. Consider usedforsecurity=False
+# S406 Using escape to parse untrusted XML data is known to be vulnerable to XML attacks
+# S410 Using lxml to parse untrusted XML data is known to be vulnerable to XML attacks
+# WPS100 Found wrong module name
+# WPS110 Found wrong variable name
+# WPS111 Found too short name
+# WPS113 Found same alias import
+# WPS114 Found underscored number name pattern
+# WPS115 Found upper-case constant in a class
+# WPS120 Found regular name with trailing underscore
+# WPS2XX: Complexity
+# WPS300 Found local folder import
+# WPS301 Found dotted raw import: http.client
+# WPS305 Found `f` string
+# WPS306 Found class without a base class
+# WPS309 Found reversed compare order
+# WPS316 Found context manager with too many assignments
+# WPS317 Found incorrect multi-line parameters
+# WPS318 Found extra indentation
+# WPS319 Found bracket in wrong position
+# WPS322 Found incorrect multi-line string
+# WPS323 Found `%` string formatting
+# WPS326 Found implicit string concatenation
+# WPS329 Found useless `except` case
+# WPS330 Found unnecessary operator
+# WPS336 Found explicit string concatenation
+# WPS337 Found multiline conditions
+# WPS347 Found vague import that may cause confusion
+# WPS360 Found an unnecessary use of a raw string
+# WPS361 Found an inconsistently structured comprehension
+# WPS414 Found incorrect unpacking target
+# WPS420 Found wrong keyword
+# WPS421 Found wrong function call
+# WPS429 Found multiple assign targets
+# WPS430 Found nested function
+# WPS431 Found nested class
+# WPS432 Found magic number
+# WPS433 Found nested import
+# WPS437 Found protected attribute usage
+# WPS440 Found block variables overlap
+# WPS440 Found block variables overlap
+# WPS441 Found control variable used after block
+# WPS442 Found outer scope names shadowing
+# WPS457 Found an infinite while loop
+# WPS458 Found imports collision: argparse
+# WPS460 Found single element destructuring
+# WPS462 Wrong multiline string usage
+# WPS463 Found a getter without a return value
+# WPS473 Found too many empty lines in `def`: 6 > 5
+# WPS501 Found `finally` in `try` block without `except`
+# WPS504 Found negated condition
+# WPS505 Found nested `try` block
+# WPS508 Found incorrect `not` with compare usage
+# WPS509 Found incorrectly nested ternary
+# WPS510 Found `in` used with a non-set container
+# WPS515 Found `open()` used without a context manager
+# WPS516 Found `type()` used to compare types
+# WPS519 Found implicit `sum()` call
+# WPS529 Found implicit `.get()` dict usage
+# WPS531 Found simplifiable returning `if` condition in a function
+# WPS602 Found using `@staticmethod`
+# WPS604 Found incorrect node inside `class` body
+# WPS605 Found method without arguments
+# WPS608 Found incorrect `super()` call
+# WPS609 Found direct magic attribute usage
+# WPS613 Found incorrect `super()` call context
+# WPS615 Found unpythonic getter or setter
+extend-ignore = B001,C408,D,DAR,E221,E303,E722,E741,E800,N801,N806,P101,S101,S324,S406,S410,WPS100,WPS110,WPS111,WPS113,WPS114,WPS115,WPS120,WPS2,WPS300,WPS301,WPS305,WPS306,WPS309,WPS316,WPS317,WPS318,WPS319,WPS322,WPS323,WPS326,WPS329,WPS330,WPS336,WPS337,WPS347,WPS360,WPS361,WPS414,WPS420,WPS421,WPS429,WPS430,WPS431,WPS432,WPS433,WPS437,WPS440,WPS440,WPS441,WPS442,WPS457,WPS458,WPS460,WPS462,WPS463,WPS473,WPS501,WPS504,WPS505,WPS508,WPS509,WPS510,WPS515,WPS516,WPS519,WPS529,WPS531,WPS602,WPS604,WPS605,WPS608,WPS609,WPS613,WPS615
+
+# E131 continuation line unaligned for hanging indent
+per-file-ignores =
+     tumblr_backup/is_reblog.py: E131
