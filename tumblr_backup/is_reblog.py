@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import re
-from typing import Any, Callable, Dict
+from typing import Any, Callable
 
 
-def _check_posted_note(doc: Dict[str, Any]) -> bool:
+def _check_posted_note(doc: dict[str, Any]) -> bool:
     notes = doc.get('notes')
     if not (notes and isinstance(notes, list)):
         return False  # no notes available
@@ -15,7 +17,7 @@ def _check_posted_note(doc: Dict[str, Any]) -> bool:
     )
 
 
-def _check_content(doc: Dict[str, Any], pred: Callable[[str], bool], name: str) -> bool:
+def _check_content(doc: dict[str, Any], pred: Callable[[str], bool], name: str) -> bool:
     reblog_info = doc.get('reblog', {})
 
     if doc.get('is_submission') and not reblog_info.get('tree_html'):
@@ -88,7 +90,7 @@ def bqpred(c: str) -> bool:
     )
 
 
-def post_is_reblog(doc: Dict[str, Any]) -> bool:
+def post_is_reblog(doc: dict[str, Any]) -> bool:
     # reason: reblogged_from_id
     # true for 84.9% of posts, 99.7% of reblogs
     if 'reblogged_from_id' in doc:

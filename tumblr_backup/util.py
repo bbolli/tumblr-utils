@@ -1,4 +1,5 @@
-import collections
+from __future__ import annotations
+
 import errno
 import os
 import queue
@@ -9,11 +10,12 @@ import threading
 import time
 import warnings
 from abc import ABC, abstractmethod
+from collections import deque
 from enum import Enum
 from functools import total_ordering
 from http.cookiejar import MozillaCookieJar
 from importlib.machinery import PathFinder
-from typing import TYPE_CHECKING, Any, Deque, Dict, Generic, Optional, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Deque, Generic, TypeVar
 
 from urllib3.exceptions import DependencyWarning
 
@@ -22,6 +24,7 @@ if sys.platform == 'darwin':
 
 if TYPE_CHECKING:
     import requests
+    from typing_extensions import TypeAlias
     swt_base = requests.Session
 
 
@@ -95,8 +98,8 @@ def is_dns_working(timeout=None, check=True):
 
 class WaitOnMainThread(ABC):
     def __init__(self):
-        self.cond: Optional[threading.Condition] = None
-        self.flag: Optional[bool] = False
+        self.cond: threading.Condition | None = None
+        self.flag: bool | None = False
 
     def setup(self, lock=None):
         self.cond = threading.Condition(lock)
@@ -287,12 +290,6 @@ def fdatasync(fd):
     fsync(fd)
 
 
-if TYPE_CHECKING:
-    WaiterSeq = Deque[Any]
-else:
-    WaiterSeq = collections.deque
-
-
 # Minimal implementation of a sum of mutable sequences
 class MultiSeqProxy:
     def __init__(self, subseqs):
@@ -308,13 +305,13 @@ class MultiSeqProxy:
 
 
 # Hooks into methods used by threading.Condition.notify
-class NotifierWaiters(WaiterSeq):
+class NotifierWaiters(Deque[Any]):
     def __iter__(self):
         return (value[0] for value in super(NotifierWaiters, self).__iter__())
 
     def __getitem__(self, index):
         item = super().__getitem__(index)
-        return WaiterSeq(v[0] for v in item) if isinstance(index, slice) else item[0]  # pytype: disable=not-callable
+        return deque(v[0] for v in item) if isinstance(index, slice) else item[0]  # pytype: disable=not-callable
 
     def remove(self, value):
         try:
@@ -381,11 +378,11 @@ def lock_acquire_restore(lock, state):
         lock.acquire()  # Ignore saved state
 
 
-ACParams = Tuple[Tuple[Any, ...], Dict[str, Any]]  # (args, kwargs)
+ACParams: TypeAlias = 'tuple[tuple[Any, ...], dict[str, Any]]'  # (args, kwargs)
 
 
 class AsyncCallable:
-    request: LockedQueue[Optional[ACParams]]
+    request: LockedQueue[ACParams | None]
     response: LockedQueue[Any]
 
     def __init__(self, lock, fun, name=None):

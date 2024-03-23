@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 import sys
 import time
@@ -5,7 +7,7 @@ import traceback
 import warnings
 from datetime import datetime
 from multiprocessing.queues import SimpleQueue
-from typing import List, Optional, Tuple, cast
+from typing import cast
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 import requests
@@ -30,7 +32,7 @@ HTTP_RETRY.RETRY_AFTER_STATUS_CODES = frozenset((413,))  # type: ignore[misc]
 # Globals
 post_url = None
 ident = None
-msg_queue: Optional[SimpleQueue[Tuple[int, str]]] = None
+msg_queue: SimpleQueue[tuple[int, str]] | None = None
 
 
 def log(level, url, msg):
@@ -191,7 +193,7 @@ class WebCrawler:
         base = '{uri.scheme}://{uri.netloc}'.format(uri=parsed_uri)
 
         notes_10k = 0
-        notes_list: List[str] = []
+        notes_list: list[str] = []
 
         notes_url = post_url
         while True:

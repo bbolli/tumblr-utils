@@ -8,6 +8,8 @@ and retrieves a JSON of very similar (but not quite identical) format to the
 normal API.
 """
 
+from __future__ import annotations
+
 import re
 import sys
 from getpass import getpass
