@@ -145,13 +145,11 @@ downloading_media_cond = threading.Condition()
 def load_bs4(reason):
     sys.modules['soupsieve'] = ()  # type: ignore[assignment]
     try:
+        import lxml  # noqa: F401
         from bs4 import BeautifulSoup
     except ImportError:
-        raise RuntimeError("Cannot {} without module 'bs4'".format(reason))
-    try:
-        import lxml  # noqa: F401
-    except ImportError:
-        raise RuntimeError("Cannot {} without module 'lxml'".format(reason))
+        print(f'Cannot {reason} without the bs4 component. Try `pip install "tumblr-backup[bs4]"`', file=sys.stderr)
+        sys.exit(1)
     return BeautifulSoup
 
 

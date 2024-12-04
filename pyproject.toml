@@ -1,6 +1,6 @@
 [project]
 name = "tumblr-backup"
-version = "1.0.4"
+version = "1.0.5.dev0"
 description = "An advanced tool for backing up Tumblr blogs."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -22,11 +22,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+bs4 = ["beautifulsoup4~=4.12", "lxml~=5.1"]
 exif = ["py3exiv2~=0.12"]
 jq = ["jq~=1.6"]
-notes = ["beautifulsoup4~=4.12", "lxml~=5.1"]
 video = ["yt_dlp>=2023.12.30"]
-all = ["tumblr-backup[exif,jq,notes,video]"]
+all = ["tumblr-backup[bs4,exif,jq,video]"]
 dev = [
     "tumblr-backup[all]",
 
