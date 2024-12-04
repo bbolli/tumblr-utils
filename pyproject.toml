@@ -1,6 +1,6 @@
 [project]
 name = "tumblr-backup"
-version = "1.0.4.dev0"
+version = "1.0.4"
 description = "An advanced tool for backing up Tumblr blogs."
 readme = "README.md"
 requires-python = ">=3.8"
