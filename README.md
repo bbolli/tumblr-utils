@@ -47,7 +47,7 @@ There are several optional dependencies that enable additional features:
 2. To enable EXIF tagging, install `tumblr-backup[exif]`, or you can manually
    install py3exiv2.
 3. To back up notes with the --save-notes option, install
-   `tumblr-backup[notes]`, or you can manually install beautifulsoup4 and lxml.
+   `tumblr-backup[bs4]`, or you can manually install beautifulsoup4 and lxml.
 4. To use the -F/--filter option to filter the downloaded posts with arbitrary
    rules based on their metadata, install `tumblr-backup[jq]`. Alternatively,
    you can manually install the [jq](https://github.com/mwilliamson/jq.py)
