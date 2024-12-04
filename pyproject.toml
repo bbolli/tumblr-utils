@@ -18,7 +18,7 @@ dependencies = [
     "filetype~=1.2",
     "platformdirs~=4.2",
     "requests~=2.31",
-    "urllib3~=2.2",
+    "urllib3>=2.2.2,<3",
 ]
 
 [project.optional-dependencies]

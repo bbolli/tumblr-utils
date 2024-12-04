@@ -11,9 +11,10 @@ from argparse import Namespace
 from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from enum import Enum
-from http.client import HTTPConnection as _HTTPConnection, ResponseNotReady
+from http.client import (HTTPConnection as _HTTPConnection, HTTPMessage as _HttplibHTTPMessage,
+                         HTTPResponse as _HttplibHTTPResponse, ResponseNotReady)
 from tempfile import NamedTemporaryFile
-from typing import Any, BinaryIO, Callable, Dict, Optional, Set
+from typing import IO, TYPE_CHECKING, Any, BinaryIO, Callable, Dict, Iterable, Mapping, Optional, Set
 from urllib.parse import urljoin, urlsplit
 
 from urllib3 import (BaseHTTPResponse, HTTPConnectionPool, HTTPHeaderDict, HTTPResponse, HTTPSConnectionPool,
@@ -24,6 +25,11 @@ from urllib3.exceptions import (ConnectTimeoutError, HeaderParsingError, HTTPErr
 from urllib3.util.response import assert_header_parsing
 
 from .util import LogLevel, enospc, fsync, is_dns_working, no_internet, opendir, setup_urllib3_ssl, try_unlink
+
+if TYPE_CHECKING:
+    from typing_extensions import TypeAlias
+
+TYPE_BODY: TypeAlias = 'bytes | IO[Any] | Iterable[bytes] | str'
 
 setup_urllib3_ssl()
 
@@ -89,21 +95,40 @@ class WGHTTPResponse(HTTPResponse):
     REDIRECT_STATUSES = [300] + HTTPResponse.REDIRECT_STATUSES
 
     def __init__(
-        self, body='', headers=None, status=0, version=0, reason=None, preload_content=True, decode_content=True,
-        original_response=None, pool=None, connection=None, msg=None, retries=None, enforce_content_length=False,
-        request_method=None, request_url=None, auto_close=True,
+        self,
+        body                   : TYPE_BODY                   = '',
+        headers                : Mapping[str, str] | None    = None,  # NB: cannot be bytes!
+        status                 : int                         = 0,
+        version                : int                         = 0,
+        version_string         : str                         = 'HTTP/?',
+        reason                 : str | None                  = None,
+        preload_content        : bool                        = True,
+        decode_content         : bool                        = True,
+        original_response      : _HttplibHTTPResponse | None = None,
+        pool                   : WGHTTPConnectionPool | None = None,
+        connection             : WGHTTPConnection     | None = None,
+        msg                    : _HttplibHTTPMessage  | None = None,
+        retries                : Retry | None                = None,
+        enforce_content_length : bool                        = False,  # NB: different default!
+        request_method         : str | None                  = None,
+        request_url            : str | None                  = None,
+        auto_close             : bool                        = True,
     ):
         # Copy original Content-Length for _init_length
         if not isinstance(headers, HTTPHeaderDict):
-            headers = HTTPHeaderDict(headers)
+            headers = HTTPHeaderDict(headers)  # type: ignore[arg-type]
         if 'Content-Length' not in headers and 'X-Archive-Orig-Content-Length' in headers:
-            headers['Content-Length'] = headers['X-Archive-Orig-Content-Length']
+            header_dict = dict(headers)
+            header_dict['Content-Length'] = header_dict['X-Archive-Orig-Content-Length']
+            headers = header_dict
 
         self.bytes_to_skip = 0
         self.last_read_length = 0
         super().__init__(
-            body, headers, status, version, reason, preload_content, decode_content, original_response, pool,
-            connection, msg, retries, enforce_content_length, request_method, request_url, auto_close,
+            body=body, headers=headers, status=status, version=version, version_string=version_string, reason=reason,
+            preload_content=preload_content, decode_content=decode_content, original_response=original_response,
+            pool=pool, connection=connection, msg=msg, retries=retries, enforce_content_length=enforce_content_length,
+            request_method=request_method, request_url=request_url, auto_close=auto_close,
         )
 
     # Make decoder public for saving and restoring the decoder state
