@@ -1,6 +1,6 @@
 [project]
 name = "tumblr-backup"
-version = "1.0.3"
+version = "1.0.4.dev0"
 description = "An advanced tool for backing up Tumblr blogs."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -42,6 +42,7 @@ dev = [
     "types-beautifulsoup4~=4.12",
     "types-requests~=2.31",
     "youtube_dl>=2021.12.17",
+    "typing_extensions>=3.10.0.0,<5",
 ]
 
 [project.urls]

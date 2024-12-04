@@ -225,7 +225,7 @@ class WGPoolManager(PoolManager):
             self.cfh_url = None
 
     # the urllib3 stubs lie about this method's signature
-    def urlopen(self, method, url, redirect=True, **kw):  # pytype: disable=signature-mismatch
+    def urlopen(self, method, url, redirect=True, **kw):  # type: ignore[override] # pytype: disable=signature-mismatch
         try:
             self.cfh_url = url
             return super().urlopen(method, url, redirect, **kw)

@@ -1006,7 +1006,7 @@ class TumblrBackup:
     @staticmethod
     def get_post_timestamp(post, bs4_class):
         if TYPE_CHECKING:
-            from bs4 import BeautifulSoup
+            from bs4 import BeautifulSoup  # noqa: WPS474
         else:
             BeautifulSoup = bs4_class
 
@@ -1283,8 +1283,8 @@ class TumblrBackup:
         if before is not None and api_parser.dashboard_only_blog:
             logger.warn('Warning: skipping posts on a dashboard-only blog is slow\n', account=True)
 
-        # returns whether any posts from this batch were saved
         def _backup(posts):
+            """returns whether any posts from this batch were saved"""
             def sort_key(x): return x['liked_timestamp'] if self.options.likes else int(x['id'])
             oldest_date = None
             for p in sorted(posts, key=sort_key, reverse=True):
@@ -1644,6 +1644,7 @@ class TumblrPost:
 
         if TYPE_CHECKING:
             import youtube_dl
+            import youtube_dl.utils
         else:
             youtube_dl = import_youtube_dl()
 
@@ -1817,7 +1818,7 @@ class TumblrPost:
 
         if self.options.save_notes or self.options.copy_notes:
             if TYPE_CHECKING:
-                from bs4 import BeautifulSoup
+                from bs4 import BeautifulSoup  # noqa: WPS474
             else:
                 BeautifulSoup = load_bs4('save notes' if self.options.save_notes else 'copy notes')
 

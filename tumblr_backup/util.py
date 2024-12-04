@@ -17,6 +17,7 @@ from http.cookiejar import MozillaCookieJar
 from importlib.machinery import PathFinder
 from typing import TYPE_CHECKING, Any, Deque, Generic, TypeVar
 
+from requests.adapters import HTTPAdapter
 from urllib3.exceptions import DependencyWarning
 
 if sys.platform == 'darwin':
@@ -244,7 +245,8 @@ def make_requests_session(session_type, retry, timeout, verify, user_agent, cook
     if user_agent is not None:
         session.headers['User-Agent'] = user_agent
     for adapter in session.adapters.values():
-        adapter.max_retries = retry
+        if isinstance(adapter, HTTPAdapter):
+            adapter.max_retries = retry
     if cookiefile is not None:
         cookies = MozillaCookieJar(cookiefile)
         cookies.load()
@@ -330,7 +332,7 @@ class MultiCondition(threading.Condition):
     def __init__(self, lock):  # noqa: WPS612
         super().__init__(lock)
 
-    def wait(self, children, timeout=None):  # pytype: disable=signature-mismatch
+    def wait(self, children, timeout=None):  # type: ignore[override] # pytype: disable=signature-mismatch
         assert len(frozenset(id(c) for c in children)) == len(children), 'Children must be unique'
         assert all(c._lock is self._lock for c in children), 'All locks must be the same'  # type: ignore[attr-defined]
 
